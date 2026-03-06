@@ -123,8 +123,14 @@ function openPanel(title, quotes, isNeg) {
   body.innerHTML = '<p class="rp-count">' + quotes.length + ' review' + (quotes.length !== 1 ? 's' : '') + ' mentioning this theme</p>';
   quotes.forEach(q => {
     const cls = isNeg ? 'rp-quote negative' : 'rp-quote';
-    const isLong = q.t.length > 200;
-    body.innerHTML += `<div class="${cls}"><p class="rp-text${isLong ? ' collapsed' : ''}" onclick="this.classList.toggle('collapsed');this.nextElementSibling&&(this.nextElementSibling.textContent=this.classList.contains('collapsed')?'Read more':'Show less')">"${q.t}"</p>${isLong ? '<span class="read-more" onclick="this.previousElementSibling.click()">Read more</span>' : ''}<div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i}${q.sh ? ' | ' + q.sh : ''} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
+    body.innerHTML += `<div class="${cls}"><p class="rp-text collapsed" onclick="this.classList.toggle('collapsed');this.nextElementSibling&&(this.nextElementSibling.textContent=this.classList.contains('collapsed')?'Read more':'Show less')">"${q.t}"</p><span class="read-more" onclick="this.previousElementSibling.click()">Read more</span><div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i}${q.sh ? ' | ' + q.sh : ''} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
+  });
+  body.querySelectorAll('.rp-text.collapsed').forEach(el => {
+    if (el.scrollHeight <= el.clientHeight) {
+      el.classList.remove('collapsed');
+      const rm = el.nextElementSibling;
+      if (rm && rm.classList.contains('read-more')) rm.style.display = 'none';
+    }
   });
   document.getElementById('rpOverlay').classList.add('open');
   document.getElementById('rpPanel').classList.add('open');
@@ -199,4 +205,13 @@ new Chart(document.getElementById('nChart'), {
       }
     }
   }
+});
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.quote-text.collapsed').forEach(function(el) {
+    if (el.scrollHeight <= el.clientHeight) {
+      el.classList.remove('collapsed');
+      var rm = el.nextElementSibling;
+      if (rm && rm.classList.contains('read-more')) rm.style.display = 'none';
+    }
+  });
 });</script></body></html>
