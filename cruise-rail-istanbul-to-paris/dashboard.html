@@ -79,17 +79,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <div class="header">
 <a class="back-link" href="../overview/executive-dashboard.html">&larr; Back to Itinerary Dashboard</a>
 <h1>Cruise &amp; Rail: Istanbul to Paris</h1>
-<div class="meta">Ship: S.S. Joie de Vivre, Golden Eagle Danube Express Luxury Train | 3 reviews | Feefo Verified</div>
-<div class="health health-good">Good - Monitor &amp; Improve</div>
+<div class="meta">Ship: S.S. Joie de Vivre | 2 reviews | Feefo Verified</div>
+<div class="health health-excellent">Excellent - Promote Heavily</div>
 </div>
 <div class="container">
 <div class="kpi-grid">
-<div class="kpi"><div class="val">4.33</div><div class="lbl">Avg Rating</div></div>
-<div class="kpi"><div class="val">3</div><div class="lbl">Reviews</div></div>
-<div class="kpi"><div class="val">66.7%</div><div class="lbl">5-Star</div></div>
-<div class="kpi"><div class="val">66.7%</div><div class="lbl">4+ Star</div></div>
+<div class="kpi"><div class="val">5.0</div><div class="lbl">Avg Rating</div></div>
+<div class="kpi"><div class="val">2</div><div class="lbl">Reviews</div></div>
+<div class="kpi"><div class="val">100.0%</div><div class="lbl">5-Star</div></div>
+<div class="kpi"><div class="val">100.0%</div><div class="lbl">4+ Star</div></div>
 <div class="kpi"><div class="val">1</div><div class="lbl">Direct</div></div>
-<div class="kpi"><div class="val">2</div><div class="lbl">Agency</div></div>
+<div class="kpi"><div class="val">1</div><div class="lbl">Agency</div></div>
 </div>
 
 <div class="grid">
@@ -101,14 +101,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <h2>Guest Quotes</h2>
 <div class="tab-bar">
 <div class="tab active" onclick="showTab('positive')">Positive (1)</div>
-<div class="tab" onclick="showTab('negative')">Needs Improvement (1)</div>
+<div class="tab" onclick="showTab('negative')">Needs Improvement (0)</div>
 </div>
-<div id="tab-positive" class="tab-content active"><div class="quote">Everything was wonderful - especially the employees who gave so much attention to all<div class="attr">&mdash; Mary, Cruise &amp; Rail: Istanbul to Paris <span class="ship">| S.S. Joie de Vivre, Golden Eagle Danube Express Luxury Train</span> | &#9733;&#9733;&#9733;&#9733;&#9733; | staff</div></div></div><div id="tab-negative" class="tab-content"><div class="quote" style="border-left-color:#c62828">Disappointing<div class="attr" style="color:#c62828">&mdash; Terrence, Rail: Paris to Istanbul (CDG-IST) 25 <span class="ship">| S.S. Joie de Vivre, Golden Eagle Danube Express Luxury Train</span> | &#9733;&#9733;&#9733; | unmet-expectations</div></div></div></div><div class="grid">
-<div class="card"><h2>Complaint Areas</h2><div class="chart-box"><canvas id="nChart"></canvas></div><p class="click-hint">Click any bar to see related guest complaints</p></div></div>
+<div id="tab-positive" class="tab-content active"><div class="quote">Everything was wonderful - especially the employees who gave so much attention to all<div class="attr">&mdash; Mary, Cruise &amp; Rail: Istanbul to Paris <span class="ship">| S.S. Joie de Vivre</span> | &#9733;&#9733;&#9733;&#9733;&#9733; | staff</div></div></div><div id="tab-negative" class="tab-content"></div></div><div class="grid"><div></div></div>
 </div>
 <script>
-const posQuotesByTheme = {"staff": [{"t": "Everything was wonderful - especially the employees who gave so much attention to all", "n": "Mary", "s": 5, "i": "Cruise & Rail: Istanbul to Paris", "sh": "S.S. Joie de Vivre, Golden Eagle Danube Express Luxury Train"}]};
-const negQuotesByTheme = {"unmet-expectations": [{"t": "Disappointing", "n": "Terrence", "s": 3, "i": "Rail: Paris to Istanbul (CDG-IST) 25", "sh": "S.S. Joie de Vivre, Golden Eagle Danube Express Luxury Train"}]};
+const posQuotesByTheme = {"staff": [{"t": "Everything was wonderful - especially the employees who gave so much attention to all", "n": "Mary", "s": 5, "i": "Cruise & Rail: Istanbul to Paris", "sh": "S.S. Joie de Vivre"}]};
+const negQuotesByTheme = {};
 
 function openPanel(title, quotes, isNeg) {
   document.getElementById('rpTitle').textContent = title;
@@ -151,7 +150,7 @@ new Chart(document.getElementById('rChart'), {
   type: 'doughnut',
   data: {
     labels: ['5 Stars', '4 Stars', '3 Stars', '2 Stars', '1 Star'],
-    datasets: [{ data: [2, 0, 1, 0, 0],
+    datasets: [{ data: [2, 0, 0, 0, 0],
       backgroundColor: ['#2e7d32','#66bb6a','#ffa726','#ef5350','#c62828'] }]
   },
   options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
@@ -177,28 +176,6 @@ new Chart(document.getElementById('pChart'), {
   }
 });
 
-const negLabels = ["Unmet Expectations"];
-const negKeys = ["unmet-expectations"];
-
-new Chart(document.getElementById('nChart'), {
-  type: 'bar',
-  data: {
-    labels: negLabels,
-    datasets: [{ data: [1], backgroundColor: '#c62828', borderRadius: 4, hoverBackgroundColor: '#e53935' }]
-  },
-  options: {
-    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: () => 'Click to see reviews' } } },
-    onClick: (e, elements) => {
-      if (elements.length > 0) {
-        const idx = elements[0].index;
-        const key = negKeys[idx];
-        const label = negLabels[idx];
-        if (negQuotesByTheme[key]) openPanel(label + ' Complaints', negQuotesByTheme[key], true);
-      }
-    }
-  }
-});
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.quote-text.collapsed').forEach(function(el) {
     if (el.scrollHeight <= el.clientHeight) {
