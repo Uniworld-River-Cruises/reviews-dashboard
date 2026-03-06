@@ -58,6 +58,6 @@ If you prefer not to use the command line:
 
 Once deployed, share this URL with your team:
 - **Landing page:** `https://{OWNER}.github.io/uniworld-2025-reviews/`
-- **Fleet dashboard:** `https://{OWNER}.github.io/uniworld-2025-reviews/_fleet-summary/executive-dashboard.html`
+- **Fleet dashboard:** `https://{OWNER}.github.io/uniworld-2025-reviews/overview/executive-dashboard.html`
 
 Note: The `.docx` files in each folder will download when clicked from the browser.
