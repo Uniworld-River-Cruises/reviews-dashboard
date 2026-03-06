@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golden Eagle Danube Express Luxury Train - Ship Review Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8f9fa; color: #333; }
+.header { background: linear-gradient(135deg, #1B3A5C 0%, #2c5f8a 100%); color: white; padding: 32px 40px; }
+.header h1 { font-size: 26px; margin-bottom: 4px; }
+.header .sub { font-size: 20px; color: #C5A258; margin-bottom: 6px; }
+.header .meta { opacity: 0.8; font-size: 14px; margin-bottom: 6px; }
+.header .health { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-top: 4px; }
+.health-excellent { background: rgba(46,125,50,0.2); color: #a5d6a7; }
+.health-strong { background: rgba(21,101,192,0.2); color: #90caf9; }
+.health-good { background: rgba(245,127,23,0.2); color: #ffe082; }
+.health-attention { background: rgba(198,40,40,0.2); color: #ef9a9a; }
+.back-link { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 13px; display: inline-block; margin-bottom: 12px; }
+.back-link:hover { color: white; }
+.container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.kpi { background: white; border-radius: 10px; padding: 20px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+.kpi .val { font-size: 32px; font-weight: 700; color: #1B3A5C; }
+.kpi .lbl { font-size: 12px; color: #999; text-transform: uppercase; margin-top: 2px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+.card h2 { font-size: 16px; color: #1B3A5C; margin-bottom: 12px; border-bottom: 2px solid #C5A258; padding-bottom: 6px; }
+.chart-box { position: relative; height: 260px; }
+.click-hint { font-size: 12px; color: #999; font-style: italic; margin-top: 8px; }
+.quote { padding: 10px 14px; border-left: 3px solid #C5A258; margin: 8px 0; background: #fafafa; font-style: italic; font-size: 13px; line-height: 1.5; }
+.quote .attr { font-style: normal; color: #1B3A5C; font-weight: 600; font-size: 12px; margin-top: 4px; }
+.quote .itin { color: #888; font-weight: 400; }
+.tab-bar { display: flex; gap: 0; margin-bottom: 16px; border-bottom: 2px solid #eee; }
+.tab { padding: 8px 20px; cursor: pointer; font-size: 14px; color: #888; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+.tab.active { color: #1B3A5C; border-bottom-color: #C5A258; font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.itin-list { list-style: none; padding: 0; }
+.itin-list li { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+.itin-list li:nth-child(even) { background: #f8f9fa; }
+.itin-name { font-weight: 600; color: #1B3A5C; font-size: 14px; }
+.itin-count { color: #888; font-size: 13px; }
+
+/* Slide-out review panel */
+.review-panel-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); z-index: 999; }
+.review-panel-overlay.open { display: block; }
+.review-panel { position: fixed; top: 0; right: 0; width: 520px; max-width: 90vw; height: 100vh; background: white; z-index: 1000; box-shadow: -4px 0 24px rgba(0,0,0,0.15); transform: translateX(100%); transition: transform 0.3s ease; overflow-y: auto; }
+.review-panel.open { transform: translateX(0); }
+.rp-header { background: #1B3A5C; color: white; padding: 20px 24px; position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; }
+.rp-header h3 { font-size: 18px; }
+.rp-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; line-height: 1; padding: 0 4px; }
+.rp-close:hover { opacity: 0.7; }
+.rp-body { padding: 20px 24px; }
+.rp-quote { padding: 14px 16px; border-left: 3px solid #C5A258; margin: 12px 0; background: #fafafa; border-radius: 0 8px 8px 0; }
+.rp-quote.negative { border-left-color: #c62828; }
+.rp-quote p { font-style: italic; font-size: 14px; line-height: 1.6; color: #333; margin-bottom: 6px; }
+.rp-quote .rp-attr { font-style: normal; font-size: 12px; color: #666; }
+.rp-quote .rp-attr strong { color: #1B3A5C; }
+.rp-quote .rp-stars { color: #C5A258; }
+.rp-count { font-size: 13px; color: #888; margin-bottom: 16px; }
+@media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .review-panel { width: 100vw; } }
+</style>
+</head>
+<body>
+
+<div class="review-panel-overlay" id="rpOverlay" onclick="closePanel()"></div>
+<div class="review-panel" id="rpPanel">
+  <div class="rp-header"><h3 id="rpTitle">Reviews</h3><button class="rp-close" onclick="closePanel()">&times;</button></div>
+  <div class="rp-body" id="rpBody"></div>
+</div>
+
+<div class="header">
+<a class="back-link" href="../../index.html">&larr; Back to Home</a>
+<h1>Golden Eagle Danube Express Luxury Train</h1>
+<div class="sub">Ship Dashboard</div>
+<div class="meta">3 reviews across 3 itineraryies | Feefo Verified</div>
+<div class="health health-good">Good - Monitor &amp; Improve</div>
+</div>
+<div class="container">
+<div class="kpi-grid">
+<div class="kpi"><div class="val">4.33</div><div class="lbl">Avg Rating</div></div>
+<div class="kpi"><div class="val">3</div><div class="lbl">Reviews</div></div>
+<div class="kpi"><div class="val">66.7%</div><div class="lbl">5-Star</div></div>
+<div class="kpi"><div class="val">66.7%</div><div class="lbl">4+ Star</div></div>
+<div class="kpi"><div class="val">3</div><div class="lbl">Itineraries</div></div>
+<div class="kpi"><div class="val">1</div><div class="lbl">Repeat Guests</div></div>
+</div>
+
+<div class="grid">
+<div class="card"><h2>Rating Distribution</h2><div class="chart-box"><canvas id="rChart"></canvas></div></div>
+<div class="card"><h2>Positive Themes</h2><div class="chart-box"><canvas id="pChart"></canvas></div><p class="click-hint">Click any bar to see related guest reviews</p></div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h2>Itineraries on this Ship</h2>
+<ul class="itin-list"><li><span class="itin-name">Rail: Paris to Istanbul (CDG-IST) 25</span><span class="itin-count">1 reviews</span></li><li><span class="itin-name">Rail: Grand Alpine Express 8 Day (BUD-VCE) 25</span><span class="itin-count">1 reviews</span></li><li><span class="itin-name">Rail: Grand Alpine Express 9 Day (BUD-VCE) 25</span><span class="itin-count">1 reviews</span></li></ul></div><div class="card"><h2>Complaint Areas</h2><div class="chart-box"><canvas id="nChart"></canvas></div><p class="click-hint">Click any bar to see related guest complaints</p></div></div>
+
+<div class="card" style="margin-bottom:20px">
+<h2>Guest Quotes</h2>
+<div class="tab-bar">
+<div class="tab active" onclick="showTab('positive')">Positive (1)</div>
+<div class="tab" onclick="showTab('negative')">Needs Improvement (1)</div>
+</div>
+<div id="tab-positive" class="tab-content active"><div class="quote">Excellent personnel, excellent tours, good food.  Andrea was an outstanding tour manager. Andrea was an excellent room attendant on the train.  The hotels were wonderful.<div class="attr">&mdash; William, Golden Eagle Danube Express Luxury Train <span class="itin">| Rail: Grand Alpine Express 9 Day (BUD-VCE) 25</span> | &#9733;&#9733;&#9733;&#9733;&#9733;</div></div></div><div id="tab-negative" class="tab-content"><div class="quote" style="border-left-color:#c62828">Disappointing<div class="attr" style="color:#c62828">&mdash; Terrence, Golden Eagle Danube Express Luxury Train <span class="itin">| Rail: Paris to Istanbul (CDG-IST) 25</span> | &#9733;&#9733;&#9733;</div></div></div></div>
+</div>
+<script>
+const posQuotesByTheme = {"staff": [{"t": "Excellent personnel, excellent tours, good food.  Andrea was an outstanding tour manager. Andrea was an excellent room attendant on the train.  The hotels were wonderful.", "n": "William", "s": 5, "i": "Rail: Grand Alpine Express 9 Day (BUD-VCE) 25", "sh": "Golden Eagle Danube Express Luxury Train"}], "food": [{"t": "Excellent personnel, excellent tours, good food.  Andrea was an outstanding tour manager. Andrea was an excellent room attendant on the train.  The hotels were wonderful.", "n": "William", "s": 5, "i": "Rail: Grand Alpine Express 9 Day (BUD-VCE) 25", "sh": "Golden Eagle Danube Express Luxury Train"}], "excursions": [{"t": "Excellent personnel, excellent tours, good food.  Andrea was an outstanding tour manager. Andrea was an excellent room attendant on the train.  The hotels were wonderful.", "n": "William", "s": 5, "i": "Rail: Grand Alpine Express 9 Day (BUD-VCE) 25", "sh": "Golden Eagle Danube Express Luxury Train"}], "accommodation": [{"t": "Excellent personnel, excellent tours, good food.  Andrea was an outstanding tour manager. Andrea was an excellent room attendant on the train.  The hotels were wonderful.", "n": "William", "s": 5, "i": "Rail: Grand Alpine Express 9 Day (BUD-VCE) 25", "sh": "Golden Eagle Danube Express Luxury Train"}]};
+const negQuotesByTheme = {"general-dissatisfaction": [{"t": "Disappointing", "n": "Terrence", "s": 3, "i": "Rail: Paris to Istanbul (CDG-IST) 25", "sh": "Golden Eagle Danube Express Luxury Train"}]};
+
+function openPanel(title, quotes, isNeg) {
+  document.getElementById('rpTitle').textContent = title;
+  const body = document.getElementById('rpBody');
+  body.innerHTML = '<p class="rp-count">' + quotes.length + ' review' + (quotes.length !== 1 ? 's' : '') + ' mentioning this theme</p>';
+  quotes.forEach(q => {
+    const cls = isNeg ? 'rp-quote negative' : 'rp-quote';
+    body.innerHTML += `<div class="${cls}"><p>"${q.t}${q.t.length >= 278 ? '...' : ''}"</p><div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i} | ${q.sh} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
+  });
+  document.getElementById('rpOverlay').classList.add('open');
+  document.getElementById('rpPanel').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('rpOverlay').classList.remove('open');
+  document.getElementById('rpPanel').classList.remove('open');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+const posLabels = ["Staff", "Food", "Excursions", "Accommodation"];
+const posKeys = ["staff", "food", "excursions", "accommodation"];
+
+new Chart(document.getElementById('rChart'), {
+  type: 'doughnut',
+  data: { labels: ['5 Stars','4 Stars','3 Stars','2 Stars','1 Star'],
+    datasets: [{ data: [2,0,1,0,0],
+      backgroundColor: ['#2e7d32','#66bb6a','#ffa726','#ef5350','#c62828'] }] },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+});
+new Chart(document.getElementById('pChart'), {
+  type: 'bar',
+  data: { labels: posLabels, datasets: [{ data: [1, 1, 1, 1], backgroundColor: '#1B3A5C', borderRadius: 4, hoverBackgroundColor: '#2c5f8a' }] },
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: () => 'Click to see reviews' } } },
+    onClick: (e, el) => { if (el.length > 0) { const i = el[0].index; if (posQuotesByTheme[posKeys[i]]) openPanel(posLabels[i]+' Reviews', posQuotesByTheme[posKeys[i]], false); } }
+  }
+});
+const negLabels = ["General Dissatisfaction"];
+const negKeys = ["general-dissatisfaction"];
+new Chart(document.getElementById('nChart'), {
+  type: 'bar',
+  data: { labels: negLabels, datasets: [{ data: [1], backgroundColor: '#c62828', borderRadius: 4, hoverBackgroundColor: '#e53935' }] },
+  options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: () => 'Click to see reviews' } } },
+    onClick: (e, el) => { if (el.length > 0) { const i = el[0].index; if (negQuotesByTheme[negKeys[i]]) openPanel(negLabels[i]+' Complaints', negQuotesByTheme[negKeys[i]], true); } }
+  }
+});</script></body></html>

@@ -272,7 +272,7 @@ const ships = [
 function renderShips(list) {
   const grid = document.getElementById('shipGrid');
   grid.innerHTML = list.map(sh => {
-    return `<a class="itin-card" href="_ships/${sh.slug}/dashboard.html">
+    return `<a class="itin-card" href="ships/${sh.slug}/dashboard.html">
       <span class="badge ${getBadgeClass(sh.h)}">${sh.h}</span>
       <div class="name">${sh.n}</div>
       <div class="ships">${sh.ct} reviews across all itineraries</div>
