@@ -128,6 +128,7 @@ function openPanel(title, quotes, isNeg) {
 function closePanel() {
   document.getElementById('rpOverlay').classList.remove('open');
   document.getElementById('rpPanel').classList.remove('open');
+  document.getElementById('rpPanel').scrollTop = 0;
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 function showTab(name) {
