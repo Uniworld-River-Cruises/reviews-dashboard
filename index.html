@@ -82,7 +82,7 @@ h2 { font-size: 24px; color: #1B3A5C; margin-bottom: 20px; }
 
 <div class="hero">
   <h1>Uniworld <span class="gold">2025</span> Review Intelligence</h1>
-  <p>Comprehensive analysis of 3,572 verified guest reviews across 47 itineraries. Built for the website, marketing, product, and executive teams.</p>
+  <p>Comprehensive analysis of 3,572 verified guest reviews across 47 itineraries and 20 ships. Built for the website, marketing, product, and executive teams.</p>
   <a class="hero-btn" href="_fleet-summary/executive-dashboard.html">Open Fleet Dashboard</a>
 </div>
 
@@ -92,6 +92,7 @@ h2 { font-size: 24px; color: #1B3A5C; margin-bottom: 20px; }
     <div class="stat"><div class="num">4.56</div><div class="lbl">Avg Rating</div></div>
     <div class="stat"><div class="num">90.7%</div><div class="lbl">4+ Stars</div></div>
     <div class="stat"><div class="num">47</div><div class="lbl">Itineraries</div></div>
+    <div class="stat"><div class="num">20</div><div class="lbl">Ships</div></div>
   </div>
 
   <h2>Fleet Summary Reports</h2>
@@ -121,6 +122,16 @@ h2 { font-size: 24px; color: #1B3A5C; margin-bottom: 20px; }
       <div class="name">Negative Trends Report</div>
       <div class="ships">Recurring complaints prioritized by frequency and severity</div>
     </a>
+  </div>
+
+  <h2>Ship Dashboards</h2>
+  <p class="section-desc">Performance analytics for each ship in the fleet. Click any ship to see its ratings, themes, staff highlights, and guest quotes.</p>
+
+  <div class="search-container">
+    <input type="text" class="search-box" id="shipSearchBox" placeholder="Search ships by name..." oninput="filterShips()">
+  </div>
+
+  <div class="itin-grid" id="shipGrid" style="margin-bottom:48px">
   </div>
 
   <h2>Itinerary Dashboards</h2>
@@ -226,5 +237,51 @@ function filterCards() {
 }
 
 renderCards(itineraries);
+
+const ships = [
+  {n:"S.S. Maria Theresa",slug:"s-s-maria-theresa",avg:4.69,ct:315,h:"Strong"},
+  {n:"S.S. Beatrice",slug:"s-s-beatrice",avg:4.51,ct:314,h:"Strong"},
+  {n:"S.S. Antoinette",slug:"s-s-antoinette",avg:4.46,ct:303,h:"Good"},
+  {n:"S.S. Joie de Vivre",slug:"s-s-joie-de-vivre",avg:4.60,ct:293,h:"Strong"},
+  {n:"S.S. Catherine",slug:"s-s-catherine",avg:4.53,ct:281,h:"Strong"},
+  {n:"S.S. La Venezia",slug:"s-s-la-venezia",avg:4.55,ct:261,h:"Strong"},
+  {n:"River Princess",slug:"river-princess",avg:4.57,ct:247,h:"Strong"},
+  {n:"S.S. Sao Gabriel",slug:"s-s-sao-gabriel",avg:4.38,ct:239,h:"Good"},
+  {n:"S.S. Elisabeth",slug:"s-s-elisabeth",avg:4.73,ct:237,h:"Excellent"},
+  {n:"S.S. Bon Voyage",slug:"s-s-bon-voyage",avg:4.48,ct:237,h:"Good"},
+  {n:"S.S. Victoria",slug:"s-s-victoria",avg:4.50,ct:206,h:"Strong"},
+  {n:"River Duchess",slug:"river-duchess",avg:4.44,ct:184,h:"Good"},
+  {n:"Mekong Jewel",slug:"mekong-jewel",avg:4.80,ct:137,h:"Excellent"},
+  {n:"Ganges Voyager II",slug:"ganges-voyager-ii",avg:4.63,ct:97,h:"Strong"},
+  {n:"River Tosca",slug:"river-tosca",avg:4.86,ct:96,h:"Excellent"},
+  {n:"S.S. Sphinx",slug:"s-s-sphinx",avg:4.86,ct:78,h:"Excellent"},
+  {n:"Aria Amazon",slug:"aria-amazon",avg:4.72,ct:29,h:"Excellent"},
+  {n:"River Queen",slug:"river-queen",avg:4.44,ct:9,h:"Good"},
+  {n:"Golden Eagle Danube Express Luxury Train",slug:"golden-eagle-danube-express-luxury-train",avg:4.33,ct:3,h:"Good"},
+  {n:"River Empress",slug:"river-empress",avg:4.00,ct:1,h:"Attention"},
+];
+
+function renderShips(list) {
+  const grid = document.getElementById('shipGrid');
+  grid.innerHTML = list.map(sh => {
+    return `<a class="itin-card" href="_ships/${sh.slug}/dashboard.html">
+      <span class="badge ${getBadgeClass(sh.h)}">${sh.h}</span>
+      <div class="name">${sh.n}</div>
+      <div class="ships">${sh.ct} reviews across all itineraries</div>
+      <div class="metrics">
+        <div class="metric"><div class="mv">${sh.avg.toFixed(2)}</div><div class="ml">Avg Rating</div></div>
+        <div class="metric"><div class="mv">${sh.ct}</div><div class="ml">Reviews</div></div>
+      </div>
+    </a>`;
+  }).join('');
+}
+
+function filterShips() {
+  const q = document.getElementById('shipSearchBox').value.toLowerCase();
+  const filtered = ships.filter(sh => sh.n.toLowerCase().includes(q));
+  renderShips(filtered);
+}
+
+renderShips(ships);
 </script>
 </body></html>
