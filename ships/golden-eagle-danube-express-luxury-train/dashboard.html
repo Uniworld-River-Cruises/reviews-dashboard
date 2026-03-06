@@ -116,7 +116,8 @@ function openPanel(title, quotes, isNeg) {
   body.innerHTML = '<p class="rp-count">' + quotes.length + ' review' + (quotes.length !== 1 ? 's' : '') + ' mentioning this theme</p>';
   quotes.forEach(q => {
     const cls = isNeg ? 'rp-quote negative' : 'rp-quote';
-    body.innerHTML += `<div class="${cls}"><p>"${q.t}${q.t.length >= 278 ? '...' : ''}"</p><div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i} | ${q.sh} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
+    const isLong = q.t.length > 200;
+    body.innerHTML += `<div class="${cls}"><p class="rp-text${isLong ? ' collapsed' : ''}" onclick="this.classList.toggle('collapsed');this.nextElementSibling&&(this.nextElementSibling.textContent=this.classList.contains('collapsed')?'Read more':'Show less')">"${q.t}"</p>${isLong ? '<span class="read-more" onclick="this.previousElementSibling.click()">Read more</span>' : ''}<div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i} | ${q.sh} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
   });
   document.getElementById('rpOverlay').classList.add('open');
   document.getElementById('rpPanel').classList.add('open');

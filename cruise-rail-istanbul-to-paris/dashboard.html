@@ -55,6 +55,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .rp-quote .rp-attr { font-style: normal; font-size: 12px; color: #666; }
 .rp-quote .rp-attr strong { color: #1B3A5C; }
 .rp-quote .rp-stars { color: #C5A258; }
+.rp-quote .rp-text { cursor: pointer; }
+.rp-quote .rp-text.collapsed { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.rp-quote .read-more { color: #C5A258; font-style: normal; font-size: 12px; cursor: pointer; font-weight: 600; margin-top: 4px; display: block; }
+.rp-quote .read-more:hover { text-decoration: underline; }
 .rp-count { font-size: 13px; color: #888; margin-bottom: 16px; }
 
 @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } .review-panel { width: 100vw; } }
@@ -112,7 +116,8 @@ function openPanel(title, quotes, isNeg) {
   body.innerHTML = '<p class="rp-count">' + quotes.length + ' review' + (quotes.length !== 1 ? 's' : '') + ' mentioning this theme</p>';
   quotes.forEach(q => {
     const cls = isNeg ? 'rp-quote negative' : 'rp-quote';
-    body.innerHTML += `<div class="${cls}"><p>"${q.t}${q.t.length >= 278 ? '...' : ''}"</p><div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i}${q.sh ? ' | ' + q.sh : ''} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
+    const isLong = q.t.length > 200;
+    body.innerHTML += `<div class="${cls}"><p class="rp-text${isLong ? ' collapsed' : ''}" onclick="this.classList.toggle('collapsed');this.nextElementSibling&&(this.nextElementSibling.textContent=this.classList.contains('collapsed')?'Read more':'Show less')">"${q.t}"</p>${isLong ? '<span class="read-more" onclick="this.previousElementSibling.click()">Read more</span>' : ''}<div class="rp-attr"><strong>${q.n}</strong> &mdash; ${q.i}${q.sh ? ' | ' + q.sh : ''} <span class="rp-stars">${'&#9733;'.repeat(q.s)}</span></div></div>`;
   });
   document.getElementById('rpOverlay').classList.add('open');
   document.getElementById('rpPanel').classList.add('open');
