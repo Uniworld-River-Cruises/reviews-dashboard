@@ -1,0 +1,54 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "themes.positive", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "themes.negative", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "ratings.product", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "scope", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "monthly_summaries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "month", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

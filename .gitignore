@@ -1,0 +1,4 @@
+.env.local
+functions/.env.local
+api-credentials.txt
+node_modules/
