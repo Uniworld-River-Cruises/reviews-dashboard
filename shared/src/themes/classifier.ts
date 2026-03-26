@@ -44,10 +44,10 @@ export async function classifyReview(reviewText: string): Promise<Classification
     const parsed = JSON.parse(text);
     return {
       positive: Array.isArray(parsed.positive)
-        ? parsed.positive.filter((t: string) => VALID_POSITIVE_NAMES.has(t))
+        ? parsed.positive.filter((t: string) => (VALID_POSITIVE_NAMES as Set<string>).has(t))
         : [],
       negative: Array.isArray(parsed.negative)
-        ? parsed.negative.filter((t: string) => VALID_NEGATIVE_NAMES.has(t))
+        ? parsed.negative.filter((t: string) => (VALID_NEGATIVE_NAMES as Set<string>).has(t))
         : [],
     };
   } catch {
