@@ -37,7 +37,8 @@ export default function RatingDistributionChart({ data }: RatingDistributionChar
           <XAxis type="number" tick={{ fontSize: 12 }} />
           <YAxis type="category" dataKey="label" width={60} tick={{ fontSize: 12 }} />
           <Tooltip
-            formatter={(value) => [Number(value).toLocaleString(), "Reviews"]}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
             {chartData.map((entry) => (

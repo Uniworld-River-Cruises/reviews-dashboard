@@ -61,7 +61,8 @@ export default function ThemeChart({ title, data, type, onBarClick }: ThemeChart
             tick={{ fontSize: isMobile ? 10 : 11 }}
           />
           <Tooltip
-            formatter={(value) => [Number(value).toLocaleString(), "Reviews"]}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
           <Bar
             dataKey="count"

@@ -59,7 +59,8 @@ export default function TrendChart({ data }: TrendChartProps) {
             <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} />
             <YAxis domain={[4.0, 5.0]} tick={{ fontSize: 11 }} />
             <Tooltip
-              formatter={(value) => [Number(value).toFixed(2), "Avg Rating"]}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any) => [Number(value).toFixed(2), "Avg Rating"]}
             />
             <Line
               type="monotone"
@@ -84,7 +85,8 @@ export default function TrendChart({ data }: TrendChartProps) {
             <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip
-              formatter={(value) => [Number(value).toLocaleString(), "Reviews"]}
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
             />
             <Bar dataKey="reviewCount" fill="#C5A258" radius={[4, 4, 0, 0]} />
           </BarChart>
