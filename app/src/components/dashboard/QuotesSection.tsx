@@ -72,7 +72,7 @@ export default function QuotesSection({ positiveQuotes, negativeQuotes }: Quotes
   const quotes = activeTab === "positive" ? positiveQuotes : negativeQuotes;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Guest Quotes</h3>
 
       {/* Tabs */}

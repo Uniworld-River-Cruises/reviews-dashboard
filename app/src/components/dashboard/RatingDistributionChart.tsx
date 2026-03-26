@@ -30,7 +30,7 @@ export default function RatingDistributionChart({ data }: RatingDistributionChar
   }));
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Rating Distribution</h3>
       <ResponsiveContainer width="100%" height={240}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 0, bottom: 0 }}>

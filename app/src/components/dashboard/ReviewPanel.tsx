@@ -74,7 +74,7 @@ export default function ReviewPanel({ theme, type, reviews, loading, onClose }: 
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative w-full max-w-md bg-white shadow-xl flex flex-col animate-slide-in-right">
+      <div className="relative w-full max-w-full sm:max-w-md bg-white shadow-xl flex flex-col animate-slide-in-right">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <div>

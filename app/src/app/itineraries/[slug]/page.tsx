@@ -108,7 +108,7 @@ export default function ItineraryDetailPage({
       <h1 className="text-2xl font-semibold text-[#1B3A5C]">{itinerary.name}</h1>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard
           title="Avg Rating"
           value={itinerary.averageRating.toFixed(2)}

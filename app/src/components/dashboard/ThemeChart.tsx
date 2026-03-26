@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -27,24 +28,37 @@ const NEGATIVE_COLORS = [
   "#eba04e", "#edaf62", "#f0be76", "#f2cd8a", "#f5dc9e",
 ];
 
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function ThemeChart({ title, data, type, onBarClick }: ThemeChartProps) {
   const colors = type === "positive" ? POSITIVE_COLORS : NEGATIVE_COLORS;
+  const isMobile = useIsMobile();
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">{title}</h3>
-      <ResponsiveContainer width="100%" height={360}>
+      <ResponsiveContainer width="100%" height={isMobile ? 280 : 360}>
         <BarChart
           data={data}
           layout="vertical"
-          margin={{ left: 20, right: 20, top: 0, bottom: 0 }}
+          margin={{ left: 0, right: 10, top: 0, bottom: 0 }}
         >
           <XAxis type="number" tick={{ fontSize: 11 }} />
           <YAxis
             type="category"
             dataKey="theme"
-            width={160}
-            tick={{ fontSize: 11 }}
+            width={isMobile ? 100 : 160}
+            tick={{ fontSize: isMobile ? 10 : 11 }}
           />
           <Tooltip
             formatter={(value) => [Number(value).toLocaleString(), "Reviews"]}

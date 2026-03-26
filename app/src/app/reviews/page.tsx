@@ -584,14 +584,36 @@ function ReviewsContent() {
       </div>
 
       {/* Main layout: sidebar + results */}
-      <div className="flex gap-6">
+      <div className="relative flex gap-6">
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Sidebar */}
         <div
           className={`${
-            sidebarOpen ? "block" : "hidden"
-          } lg:block w-full lg:w-64 shrink-0`}
+            sidebarOpen
+              ? "fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto bg-white p-4 shadow-xl lg:static lg:z-auto lg:w-64 lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none"
+              : "hidden"
+          } lg:block lg:w-64 shrink-0`}
         >
           <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sticky top-4">
+            <div className="flex items-center justify-between lg:hidden mb-3">
+              <span className="text-sm font-semibold text-[#1B3A5C]">Filters</span>
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="rounded p-1 hover:bg-gray-100 text-gray-400"
+                aria-label="Close filters"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             <FilterSidebar
               filters={filters}
               onChange={setFilters}

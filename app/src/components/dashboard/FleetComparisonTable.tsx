@@ -54,7 +54,7 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
         <h3 className="text-lg font-semibold text-[#1B3A5C]">Fleet Comparison</h3>
         <input
@@ -67,7 +67,7 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="border-b border-gray-200">
               {columns.map((col) => (
