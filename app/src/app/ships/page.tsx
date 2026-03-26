@@ -1,14 +1,28 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import SearchFilter from "@/components/dashboard/SearchFilter";
 import HealthBadge from "@/components/dashboard/HealthBadge";
+import ShipDetail from "@/components/ships/ShipDetail";
 import { getShips, type ShipSummary } from "@/lib/firestore/ship-queries";
 
 type SortOption = "rating" | "reviewCount" | "name";
 
 export default function ShipsPage() {
+  const pathname = usePathname();
+  const slugMatch = pathname.match(/^\/ships\/(.+)$/);
+  const slug = slugMatch ? slugMatch[1] : null;
+
+  if (slug) {
+    return <ShipDetail slug={slug} />;
+  }
+
+  return <ShipList />;
+}
+
+function ShipList() {
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -51,14 +65,9 @@ export default function ShipsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-[#1B3A5C]">Ships</h1>
 
-      {/* Search and Sort Controls */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 max-w-md">
-          <SearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Search ships..."
-          />
+          <SearchFilter value={search} onChange={setSearch} placeholder="Search ships..." />
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="sort" className="text-sm text-gray-500">Sort by:</label>
@@ -75,7 +84,6 @@ export default function ShipsPage() {
         </div>
       </div>
 
-      {/* Ship Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((ship) => (
           <Link
@@ -87,7 +95,6 @@ export default function ShipsPage() {
             <p className="text-xs text-gray-500 mb-4">
               {ship.itineraryCount} itinerar{ship.itineraryCount === 1 ? "y" : "ies"}
             </p>
-
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div>
                 <p className="text-xs text-gray-400">Avg Rating</p>
@@ -102,7 +109,6 @@ export default function ShipsPage() {
                 <p className="text-lg font-semibold text-[#1B3A5C]">{ship.fiveStarPercent.toFixed(1)}%</p>
               </div>
             </div>
-
             <HealthBadge rating={ship.averageRating} />
           </Link>
         ))}

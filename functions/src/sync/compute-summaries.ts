@@ -1,8 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { ReviewDocument, Brand } from "@feefo/shared";
 
-const db = getFirestore();
-
 interface Summary {
   id: string;
   brand: string;
@@ -29,6 +27,7 @@ interface MonthlySummary {
 }
 
 export async function computeSummaries(brand: Brand): Promise<void> {
+  const db = getFirestore();
   const snapshot = await db
     .collection("reviews")
     .where("brand", "==", brand)
@@ -68,6 +67,7 @@ export async function computeSummaries(brand: Brand): Promise<void> {
 }
 
 async function computeMonthlySummaries(brand: Brand, reviews: ReviewDocument[]): Promise<void> {
+  const db = getFirestore();
   const byMonth = groupBy(reviews, (r) => {
     const date = new Date(r.dates.created);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
@@ -103,6 +103,7 @@ async function cleanStaleSummaries(
   byShip: Record<string, ReviewDocument[]>,
   byItinerary: Record<string, ReviewDocument[]>
 ): Promise<void> {
+  const db = getFirestore();
   const existing = await db.collection("summaries")
     .where("brand", "==", brand)
     .get();

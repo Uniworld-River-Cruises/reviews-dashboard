@@ -1,8 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { fetchReviews, transformReview, classifyBatch, Brand, ReviewDocument } from "@feefo/shared";
 
-const db = getFirestore();
-
 interface SyncResult {
   brand: Brand;
   newReviews: number;
@@ -14,6 +12,7 @@ interface SyncResult {
 }
 
 export async function syncBrand(brand: Brand, fullSync: boolean = false): Promise<SyncResult> {
+  const db = getFirestore();
   const result: SyncResult = {
     brand,
     newReviews: 0,
@@ -79,8 +78,14 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
         text: [r.reviews.serviceText, r.reviews.productText].filter(Boolean).join("\n\n"),
       }));
 
-    const classifications = await classifyBatch(reviewsToClassify);
-    result.classified = classifications.size;
+    let classifications = new Map<string, { positive: string[]; negative: string[] }>();
+    try {
+      classifications = await classifyBatch(reviewsToClassify);
+      result.classified = classifications.size;
+    } catch (err) {
+      console.warn(`Classification failed, skipping: ${err}`);
+      result.errors.push(`Classification skipped: ${err}`);
+    }
 
     // 4. Write to Firestore using BulkWriter
     const writer = db.bulkWriter();

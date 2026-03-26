@@ -1,4 +1,5 @@
 import { initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
 import { syncAll } from "./sync/sync-reviews";
@@ -19,13 +20,21 @@ export const dailySync = onSchedule(
 
 // On-demand sync with bearer token auth
 export const manualSync = onRequest(
-  { timeoutSeconds: 540, memory: "1GiB" },
+  { timeoutSeconds: 3600, memory: "2GiB", invoker: "public" },
   async (req, res) => {
     const authHeader = req.headers.authorization;
     const expectedToken = process.env.SYNC_API_TOKEN;
     if (expectedToken && authHeader !== `Bearer ${expectedToken}`) {
       res.status(401).json({ error: "Unauthorized" });
       return;
+    }
+
+    // Reset stuck sync locks if requested
+    if (req.body?.resetLock) {
+      const db = getFirestore();
+      await db.collection("sync_meta").doc("uniworld").set({ status: "idle" }, { merge: true });
+      await db.collection("sync_meta").doc("luxury-gold").set({ status: "idle" }, { merge: true });
+      console.log("Sync locks reset");
     }
 
     const fullSync = req.body?.fullSync === true;

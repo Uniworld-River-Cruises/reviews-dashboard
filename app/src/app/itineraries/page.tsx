@@ -1,14 +1,28 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import SearchFilter from "@/components/dashboard/SearchFilter";
 import HealthBadge from "@/components/dashboard/HealthBadge";
+import ItineraryDetail from "@/components/itineraries/ItineraryDetail";
 import { getItineraries, type ItinerarySummary } from "@/lib/firestore/itinerary-queries";
 
 type SortOption = "rating" | "reviewCount" | "name";
 
 export default function ItinerariesPage() {
+  const pathname = usePathname();
+  const slugMatch = pathname.match(/^\/itineraries\/(.+)$/);
+  const slug = slugMatch ? slugMatch[1] : null;
+
+  if (slug) {
+    return <ItineraryDetail slug={slug} />;
+  }
+
+  return <ItineraryList />;
+}
+
+function ItineraryList() {
   const [itineraries, setItineraries] = useState<ItinerarySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -51,14 +65,9 @@ export default function ItinerariesPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-[#1B3A5C]">Itineraries</h1>
 
-      {/* Search and Sort Controls */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 max-w-md">
-          <SearchFilter
-            value={search}
-            onChange={setSearch}
-            placeholder="Search itineraries..."
-          />
+          <SearchFilter value={search} onChange={setSearch} placeholder="Search itineraries..." />
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="sort" className="text-sm text-gray-500">Sort by:</label>
@@ -75,7 +84,6 @@ export default function ItinerariesPage() {
         </div>
       </div>
 
-      {/* Itinerary Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((it) => (
           <Link
@@ -85,7 +93,6 @@ export default function ItinerariesPage() {
           >
             <h3 className="text-base font-semibold text-[#1B3A5C] mb-2">{it.name}</h3>
             <p className="text-xs text-gray-500 mb-4">{it.ships.join(", ")}</p>
-
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div>
                 <p className="text-xs text-gray-400">Avg Rating</p>
@@ -100,7 +107,6 @@ export default function ItinerariesPage() {
                 <p className="text-lg font-semibold text-[#1B3A5C]">{it.fiveStarPercent.toFixed(1)}%</p>
               </div>
             </div>
-
             <HealthBadge rating={it.averageRating} />
           </Link>
         ))}
