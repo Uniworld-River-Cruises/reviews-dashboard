@@ -4,6 +4,7 @@ import BrandSwitcher from "./BrandSwitcher";
 import DateRangePicker from "./DateRangePicker";
 import RefreshButton from "./RefreshButton";
 import ThemeToggle from "./ThemeToggle";
+import AuthButton from "./AuthButton";
 
 export default function Header() {
   return (
@@ -20,6 +21,7 @@ export default function Header() {
           <div className="flex items-center gap-3">
             <DateRangePicker />
             <ThemeToggle />
+            <AuthButton />
             <RefreshButton />
           </div>
         </div>

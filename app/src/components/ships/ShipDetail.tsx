@@ -105,7 +105,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
         <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Itineraries on This Ship</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ship.itineraries.map((it) => (
-            <Link key={it.slug} href={`/itineraries/${it.slug}`} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+            <Link key={it.slug} href={`/itineraries?slug=${encodeURIComponent(it.slug)}`} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
               <h4 className="text-sm font-semibold text-[#1B3A5C] mb-3">{it.name}</h4>
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <div><p className="text-xs text-gray-400">Rating</p><p className="text-sm font-semibold text-[#1B3A5C]">{it.averageRating.toFixed(2)}</p></div>

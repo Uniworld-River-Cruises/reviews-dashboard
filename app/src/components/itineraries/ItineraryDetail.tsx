@@ -104,7 +104,7 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
         <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Ships Operating This Itinerary</h3>
         <div className="flex flex-wrap gap-3">
           {itinerary.ships.map((ship) => (
-            <Link key={ship} href={`/ships/${ship.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`} className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors">
+            <Link key={ship} href={`/ships?slug=${encodeURIComponent(ship.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""))}`} className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors">
               <svg className="h-5 w-5 text-[#1B3A5C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
               <span className="text-sm font-medium text-[#1B3A5C]">{ship}</span>
             </Link>

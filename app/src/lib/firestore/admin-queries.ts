@@ -1,5 +1,6 @@
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { postFunction } from "@/lib/functions-client";
 
 export interface ItineraryMapping {
   rawName: string;
@@ -23,35 +24,29 @@ export async function getItineraryMappings(brand: string): Promise<ItineraryMapp
     .sort((a, b) => b.reviewCount - a.reviewCount);
 }
 
-const FUNCTIONS_BASE = process.env.NEXT_PUBLIC_FUNCTIONS_URL || "https://us-central1-feefo-reviews.cloudfunctions.net";
-
 export async function saveManualMapping(
   brand: string,
   rawName: string,
   manualParentName: string | null
 ): Promise<void> {
-  const res = await fetch(`${FUNCTIONS_BASE}/itineraryMappings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "update", brand, rawName, manualParentName }),
+  await postFunction("itineraryMappings", {
+    action: "update",
+    brand,
+    rawName,
+    manualParentName,
   });
-  if (!res.ok) throw new Error(`Failed to save mapping: ${res.status}`);
 }
 
 export async function triggerRebuildMappings(brand?: string): Promise<void> {
-  const res = await fetch(`${FUNCTIONS_BASE}/itineraryMappings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "rebuild", brand }),
+  await postFunction("itineraryMappings", {
+    action: "rebuild",
+    brand,
   });
-  if (!res.ok) throw new Error(`Failed to rebuild mappings: ${res.status}`);
 }
 
 export async function triggerRecomputeSummaries(brand?: string): Promise<void> {
-  const res = await fetch(`${FUNCTIONS_BASE}/itineraryMappings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "recompute", brand }),
+  await postFunction("itineraryMappings", {
+    action: "recompute",
+    brand,
   });
-  if (!res.ok) throw new Error(`Failed to recompute summaries: ${res.status}`);
 }

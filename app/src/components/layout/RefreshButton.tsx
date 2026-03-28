@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { onAuthStateChanged } from "firebase/auth";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { postFunction } from "@/lib/functions-client";
 import { doc, getDoc } from "firebase/firestore";
 
 export default function RefreshButton() {
   const { lastSynced, setLastSynced } = useDashboard();
   const [syncing, setSyncing] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   // Load last sync time from Firestore on mount
   useEffect(() => {
@@ -27,15 +31,26 @@ export default function RefreshButton() {
     ? `Synced ${formatDistanceToNow(new Date(lastSynced), { addSuffix: true })}`
     : "Not synced";
 
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => {
+      setIsSignedIn(Boolean(user));
+    });
+  }, []);
+
   async function handleSync() {
+    if (!isSignedIn) {
+      setMessage("Sign in to trigger a sync.");
+      return;
+    }
+
     setSyncing(true);
+    setMessage(null);
     try {
-      const res = await fetch("/api/sync", { method: "POST" });
-      if (res.ok) {
-        setLastSynced(new Date().toISOString());
-      }
-    } catch {
-      // Sync endpoint may not be available yet
+      await postFunction("manualSync", { fullSync: false });
+      setLastSynced(new Date().toISOString());
+      setMessage("Sync triggered.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Failed to trigger sync.");
     } finally {
       setSyncing(false);
     }
@@ -48,7 +63,7 @@ export default function RefreshButton() {
       </span>
       <button
         onClick={handleSync}
-        disabled={syncing}
+        disabled={syncing || !isSignedIn}
         className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50 dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/20"
       >
         <svg
@@ -66,6 +81,9 @@ export default function RefreshButton() {
         </svg>
         {syncing ? "Syncing..." : "Refresh"}
       </button>
+      {message ? (
+        <span className="hidden text-xs text-white/70 md:inline">{message}</span>
+      ) : null}
     </div>
   );
 }

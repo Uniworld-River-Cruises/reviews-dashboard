@@ -3,16 +3,19 @@
   "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "build": "tsc",
     "test": "jest"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^25.5.0",
+    "@types/node": "^20.19.23",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.6",
-    "typescript": "^6.0.2"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0"
