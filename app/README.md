@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frontend App (`app/`)
 
-## Getting Started
+Next.js frontend for the Feefo dashboard.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20.x (required)
+- `app/.env.local` configured from [app/.env.example](/C:/projects/feefo-reviews/app/.env.example)
+
+## Local Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Build
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+```
 
-## Learn More
+This project uses static export (`next.config.ts` has `output: "export"`), generating `app/out` for Firebase Hosting.
 
-To learn more about Next.js, take a look at the following resources:
+## Auth + Protected Actions
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Header includes sign-in/sign-out control.
+- Refresh/admin actions call Cloud Functions with Firebase ID token in `Authorization` header.
+- If user is not signed in (or not allowlisted server-side), protected actions fail with 401/403.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Important UI Routes
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `/` Overview
+- `/itineraries` Itinerary list and detail (`?slug=...`)
+- `/ships` Ship list and detail (`?slug=...`)
+- `/reviews` Reviews explorer
+- `/admin` Itinerary grouping admin

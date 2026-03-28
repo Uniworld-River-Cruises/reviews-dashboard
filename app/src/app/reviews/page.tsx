@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { db } from "@/lib/firebase";
+import { getClientDb } from "@/lib/firebase";
 import {
   collection,
   query,
@@ -240,7 +240,7 @@ const DISPLAY_PAGE_SIZE = 10;
 
 function ReviewsContent() {
   const searchParams = useSearchParams();
-  const { brand, dateRange } = useDashboard();
+  const { brand, dateRange, dataVersion } = useDashboard();
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
@@ -253,6 +253,7 @@ function ReviewsContent() {
   // Firestore data
   const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreFirestore, setHasMoreFirestore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -268,17 +269,19 @@ function ReviewsContent() {
   // Load filter options scoped to the selected date range
   useEffect(() => {
     getFilterOptions(brand, dateStart, dateEnd).then(setFilterOptions).catch(() => {});
-  }, [brand, dateStart, dateEnd]);
+  }, [brand, dateStart, dateEnd, dataVersion]);
 
   // Main query — re-fetch when brand, date range, or server-side filters change
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     setAllReviews([]);
     setLastDoc(null);
     setHasMoreFirestore(true);
     setVisibleCount(DISPLAY_PAGE_SIZE);
 
+    const db = getClientDb();
     const ref = collection(db, "reviews");
     const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters);
     constraints.push(limit(PAGE_SIZE));
@@ -291,28 +294,47 @@ function ReviewsContent() {
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
       setLoading(false);
+    }).catch((err) => {
+      if (cancelled) return;
+
+      console.error("Failed to load reviews", err);
+      setError(
+        err instanceof Error ? err.message : "Unable to load reviews right now."
+      );
+      setHasMoreFirestore(false);
+      setLoading(false);
     });
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brand, dateStart, dateEnd, srvFilterKey]);
+  }, [brand, dateStart, dateEnd, srvFilterKey, dataVersion]);
 
   // Load more from Firestore
   const loadMoreFromFirestore = useCallback(async () => {
     if (!lastDoc || !hasMoreFirestore || loadingMore) return;
     setLoadingMore(true);
 
+    const db = getClientDb();
     const ref = collection(db, "reviews");
     const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters);
     constraints.push(startAfter(lastDoc), limit(PAGE_SIZE));
     const q = query(ref, ...constraints);
-    const snap = await getDocs(q);
+    try {
+      const snap = await getDocs(q);
 
-    const newReviews = snap.docs.map(mapReviewDoc);
-    setAllReviews((prev) => [...prev, ...newReviews]);
-    setLastDoc(snap.docs[snap.docs.length - 1] || null);
-    setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
-    setLoadingMore(false);
+      const newReviews = snap.docs.map(mapReviewDoc);
+      setAllReviews((prev) => [...prev, ...newReviews]);
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
+    } catch (err) {
+      console.error("Failed to load more reviews", err);
+      setError(
+        err instanceof Error ? err.message : "Unable to load more reviews right now."
+      );
+      setHasMoreFirestore(false);
+    } finally {
+      setLoadingMore(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastDoc, hasMoreFirestore, loadingMore, brand, dateStart, dateEnd, srvFilterKey]);
 
@@ -367,6 +389,14 @@ function ReviewsContent() {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-8 w-8 animate-spin rounded-full border-4" style={{ borderColor: 'var(--border)', borderTopColor: 'var(--brand-primary)' }} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-900">
+        {error}
       </div>
     );
   }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { usePathname } from "next/navigation";
+import { useEffect, useState, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useDashboard } from "@/contexts/DashboardContext";
 import SearchFilter from "@/components/dashboard/SearchFilter";
@@ -12,9 +12,22 @@ import { getShips, type ShipSummary } from "@/lib/firestore/ship-queries";
 type SortOption = "rating" | "reviewCount" | "name";
 
 export default function ShipsPage() {
-  const pathname = usePathname();
-  const slugMatch = pathname.match(/^\/ships\/(.+)$/);
-  const slug = slugMatch ? slugMatch[1] : null;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-24">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        </div>
+      }
+    >
+      <ShipsContent />
+    </Suspense>
+  );
+}
+
+function ShipsContent() {
+  const searchParams = useSearchParams();
+  const slug = searchParams.get("slug");
 
   if (slug) {
     return <ShipDetail slug={slug} />;
@@ -24,19 +37,25 @@ export default function ShipsPage() {
 }
 
 function ShipList() {
-  const { brand } = useDashboard();
+  const { brand, dataVersion } = useDashboard();
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("reviewCount");
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     getShips(brand).then((data) => {
       setShips(data);
       setLoading(false);
+    }).catch((err) => {
+      console.error("Failed to load ships", err);
+      setError(err instanceof Error ? err.message : "Unable to load ships right now.");
+      setLoading(false);
     });
-  }, [brand]);
+  }, [brand, dataVersion]);
 
   const filtered = useMemo(() => {
     const result = ships.filter((s) =>
@@ -60,6 +79,14 @@ function ShipList() {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-900">
+        {error}
       </div>
     );
   }
@@ -91,7 +118,7 @@ function ShipList() {
         {filtered.map((ship) => (
           <Link
             key={ship.slug}
-            href={`/ships/${ship.slug}`}
+            href={`/ships?slug=${encodeURIComponent(ship.slug)}`}
             className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
           >
             <h3 className="text-base font-semibold text-[#1B3A5C] mb-2">{ship.name}</h3>

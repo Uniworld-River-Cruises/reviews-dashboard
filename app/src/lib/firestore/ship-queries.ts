@@ -1,4 +1,6 @@
-import { db } from "@/lib/firebase";
+"use client";
+
+import { getClientDb } from "@/lib/firebase";
 import {
   collection,
   query,
@@ -123,6 +125,7 @@ function buildShipSummaryFromDocs(
 }
 
 async function getFleetAverages(brand: string): Promise<{ avgRating: number; avgFiveStar: number }> {
+  const db = getClientDb();
   const ref = collection(db, "summaries");
   const constraints = brand === "combined"
     ? [where("scope", "==", "fleet")]
@@ -152,6 +155,7 @@ async function getFleetAverages(brand: string): Promise<{ avgRating: number; avg
 // ── Query functions ─────────────────────────────────────────────────────────
 
 export async function getShips(brand: string = "combined"): Promise<ShipSummary[]> {
+  const db = getClientDb();
   const ref = collection(db, "summaries");
   const constraints = brand === "combined"
     ? [where("scope", "==", "ship")]
@@ -179,6 +183,7 @@ export async function getShipQuotes(
   shipName: string,
   brand: string = "combined"
 ): Promise<{ positive: Quote[]; negative: Quote[] }> {
+  const db = getClientDb();
   const ref = collection(db, "reviews");
   const baseConstraints = [
     where("tags.ship", "==", shipName),

@@ -2,13 +2,18 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { db } from "@/lib/firebase";
+import { getClientDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, QueryConstraint } from "firebase/firestore";
 import {
+  listAdminUsers,
+  removeAdminUser,
   getItineraryMappings,
+  upsertAdminUser,
   saveManualMapping,
   triggerRebuildMappings,
   triggerRecomputeSummaries,
+  type AdminRole,
+  type AdminUserAccess,
   type ItineraryMapping,
 } from "@/lib/firestore/admin-queries";
 
@@ -52,7 +57,12 @@ function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 export default function AdminPage() {
-  const { brand, dateRange } = useDashboard();
+  const { brand, dateRange, dataVersion } = useDashboard();
+  const [adminUsers, setAdminUsers] = useState<AdminUserAccess[]>([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(true);
+  const [accessEmail, setAccessEmail] = useState("");
+  const [accessRole, setAccessRole] = useState<AdminRole>("sync");
+  const [savingAccess, setSavingAccess] = useState(false);
   const [mappings, setMappings] = useState<ItineraryMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -71,6 +81,17 @@ export default function AdminPage() {
   const dateStart = dateRange.start.toISOString();
   const dateEnd = dateRange.end.toISOString();
 
+  const loadAdminAccess = useCallback(async () => {
+    setAdminUsersLoading(true);
+    try {
+      const users = await listAdminUsers();
+      setAdminUsers(users);
+    } catch {
+      setToast("Failed to load admin access");
+    }
+    setAdminUsersLoading(false);
+  }, []);
+
   const loadMappings = useCallback(async () => {
     setLoading(true);
     try {
@@ -78,6 +99,7 @@ export default function AdminPage() {
       const allMappings = await getItineraryMappings(brand);
 
       // Query reviews within date range for tour counts
+      const db = getClientDb();
       const ref = collection(db, "reviews");
       const constraints: QueryConstraint[] = [
         where("dates.created", ">=", dateStart),
@@ -106,7 +128,11 @@ export default function AdminPage() {
       setToast("Failed to load mappings");
     }
     setLoading(false);
-  }, [brand, dateStart, dateEnd]);
+  }, [brand, dateStart, dateEnd, dataVersion]);
+
+  useEffect(() => {
+    loadAdminAccess();
+  }, [loadAdminAccess]);
 
   useEffect(() => {
     loadMappings();
@@ -178,6 +204,38 @@ export default function AdminPage() {
     const auto = mappings.filter((m) => !m.manualParentName && m.autoParentName !== m.rawName).length;
     return { total, grouped, manual, auto };
   }, [mappings]);
+
+  async function handleGrantAccess() {
+    const email = accessEmail.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      setToast("Enter a valid company email");
+      return;
+    }
+
+    setSavingAccess(true);
+    try {
+      await upsertAdminUser(email, accessRole, true);
+      setAccessEmail("");
+      setAccessRole("sync");
+      await loadAdminAccess();
+      setToast("Access saved");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to save access");
+    }
+    setSavingAccess(false);
+  }
+
+  async function handleRemoveAccess(email: string) {
+    setSavingAccess(true);
+    try {
+      await removeAdminUser(email);
+      await loadAdminAccess();
+      setToast("Access removed");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to remove access");
+    }
+    setSavingAccess(false);
+  }
 
   async function handleRebuild() {
     setRebuilding(true);
@@ -298,6 +356,141 @@ export default function AdminPage() {
 
   return (
     <div>
+      <div className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="border-b border-gray-200 px-6 py-5">
+          <h2 className="text-xl font-semibold text-[#1B3A5C]">Access Control</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Admin access now lives in Firestore, not GitHub. Owners can add or remove
+            who is allowed to sync data and use protected admin actions.
+          </p>
+        </div>
+        <div className="grid gap-6 px-6 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+              Current Access
+            </h3>
+            <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+              {adminUsersLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+                </div>
+              ) : adminUsers.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-gray-500">
+                  No admin users are configured yet. Add your first owner in Firestore or
+                  after bootstrap use the form on the right.
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-gray-500">
+                      <th className="px-4 py-3 font-medium">Email</th>
+                      <th className="px-4 py-3 font-medium">Role</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Updated</th>
+                      <th className="px-4 py-3 text-right font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsers.map((user) => (
+                      <tr key={user.email} className="border-t border-gray-100">
+                        <td className="px-4 py-3 text-gray-900">{user.email}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex rounded-full bg-[#1B3A5C]/10 px-2 py-0.5 text-xs font-medium capitalize text-[#1B3A5C]">
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                              user.active
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-gray-100 text-gray-500"
+                            }`}
+                          >
+                            {user.active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">
+                          {user.updatedAt
+                            ? new Date(user.updatedAt).toLocaleString()
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => handleRemoveAccess(user.email)}
+                            disabled={savingAccess}
+                            className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+              Grant Access
+            </h3>
+            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={accessEmail}
+                    onChange={(e) => setAccessEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Role
+                  </label>
+                  <select
+                    value={accessRole}
+                    onChange={(e) => setAccessRole(e.target.value as AdminRole)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                  >
+                    <option value="sync">Sync Operator</option>
+                    <option value="admin">Admin</option>
+                    <option value="owner">Owner</option>
+                  </select>
+                </div>
+                <div className="rounded-lg bg-white p-3 text-xs leading-5 text-gray-500">
+                  <p>
+                    <strong className="text-gray-700">Sync Operator</strong>: can run
+                    data syncs and classification.
+                  </p>
+                  <p className="mt-2">
+                    <strong className="text-gray-700">Admin</strong>: can sync data and
+                    manage itinerary grouping tools.
+                  </p>
+                  <p className="mt-2">
+                    <strong className="text-gray-700">Owner</strong>: full access,
+                    including managing who else gets access.
+                  </p>
+                </div>
+                <button
+                  onClick={handleGrantAccess}
+                  disabled={savingAccess}
+                  className="inline-flex items-center rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 disabled:opacity-50"
+                >
+                  {savingAccess ? "Saving..." : "Grant Access"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[#1B3A5C]">Itinerary Grouping</h1>

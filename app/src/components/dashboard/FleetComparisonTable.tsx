@@ -95,7 +95,7 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
                 className="border-b border-gray-100 hover:bg-[#1B3A5C]/5 cursor-pointer transition-colors group"
               >
                 <td className="py-3 pr-4">
-                  <Link href={`/itineraries/${entity.id}`} className="font-medium text-[#1B3A5C] group-hover:underline">
+                  <Link href={`/itineraries?slug=${encodeURIComponent(entity.id)}`} className="font-medium text-[#1B3A5C] group-hover:underline">
                     {entity.name}
                   </Link>
                 </td>

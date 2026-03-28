@@ -1,30 +1,134 @@
 import { initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
 import { syncAll } from "./sync/sync-reviews";
 import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
-import { rebuildMappings as rebuildItineraryMappings, updateMapping as updateItineraryMapping } from "./sync/itinerary-mappings";
+import {
+  deleteAdminUser,
+  getAdminUserByEmail,
+  getOwnerCount,
+  hasPermission,
+  listAdminUsers,
+  normalizeEmail,
+  upsertAdminUser,
+  type AccessPermission,
+  type AdminRole,
+} from "./auth/access-control";
+import {
+  rebuildMappings as rebuildItineraryMappings,
+  updateMapping as updateItineraryMapping,
+} from "./sync/itinerary-mappings";
 
 initializeApp();
 
-// Daily sync at 2am UTC — fetch reviews + compute summaries (no classification)
+interface AuthorizedCaller {
+  uid: string;
+  email: string | null;
+  source: "firebase" | "shared-token";
+  role: AdminRole | "service";
+}
+
+function parseAllowedEmails(): Set<string> {
+  const raw = process.env.ADMIN_EMAILS ?? "";
+  return new Set(
+    raw
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function getSharedTokenHeader(req: any): string | null {
+  const raw = req.headers["x-sync-token"];
+  if (!raw) return null;
+  return Array.isArray(raw) ? raw[0] : raw;
+}
+
+async function authorizeRequest(
+  req: any,
+  res: any,
+  permission: AccessPermission
+): Promise<AuthorizedCaller | null> {
+  const sharedToken = process.env.SYNC_API_TOKEN;
+  const suppliedSharedToken = getSharedTokenHeader(req);
+  if (sharedToken && suppliedSharedToken === sharedToken) {
+    return { uid: "shared-token", email: null, source: "shared-token", role: "service" };
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing bearer token." });
+    return null;
+  }
+
+  const token = authHeader.slice("Bearer ".length).trim();
+
+  try {
+    const decoded = await getAuth().verifyIdToken(token);
+    const email = decoded.email?.toLowerCase() ?? null;
+
+    const allowedEmails = parseAllowedEmails();
+    const adminUser = await getAdminUserByEmail(email);
+    const allowedByLegacyEmailList =
+      allowedEmails.size > 0 && Boolean(email && allowedEmails.has(email));
+    const allowedByDatabase = hasPermission(adminUser, permission);
+
+    if (!allowedByLegacyEmailList && !allowedByDatabase) {
+      res.status(403).json({
+        error:
+          "Forbidden for this account. Ask an owner to add your email to the admin_users collection.",
+      });
+      return null;
+    }
+
+    const requireAdminClaim = process.env.REQUIRE_ADMIN_CLAIM === "true";
+    if (requireAdminClaim && decoded.admin !== true) {
+      res.status(403).json({ error: "Admin claim required." });
+      return null;
+    }
+
+    return {
+      uid: decoded.uid,
+      email: decoded.email ?? null,
+      source: "firebase",
+      role: adminUser?.role ?? "admin",
+    };
+  } catch {
+    res.status(401).json({ error: "Invalid bearer token." });
+    return null;
+  }
+}
+
+function ensurePost(req: any, res: any): boolean {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed. Use POST." });
+    return false;
+  }
+  return true;
+}
+
+// Scheduled sync every 6 hours in UTC - fetch reviews + compute summaries (no classification)
 export const dailySync = onSchedule(
-  { schedule: "0 2 * * *", timeoutSeconds: 540, memory: "1GiB" },
+  { schedule: "0 */6 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
     const results = await syncAll(false);
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
-    console.log("Daily sync complete:", JSON.stringify(results));
+    console.log("Scheduled sync complete:", JSON.stringify(results));
   }
 );
 
-// On-demand sync — fetch reviews + tags from Feefo, compute summaries
+// On-demand sync - fetch reviews + tags from Feefo, compute summaries
 export const manualSync = onRequest(
-  { timeoutSeconds: 3600, memory: "2GiB", invoker: "public" },
+  { timeoutSeconds: 3600, memory: "2GiB", invoker: "public", cors: true },
   async (req, res) => {
-    // Reset stuck sync locks if requested
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "sync");
+    if (!caller) return;
+
     if (req.body?.resetLock) {
       const db = getFirestore();
       await db.collection("sync_meta").doc("uniworld").set({ status: "idle" }, { merge: true });
@@ -36,33 +140,48 @@ export const manualSync = onRequest(
     const results = await syncAll(fullSync);
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
+    console.log(`manualSync triggered by ${caller.source}:${caller.email ?? caller.uid}`);
     res.json({ success: true, results });
   }
 );
 
 // Submit unclassified reviews to Anthropic Batch API (50% cheaper, no rate limits)
 export const batchClassify = onRequest(
-  { timeoutSeconds: 300, memory: "1GiB", invoker: "public" },
+  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: true },
   async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "batchClassify");
+    if (!caller) return;
+
     const action = req.body?.action ?? "submit";
 
     if (action === "submit") {
       const result = await submitClassificationBatch();
+      console.log(`batchClassify submit by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json(result);
-    } else if (action === "results") {
+      return;
+    }
+
+    if (action === "results") {
       const batchId = req.body?.batchId;
       const result = await processBatchResults(batchId);
+      console.log(`batchClassify results by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json(result);
-    } else {
-      res.status(400).json({ error: "Invalid action. Use 'submit' or 'results'." });
+      return;
     }
+
+    res.status(400).json({ error: "Invalid action. Use 'submit' or 'results'." });
   }
 );
 
-// Rebuild itinerary mappings (auto-grouping) — preserves manual overrides
+// Rebuild itinerary mappings (auto-grouping) - preserves manual overrides
 export const itineraryMappings = onRequest(
-  { timeoutSeconds: 300, memory: "1GiB", invoker: "public" },
+  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: true },
   async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "manageMappings");
+    if (!caller) return;
+
     const action = req.body?.action ?? "rebuild";
     const brand = req.body?.brand as string | undefined;
 
@@ -74,21 +193,110 @@ export const itineraryMappings = onRequest(
       if (!brand || brand === "luxury-gold") {
         results["luxury-gold"] = await rebuildItineraryMappings("luxury-gold");
       }
+      console.log(`itineraryMappings rebuild by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json({ success: true, results });
-    } else if (action === "update") {
+      return;
+    }
+
+    if (action === "update") {
       const { rawName, manualParentName } = req.body;
       if (!brand || !rawName) {
         res.status(400).json({ error: "brand and rawName are required" });
         return;
       }
-      await updateItineraryMapping(brand as "uniworld" | "luxury-gold", rawName, manualParentName ?? null);
+      await updateItineraryMapping(
+        brand as "uniworld" | "luxury-gold",
+        rawName,
+        manualParentName ?? null
+      );
+      console.log(`itineraryMappings update by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json({ success: true });
-    } else if (action === "recompute") {
+      return;
+    }
+
+    if (action === "recompute") {
       if (!brand || brand === "uniworld") await computeSummaries("uniworld");
       if (!brand || brand === "luxury-gold") await computeSummaries("luxury-gold");
+      console.log(`itineraryMappings recompute by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json({ success: true });
-    } else {
-      res.status(400).json({ error: "Invalid action. Use 'rebuild', 'update', or 'recompute'." });
+      return;
     }
+
+    res.status(400).json({ error: "Invalid action. Use 'rebuild', 'update', or 'recompute'." });
+  }
+);
+
+// Manage runtime admin access stored in Firestore.
+export const adminUsers = onRequest(
+  { timeoutSeconds: 120, memory: "512MiB", invoker: "public", cors: true },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "manageUsers");
+    if (!caller) return;
+
+    const action = req.body?.action ?? "list";
+
+    if (action === "list") {
+      const users = await listAdminUsers();
+      res.json({ users });
+      return;
+    }
+
+    if (action === "upsert") {
+      const email = req.body?.email;
+      const role = req.body?.role;
+      const active = req.body?.active !== false;
+
+      if (typeof email !== "string" || !email.includes("@")) {
+        res.status(400).json({ error: "A valid email is required." });
+        return;
+      }
+
+      if (role !== "owner" && role !== "admin" && role !== "sync") {
+        res.status(400).json({ error: "role must be owner, admin, or sync." });
+        return;
+      }
+
+      const record = await upsertAdminUser({
+        email,
+        role,
+        active,
+        updatedBy: caller.email ?? caller.uid,
+      });
+      console.log(`adminUsers upsert by ${caller.source}:${caller.email ?? caller.uid}`);
+      res.json({ success: true, user: record });
+      return;
+    }
+
+    if (action === "remove") {
+      const email = req.body?.email;
+
+      if (typeof email !== "string" || !email.includes("@")) {
+        res.status(400).json({ error: "A valid email is required." });
+        return;
+      }
+
+      const normalizedTarget = normalizeEmail(email);
+      const target = await getAdminUserByEmail(normalizedTarget);
+      if (!target) {
+        res.json({ success: true });
+        return;
+      }
+
+      if (target.role === "owner") {
+        const ownerCount = await getOwnerCount();
+        if (ownerCount <= 1) {
+          res.status(400).json({ error: "You cannot remove the last active owner." });
+          return;
+        }
+      }
+
+      await deleteAdminUser(normalizedTarget);
+      console.log(`adminUsers remove by ${caller.source}:${caller.email ?? caller.uid}`);
+      res.json({ success: true });
+      return;
+    }
+
+    res.status(400).json({ error: "Invalid action. Use 'list', 'upsert', or 'remove'." });
   }
 );

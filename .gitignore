@@ -2,9 +2,12 @@
 .env
 functions/.env.local
 functions/.env
+functions/.env.*
+!functions/.env.example
 functions/shared-lib/
 api-credentials.txt
 node_modules/
 .firebase/
 app/out/
 app/.next/
+gha-creds-*.json

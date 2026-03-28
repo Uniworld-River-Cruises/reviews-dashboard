@@ -18,13 +18,14 @@ import {
 } from "@/lib/firestore/itinerary-queries";
 
 export default function ItineraryDetail({ slug }: { slug: string }) {
-  const { brand } = useDashboard();
+  const { brand, dataVersion } = useDashboard();
   const [itinerary, setItinerary] = useState<ItinerarySummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
     negative: [],
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTheme, setPanelTheme] = useState("");
   const [panelType, setPanelType] = useState<"positive" | "negative">("positive");
@@ -34,6 +35,7 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     getItineraryBySlug(slug, brand).then(async (data) => {
       if (cancelled) return;
       setItinerary(data);
@@ -42,9 +44,14 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
         if (!cancelled) setQuotes(q);
       }
       setLoading(false);
+    }).catch((err) => {
+      if (cancelled) return;
+      console.error("Failed to load itinerary detail", err);
+      setError(err instanceof Error ? err.message : "Unable to load itinerary detail right now.");
+      setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [slug, brand]);
+  }, [slug, brand, dataVersion]);
 
   const openPanel = useCallback(async (theme: string, type: "positive" | "negative") => {
     setPanelTheme(theme);
@@ -65,6 +72,14 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-900">
+        {error}
       </div>
     );
   }
@@ -104,7 +119,7 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
         <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Ships Operating This Itinerary</h3>
         <div className="flex flex-wrap gap-3">
           {itinerary.ships.map((ship) => (
-            <Link key={ship} href={`/ships/${ship.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}`} className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors">
+            <Link key={ship} href={`/ships?slug=${encodeURIComponent(ship.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""))}`} className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors">
               <svg className="h-5 w-5 text-[#1B3A5C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
               <span className="text-sm font-medium text-[#1B3A5C]">{ship}</span>
             </Link>

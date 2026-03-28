@@ -19,13 +19,14 @@ import {
 } from "@/lib/firestore/ship-queries";
 
 export default function ShipDetail({ slug }: { slug: string }) {
-  const { brand } = useDashboard();
+  const { brand, dataVersion } = useDashboard();
   const [ship, setShip] = useState<ShipSummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
     negative: [],
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTheme, setPanelTheme] = useState("");
   const [panelType, setPanelType] = useState<"positive" | "negative">("positive");
@@ -35,6 +36,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     getShipBySlug(slug, brand).then(async (data) => {
       if (cancelled) return;
       setShip(data);
@@ -43,9 +45,14 @@ export default function ShipDetail({ slug }: { slug: string }) {
         if (!cancelled) setQuotes(q);
       }
       setLoading(false);
+    }).catch((err) => {
+      if (cancelled) return;
+      console.error("Failed to load ship detail", err);
+      setError(err instanceof Error ? err.message : "Unable to load ship detail right now.");
+      setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [slug, brand]);
+  }, [slug, brand, dataVersion]);
 
   const openPanel = useCallback(async (theme: string, type: "positive" | "negative") => {
     setPanelTheme(theme);
@@ -66,6 +73,14 @@ export default function ShipDetail({ slug }: { slug: string }) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-900">
+        {error}
       </div>
     );
   }
@@ -105,7 +120,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
         <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Itineraries on This Ship</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ship.itineraries.map((it) => (
-            <Link key={it.slug} href={`/itineraries/${it.slug}`} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
+            <Link key={it.slug} href={`/itineraries?slug=${encodeURIComponent(it.slug)}`} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
               <h4 className="text-sm font-semibold text-[#1B3A5C] mb-3">{it.name}</h4>
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <div><p className="text-xs text-gray-400">Rating</p><p className="text-sm font-semibold text-[#1B3A5C]">{it.averageRating.toFixed(2)}</p></div>
