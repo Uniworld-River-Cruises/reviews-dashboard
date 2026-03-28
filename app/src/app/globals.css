@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f9fa;
+  --foreground: #1a1a2e;
+  --surface: #ffffff;
+  --surface-hover: #f9fafb;
+  --surface-alt: #f3f4f6;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --brand-primary: #1B3A5C;
+  --brand-primary-hover: rgba(27, 58, 92, 0.05);
+  --brand-primary-light: rgba(27, 58, 92, 0.1);
+  --brand-gold: #C5A258;
+  --nav-bg: #ffffff;
+  --nav-border: #e5e7eb;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --badge-gray-bg: #f3f4f6;
+  --badge-gray-text: #6b7280;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+.dark {
+  --background: #0c1220;
+  --foreground: #e2e8f0;
+  --surface: #141e30;
+  --surface-hover: #1a2740;
+  --surface-alt: #111927;
+  --border: #1e2d44;
+  --border-light: #182438;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --brand-primary: #1B3A5C;
+  --brand-primary-hover: rgba(126, 184, 224, 0.08);
+  --brand-primary-light: rgba(126, 184, 224, 0.15);
+  --brand-gold: #d4b06a;
+  --nav-bg: #111927;
+  --nav-border: #1e2d44;
+  --input-bg: #141e30;
+  --input-border: #2a3a52;
+  --badge-gray-bg: #1e2d44;
+  --badge-gray-text: #94a3b8;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-alt: var(--surface-alt);
+  --color-dm-border: var(--border);
+  --color-dm-border-light: var(--border-light);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-gold: var(--brand-gold);
+  --color-nav-bg: var(--nav-bg);
+  --color-nav-border: var(--nav-border);
+  --color-input-bg: var(--input-bg);
+  --color-input-border: var(--input-border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Dark mode overrides for common Tailwind utilities */
+.dark .bg-white {
+  background-color: var(--surface) !important;
+}
+
+.dark .bg-gray-50 {
+  background-color: var(--surface-alt) !important;
+}
+
+/* Body transition for smooth theme switching */
+body, .bg-white, .bg-gray-50 {
+  transition: background-color 0.15s ease;
+}
+
+.dark .border-gray-100 {
+  border-color: var(--border-light) !important;
+}
+
+.dark .border-gray-200 {
+  border-color: var(--border) !important;
+}
+
+.dark .border-gray-300 {
+  border-color: var(--input-border) !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800 {
+  color: var(--text-primary) !important;
+}
+
+.dark .text-gray-700,
+.dark .text-gray-600 {
+  color: var(--text-secondary) !important;
+}
+
+.dark .text-gray-500 {
+  color: var(--text-tertiary) !important;
+}
+
+.dark .text-gray-400 {
+  color: #4b5e78 !important;
+}
+
+.dark .text-\[\#1B3A5C\] {
+  color: #7EB8E0 !important;
+}
+
+.dark .bg-\[\#1B3A5C\]\/5 {
+  background-color: rgba(126, 184, 224, 0.08) !important;
+}
+
+.dark .bg-\[\#1B3A5C\]\/10 {
+  background-color: rgba(126, 184, 224, 0.12) !important;
+}
+
+.dark .text-\[\#C5A258\] {
+  color: #d4b06a !important;
+}
+
+.dark .hover\:bg-gray-50:hover {
+  background-color: var(--surface-hover) !important;
+}
+
+.dark .shadow-sm {
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.dark .shadow-lg {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3) !important;
+}
+
+/* Dark mode inputs */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark input::placeholder {
+  color: var(--text-tertiary) !important;
+}
+
+/* Dark mode for Recharts */
+.dark .recharts-cartesian-axis-tick-value {
+  fill: var(--text-tertiary) !important;
+}
+
+.dark .recharts-cartesian-grid line {
+  stroke: var(--border) !important;
+}
+
+/* Dark mode health badges */
+.dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.15) !important; }
+.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.15) !important; }
+.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.15) !important; }
+.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.15) !important; }
+.dark .bg-gray-100 { background-color: var(--badge-gray-bg) !important; }
+
+.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.1) !important; }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.1) !important; }
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.1) !important; }
+.dark .bg-yellow-50 { background-color: rgba(234, 179, 8, 0.1) !important; }
+
+/* Recharts tooltip dark mode */
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.25s ease-out;
+}

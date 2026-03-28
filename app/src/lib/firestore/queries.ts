@@ -1,0 +1,507 @@
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  doc,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  orderBy,
+  limit,
+  QueryConstraint,
+} from "firebase/firestore";
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+export interface FleetSummary {
+  totalReviews: number;
+  averageRating: number;
+  fiveStarPercent: number;
+  fourPlusPercent: number;
+  totalItineraries: number;
+  totalShips: number;
+  ratingDistribution: { star: number; count: number }[];
+  previousPeriodReviews: number;
+  previousPeriodRating: number;
+  positiveThemes: { theme: string; count: number }[];
+  negativeThemes: { theme: string; count: number }[];
+}
+
+export interface MonthlySummary {
+  month: string; // e.g. "2025-06"
+  averageRating: number;
+  reviewCount: number;
+}
+
+export interface EntitySummary {
+  id: string;
+  name: string;
+  ships: string[];
+  averageRating: number;
+  reviewCount: number;
+  fiveStarPercent: number;
+}
+
+export interface ThemeReview {
+  id: string;
+  guestName: string;
+  rating: number;
+  itinerary: string;
+  ship: string;
+  text: string;
+  date: string;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 100);
+}
+
+const EMPTY_FLEET: FleetSummary = {
+  totalReviews: 0,
+  averageRating: 0,
+  fiveStarPercent: 0,
+  fourPlusPercent: 0,
+  totalItineraries: 0,
+  totalShips: 0,
+  ratingDistribution: [
+    { star: 5, count: 0 },
+    { star: 4, count: 0 },
+    { star: 3, count: 0 },
+    { star: 2, count: 0 },
+    { star: 1, count: 0 },
+  ],
+  previousPeriodReviews: 0,
+  previousPeriodRating: 0,
+  positiveThemes: [],
+  negativeThemes: [],
+};
+
+// ── Query functions ─────────────────────────────────────────────────────────
+
+export async function getFleetSummary(brand: string): Promise<FleetSummary> {
+  // "combined" means we need to merge both brand summaries
+  if (brand === "combined") {
+    const snap = await getDocs(
+      query(collection(db, "summaries"), where("scope", "==", "fleet"))
+    );
+    if (snap.empty) return EMPTY_FLEET;
+
+    let totalReviews = 0;
+    let reviewsWithComments = 0;
+    let ratingSum = 0;
+    const starDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+    const positiveCounts: Record<string, number> = {};
+    const negativeCounts: Record<string, number> = {};
+    const allShips = new Set<string>();
+    const allItineraries = new Set<string>();
+
+    for (const d of snap.docs) {
+      const data = d.data();
+      totalReviews += data.totalReviews || 0;
+      reviewsWithComments += data.reviewsWithComments || 0;
+      ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
+      const sd = data.starDistribution || {};
+      for (const star of Object.keys(sd)) {
+        starDist[star] = (starDist[star] || 0) + sd[star];
+      }
+      for (const t of data.topPositiveThemes || []) {
+        positiveCounts[t.theme] = (positiveCounts[t.theme] || 0) + t.count;
+      }
+      for (const t of data.topNegativeThemes || []) {
+        negativeCounts[t.theme] = (negativeCounts[t.theme] || 0) + t.count;
+      }
+      for (const s of data.ships || []) allShips.add(s);
+      for (const it of data.itineraries || []) allItineraries.add(it);
+    }
+
+    const avgRating = totalReviews > 0 ? Math.round((ratingSum / totalReviews) * 100) / 100 : 0;
+    const fiveStar = starDist["5"] || 0;
+    const fourPlus = (starDist["5"] || 0) + (starDist["4"] || 0);
+
+    return {
+      totalReviews,
+      averageRating: avgRating,
+      fiveStarPercent: totalReviews > 0 ? Math.round((fiveStar / totalReviews) * 1000) / 10 : 0,
+      fourPlusPercent: totalReviews > 0 ? Math.round((fourPlus / totalReviews) * 1000) / 10 : 0,
+      totalItineraries: allItineraries.size,
+      totalShips: allShips.size,
+      ratingDistribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: starDist[String(star)] || 0 })),
+      previousPeriodReviews: 0,
+      previousPeriodRating: 0,
+      positiveThemes: Object.entries(positiveCounts)
+        .map(([theme, count]) => ({ theme, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+      negativeThemes: Object.entries(negativeCounts)
+        .map(([theme, count]) => ({ theme, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+    };
+  }
+
+  // Single brand: doc ID is the brand name (e.g. "uniworld")
+  const docRef = doc(db, "summaries", brand);
+  const snap = await getDoc(docRef);
+
+  if (!snap.exists()) return EMPTY_FLEET;
+
+  const data = snap.data();
+  const totalReviews = data.totalReviews || 0;
+  const sd = data.starDistribution || {};
+  const fiveStar = sd["5"] || 0;
+  const fourPlus = (sd["5"] || 0) + (sd["4"] || 0);
+
+  // Count unique ships and itineraries from sub-summaries
+  const subSnap = await getDocs(
+    query(collection(db, "summaries"), where("brand", "==", brand), where("scope", "!=", "fleet"))
+  );
+  const ships = new Set<string>();
+  const itineraries = new Set<string>();
+  for (const d of subSnap.docs) {
+    const sub = d.data();
+    if (sub.scope === "ship" && sub.scopeValue) ships.add(sub.scopeValue);
+    if (sub.scope === "itinerary" && sub.scopeValue) itineraries.add(sub.scopeValue);
+  }
+
+  return {
+    totalReviews,
+    averageRating: data.avgRating || 0,
+    fiveStarPercent: totalReviews > 0 ? Math.round((fiveStar / totalReviews) * 1000) / 10 : 0,
+    fourPlusPercent: totalReviews > 0 ? Math.round((fourPlus / totalReviews) * 1000) / 10 : 0,
+    totalItineraries: itineraries.size,
+    totalShips: ships.size,
+    ratingDistribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: sd[String(star)] || 0 })),
+    previousPeriodReviews: 0,
+    previousPeriodRating: 0,
+    positiveThemes: (data.topPositiveThemes || []).slice(0, 10),
+    negativeThemes: (data.topNegativeThemes || []).slice(0, 10),
+  };
+}
+
+export async function getMonthlySummaries(brand: string): Promise<MonthlySummary[]> {
+  const ref = collection(db, "monthly_summaries");
+  const constraints = brand === "combined"
+    ? [orderBy("month", "asc")]
+    : [where("brand", "==", brand), orderBy("month", "asc")];
+  const q = query(ref, ...constraints);
+  const snap = await getDocs(q);
+
+  if (snap.empty) return [];
+
+  if (brand === "combined") {
+    // Aggregate by month across brands
+    const byMonth: Record<string, { totalReviews: number; ratingSum: number }> = {};
+    for (const d of snap.docs) {
+      const data = d.data();
+      const month = data.month;
+      if (!byMonth[month]) byMonth[month] = { totalReviews: 0, ratingSum: 0 };
+      byMonth[month].totalReviews += data.totalReviews || 0;
+      byMonth[month].ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
+    }
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, agg]) => ({
+        month,
+        averageRating: agg.totalReviews > 0 ? Math.round((agg.ratingSum / agg.totalReviews) * 100) / 100 : 0,
+        reviewCount: agg.totalReviews,
+      }));
+  }
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      month: data.month,
+      averageRating: data.avgRating || 0,
+      reviewCount: data.totalReviews || 0,
+    };
+  });
+}
+
+export async function getEntitySummaries(
+  brand: string,
+  scope: "ship" | "itinerary" = "itinerary"
+): Promise<EntitySummary[]> {
+  const ref = collection(db, "summaries");
+  const constraints = brand === "combined"
+    ? [where("scope", "==", scope)]
+    : [where("brand", "==", brand), where("scope", "==", scope)];
+  const q = query(ref, ...constraints);
+  const snap = await getDocs(q);
+
+  if (snap.empty) return [];
+
+  // When combined, aggregate duplicate scope values across brands
+  if (brand === "combined") {
+    const byName: Record<string, { totalReviews: number; ratingSum: number; fiveStar: number; ships: Set<string> }> = {};
+    for (const d of snap.docs) {
+      const data = d.data();
+      const name = data.scopeValue || d.id;
+      if (!byName[name]) byName[name] = { totalReviews: 0, ratingSum: 0, fiveStar: 0, ships: new Set() };
+      byName[name].totalReviews += data.totalReviews || 0;
+      byName[name].ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
+      byName[name].fiveStar += (data.starDistribution?.["5"] || 0);
+      for (const s of data.ships || []) byName[name].ships.add(s);
+    }
+    return Object.entries(byName).map(([name, agg]) => ({
+      id: slugify(name),
+      name,
+      ships: [...agg.ships],
+      averageRating: agg.totalReviews > 0 ? Math.round((agg.ratingSum / agg.totalReviews) * 100) / 100 : 0,
+      reviewCount: agg.totalReviews,
+      fiveStarPercent: agg.totalReviews > 0 ? Math.round((agg.fiveStar / agg.totalReviews) * 1000) / 10 : 0,
+    }));
+  }
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    const total = data.totalReviews || 0;
+    const fiveStar = data.starDistribution?.["5"] || 0;
+    const name = data.scopeValue || d.id;
+    return {
+      id: slugify(name),
+      name,
+      ships: data.ships || [],
+      averageRating: data.avgRating || 0,
+      reviewCount: total,
+      fiveStarPercent: total > 0 ? Math.round((fiveStar / total) * 1000) / 10 : 0,
+    };
+  });
+}
+
+/**
+ * Compute fleet summary directly from reviews filtered by date range.
+ * Used when the user selects a date range other than "All Time".
+ */
+export async function getFleetSummaryByDateRange(
+  brand: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FleetSummary> {
+  const ref = collection(db, "reviews");
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", startDate.toISOString()),
+    where("dates.created", "<=", endDate.toISOString()),
+  ];
+  if (brand !== "combined") {
+    constraints.push(where("brand", "==", brand));
+  }
+  constraints.push(orderBy("dates.created", "desc"));
+  const q = query(ref, ...constraints);
+  const snap = await getDocs(q);
+
+  if (snap.empty) return EMPTY_FLEET;
+
+  let ratingSum = 0;
+  const starDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+  const positiveCounts: Record<string, number> = {};
+  const negativeCounts: Record<string, number> = {};
+  const ships = new Set<string>();
+  const itineraries = new Set<string>();
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    const rating = data.rating || data.ratings?.product || data.ratings?.service || 0;
+    ratingSum += rating;
+    const starKey = String(Math.round(rating));
+    starDist[starKey] = (starDist[starKey] || 0) + 1;
+
+    if (data.ship) ships.add(data.ship);
+    if (data.tags?.ship) ships.add(data.tags.ship);
+    if (data.tags?.tour) itineraries.add(data.tags.tour);
+
+    for (const t of data.themes?.positive || []) {
+      positiveCounts[t] = (positiveCounts[t] || 0) + 1;
+    }
+    for (const t of data.themes?.negative || []) {
+      negativeCounts[t] = (negativeCounts[t] || 0) + 1;
+    }
+  }
+
+  const total = snap.docs.length;
+  const avgRating = total > 0 ? Math.round((ratingSum / total) * 100) / 100 : 0;
+  const fiveStar = starDist["5"] || 0;
+  const fourPlus = (starDist["5"] || 0) + (starDist["4"] || 0);
+
+  return {
+    totalReviews: total,
+    averageRating: avgRating,
+    fiveStarPercent: total > 0 ? Math.round((fiveStar / total) * 1000) / 10 : 0,
+    fourPlusPercent: total > 0 ? Math.round((fourPlus / total) * 1000) / 10 : 0,
+    totalItineraries: itineraries.size,
+    totalShips: ships.size,
+    ratingDistribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: starDist[String(star)] || 0 })),
+    previousPeriodReviews: 0,
+    previousPeriodRating: 0,
+    positiveThemes: Object.entries(positiveCounts)
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+    negativeThemes: Object.entries(negativeCounts)
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+  };
+}
+
+/**
+ * Get all filter options (ships, itineraries, themes) from reviews within the date range.
+ * Queries the reviews collection so results reflect the selected time period.
+ */
+/**
+ * Compute entity summaries (itinerary or ship) from reviews within a date range.
+ */
+export async function getEntitySummariesByDateRange(
+  brand: string,
+  startDate: Date,
+  endDate: Date,
+  scope: "ship" | "itinerary" = "itinerary"
+): Promise<EntitySummary[]> {
+  const ref = collection(db, "reviews");
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", startDate.toISOString()),
+    where("dates.created", "<=", endDate.toISOString()),
+    orderBy("dates.created", "desc"),
+  ];
+  if (brand !== "combined") {
+    constraints.unshift(where("brand", "==", brand));
+  }
+  const snap = await getDocs(query(ref, ...constraints));
+
+  if (snap.empty) return [];
+
+  const byName: Record<string, { totalReviews: number; ratingSum: number; fiveStar: number; ships: Set<string> }> = {};
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    const name = scope === "ship"
+      ? (data.tags?.ship || "")
+      : (data.tags?.tour || data.product?.title || "");
+    if (!name) continue;
+
+    if (!byName[name]) byName[name] = { totalReviews: 0, ratingSum: 0, fiveStar: 0, ships: new Set() };
+    byName[name].totalReviews++;
+    const rating = data.ratings?.product ?? data.ratings?.service ?? 0;
+    byName[name].ratingSum += rating;
+    if (Math.round(rating) === 5) byName[name].fiveStar++;
+    if (data.tags?.ship) byName[name].ships.add(data.tags.ship);
+  }
+
+  return Object.entries(byName)
+    .map(([name, agg]) => ({
+      id: slugify(name),
+      name,
+      ships: [...agg.ships],
+      averageRating: agg.totalReviews > 0 ? Math.round((agg.ratingSum / agg.totalReviews) * 100) / 100 : 0,
+      reviewCount: agg.totalReviews,
+      fiveStarPercent: agg.totalReviews > 0 ? Math.round((agg.fiveStar / agg.totalReviews) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.reviewCount - a.reviewCount);
+}
+
+export interface FilterOptions {
+  brands: string[];
+  ratings: number[];
+  ships: string[];
+  itineraries: string[];
+  positiveThemes: string[];
+  negativeThemes: string[];
+  bookingTypes: string[];
+  regions: string[];
+  loyaltyLevels: string[];
+}
+
+/**
+ * Get all filter options from reviews within the date range.
+ * Queries the reviews collection so results reflect the selected time period.
+ */
+export async function getFilterOptions(
+  brand: string,
+  startDate: string,
+  endDate: string
+): Promise<FilterOptions> {
+  const ref = collection(db, "reviews");
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", startDate),
+    where("dates.created", "<=", endDate),
+    orderBy("dates.created", "desc"),
+  ];
+  if (brand !== "combined") {
+    constraints.unshift(where("brand", "==", brand));
+  }
+  const snap = await getDocs(query(ref, ...constraints));
+
+  const brands = new Set<string>();
+  const ratings = new Set<number>();
+  const ships = new Set<string>();
+  const itineraries = new Set<string>();
+  const positiveThemes = new Set<string>();
+  const negativeThemes = new Set<string>();
+  const bookingTypes = new Set<string>();
+  const regions = new Set<string>();
+  const loyaltyLevels = new Set<string>();
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.brand) brands.add(data.brand);
+    const rating = data.ratings?.product ?? data.ratings?.service;
+    if (rating != null) ratings.add(Math.round(rating));
+    if (data.tags?.ship) ships.add(data.tags.ship);
+    if (data.tags?.tour) itineraries.add(data.tags.tour);
+    if (data.tags?.bookingType) bookingTypes.add(data.tags.bookingType);
+    if (data.tags?.region) regions.add(data.tags.region);
+    if (data.tags?.loyalty) loyaltyLevels.add(data.tags.loyalty);
+    for (const t of data.themes?.positive || []) positiveThemes.add(t);
+    for (const t of data.themes?.negative || []) negativeThemes.add(t);
+  }
+
+  return {
+    brands: [...brands].sort(),
+    ratings: [...ratings].sort((a, b) => b - a),
+    ships: [...ships].sort(),
+    itineraries: [...itineraries].sort(),
+    positiveThemes: [...positiveThemes].sort(),
+    negativeThemes: [...negativeThemes].sort(),
+    bookingTypes: [...bookingTypes].sort(),
+    regions: [...regions].sort(),
+    loyaltyLevels: [...loyaltyLevels].sort(),
+  };
+}
+
+export async function getReviewsByTheme(
+  brand: string,
+  theme: string,
+  type: "positive" | "negative"
+): Promise<ThemeReview[]> {
+  const ref = collection(db, "reviews");
+  const constraints = [
+    where(`themes.${type}`, "array-contains", theme),
+    orderBy("dates.created", "desc"),
+    limit(20),
+  ];
+  if (brand !== "combined") {
+    constraints.unshift(where("brand", "==", brand));
+  }
+  const q = query(ref, ...constraints);
+  const snap = await getDocs(q);
+
+  if (snap.empty) return [];
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      guestName: data.customer?.displayName || data.customer?.name || "Guest",
+      rating: data.ratings?.product ?? data.ratings?.service ?? 0,
+      itinerary: data.tags?.tour || data.product?.title || "",
+      ship: data.tags?.ship || "",
+      text: data.reviews?.productText || data.reviews?.serviceText || "",
+      date: data.dates?.created || "",
+    };
+  });
+}
