@@ -37,6 +37,8 @@ interface DashboardContextValue {
   setDateRange: (range: DateRange) => void;
   lastSynced: string | null;
   setLastSynced: (value: string | null) => void;
+  dataVersion: number;
+  bumpDataVersion: () => void;
 }
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
@@ -83,6 +85,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [brand, setBrand] = useState<Brand>("uniworld");
   const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
+  const [dataVersion, setDataVersion] = useState(0);
 
   const handleSetDateRange = useCallback((range: DateRange) => {
     setDateRange(range);
@@ -96,6 +99,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setLastSynced(value);
   }, []);
 
+  const bumpDataVersion = useCallback(() => {
+    setDataVersion((value) => value + 1);
+  }, []);
+
   return (
     <DashboardContext.Provider
       value={{
@@ -105,6 +112,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setDateRange: handleSetDateRange,
         lastSynced,
         setLastSynced: handleSetLastSynced,
+        dataVersion,
+        bumpDataVersion,
       }}
     >
       {children}

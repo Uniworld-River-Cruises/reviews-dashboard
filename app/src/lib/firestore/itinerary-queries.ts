@@ -1,4 +1,6 @@
-import { db } from "@/lib/firebase";
+"use client";
+
+import { getClientDb } from "@/lib/firebase";
 import {
   collection,
   query,
@@ -38,6 +40,7 @@ function slugify(text: string): string {
 }
 
 async function getFleetAverages(brand: string): Promise<{ avgRating: number; avgFiveStar: number }> {
+  const db = getClientDb();
   const ref = collection(db, "summaries");
   const constraints = brand === "combined"
     ? [where("scope", "==", "fleet")]
@@ -67,6 +70,7 @@ async function getFleetAverages(brand: string): Promise<{ avgRating: number; avg
 // ── Query functions ─────────────────────────────────────────────────────────
 
 export async function getItineraries(brand: string = "combined"): Promise<ItinerarySummary[]> {
+  const db = getClientDb();
   const ref = collection(db, "summaries");
   const constraints = brand === "combined"
     ? [where("scope", "==", "itinerary")]
@@ -163,6 +167,7 @@ export async function getItineraryQuotes(
   _ship: string,
   brand: string = "combined"
 ): Promise<{ positive: Quote[]; negative: Quote[] }> {
+  const db = getClientDb();
   const ref = collection(db, "reviews");
   // Use childItineraries to match all variant tour names; Firestore "in" supports up to 30
   const tourNames = childItineraries.length > 0 ? childItineraries.slice(0, 30) : [itineraryName];

@@ -1,4 +1,6 @@
-import { db } from "@/lib/firebase";
+"use client";
+
+import { getClientDb } from "@/lib/firebase";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { postFunction } from "@/lib/functions-client";
 
@@ -12,7 +14,20 @@ export interface ItineraryMapping {
   lastUpdated: string;
 }
 
+export type AdminRole = "owner" | "admin" | "sync";
+
+export interface AdminUserAccess {
+  email: string;
+  role: AdminRole;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
 export async function getItineraryMappings(brand: string): Promise<ItineraryMapping[]> {
+  const db = getClientDb();
   const ref = collection(db, "itinerary_mappings");
   const constraints = brand === "combined"
     ? []
@@ -48,5 +63,33 @@ export async function triggerRecomputeSummaries(brand?: string): Promise<void> {
   await postFunction("itineraryMappings", {
     action: "recompute",
     brand,
+  });
+}
+
+export async function listAdminUsers(): Promise<AdminUserAccess[]> {
+  const response = await postFunction<{ users?: AdminUserAccess[] }>("adminUsers", {
+    action: "list",
+  });
+  return response.users ?? [];
+}
+
+export async function upsertAdminUser(
+  email: string,
+  role: AdminRole,
+  active: boolean = true
+): Promise<AdminUserAccess> {
+  const response = await postFunction<{ user: AdminUserAccess }>("adminUsers", {
+    action: "upsert",
+    email,
+    role,
+    active,
+  });
+  return response.user;
+}
+
+export async function removeAdminUser(email: string): Promise<void> {
+  await postFunction("adminUsers", {
+    action: "remove",
+    email,
   });
 }

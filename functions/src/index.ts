@@ -7,6 +7,17 @@ import { syncAll } from "./sync/sync-reviews";
 import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
 import {
+  deleteAdminUser,
+  getAdminUserByEmail,
+  getOwnerCount,
+  hasPermission,
+  listAdminUsers,
+  normalizeEmail,
+  upsertAdminUser,
+  type AccessPermission,
+  type AdminRole,
+} from "./auth/access-control";
+import {
   rebuildMappings as rebuildItineraryMappings,
   updateMapping as updateItineraryMapping,
 } from "./sync/itinerary-mappings";
@@ -17,6 +28,7 @@ interface AuthorizedCaller {
   uid: string;
   email: string | null;
   source: "firebase" | "shared-token";
+  role: AdminRole | "service";
 }
 
 function parseAllowedEmails(): Set<string> {
@@ -35,11 +47,15 @@ function getSharedTokenHeader(req: any): string | null {
   return Array.isArray(raw) ? raw[0] : raw;
 }
 
-async function authorizeRequest(req: any, res: any): Promise<AuthorizedCaller | null> {
+async function authorizeRequest(
+  req: any,
+  res: any,
+  permission: AccessPermission
+): Promise<AuthorizedCaller | null> {
   const sharedToken = process.env.SYNC_API_TOKEN;
   const suppliedSharedToken = getSharedTokenHeader(req);
   if (sharedToken && suppliedSharedToken === sharedToken) {
-    return { uid: "shared-token", email: null, source: "shared-token" };
+    return { uid: "shared-token", email: null, source: "shared-token", role: "service" };
   }
 
   const authHeader = req.headers.authorization;
@@ -55,8 +71,16 @@ async function authorizeRequest(req: any, res: any): Promise<AuthorizedCaller | 
     const email = decoded.email?.toLowerCase() ?? null;
 
     const allowedEmails = parseAllowedEmails();
-    if (allowedEmails.size > 0 && (!email || !allowedEmails.has(email))) {
-      res.status(403).json({ error: "Forbidden for this account." });
+    const adminUser = await getAdminUserByEmail(email);
+    const allowedByLegacyEmailList =
+      allowedEmails.size > 0 && Boolean(email && allowedEmails.has(email));
+    const allowedByDatabase = hasPermission(adminUser, permission);
+
+    if (!allowedByLegacyEmailList && !allowedByDatabase) {
+      res.status(403).json({
+        error:
+          "Forbidden for this account. Ask an owner to add your email to the admin_users collection.",
+      });
       return null;
     }
 
@@ -70,6 +94,7 @@ async function authorizeRequest(req: any, res: any): Promise<AuthorizedCaller | 
       uid: decoded.uid,
       email: decoded.email ?? null,
       source: "firebase",
+      role: adminUser?.role ?? "admin",
     };
   } catch {
     res.status(401).json({ error: "Invalid bearer token." });
@@ -85,14 +110,14 @@ function ensurePost(req: any, res: any): boolean {
   return true;
 }
 
-// Daily sync at 2am UTC - fetch reviews + compute summaries (no classification)
+// Scheduled sync every 6 hours in UTC - fetch reviews + compute summaries (no classification)
 export const dailySync = onSchedule(
-  { schedule: "0 2 * * *", timeoutSeconds: 540, memory: "1GiB" },
+  { schedule: "0 */6 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
     const results = await syncAll(false);
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
-    console.log("Daily sync complete:", JSON.stringify(results));
+    console.log("Scheduled sync complete:", JSON.stringify(results));
   }
 );
 
@@ -101,7 +126,7 @@ export const manualSync = onRequest(
   { timeoutSeconds: 3600, memory: "2GiB", invoker: "public", cors: true },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
-    const caller = await authorizeRequest(req, res);
+    const caller = await authorizeRequest(req, res, "sync");
     if (!caller) return;
 
     if (req.body?.resetLock) {
@@ -125,7 +150,7 @@ export const batchClassify = onRequest(
   { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: true },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
-    const caller = await authorizeRequest(req, res);
+    const caller = await authorizeRequest(req, res, "batchClassify");
     if (!caller) return;
 
     const action = req.body?.action ?? "submit";
@@ -154,7 +179,7 @@ export const itineraryMappings = onRequest(
   { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: true },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
-    const caller = await authorizeRequest(req, res);
+    const caller = await authorizeRequest(req, res, "manageMappings");
     if (!caller) return;
 
     const action = req.body?.action ?? "rebuild";
@@ -198,5 +223,80 @@ export const itineraryMappings = onRequest(
     }
 
     res.status(400).json({ error: "Invalid action. Use 'rebuild', 'update', or 'recompute'." });
+  }
+);
+
+// Manage runtime admin access stored in Firestore.
+export const adminUsers = onRequest(
+  { timeoutSeconds: 120, memory: "512MiB", invoker: "public", cors: true },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "manageUsers");
+    if (!caller) return;
+
+    const action = req.body?.action ?? "list";
+
+    if (action === "list") {
+      const users = await listAdminUsers();
+      res.json({ users });
+      return;
+    }
+
+    if (action === "upsert") {
+      const email = req.body?.email;
+      const role = req.body?.role;
+      const active = req.body?.active !== false;
+
+      if (typeof email !== "string" || !email.includes("@")) {
+        res.status(400).json({ error: "A valid email is required." });
+        return;
+      }
+
+      if (role !== "owner" && role !== "admin" && role !== "sync") {
+        res.status(400).json({ error: "role must be owner, admin, or sync." });
+        return;
+      }
+
+      const record = await upsertAdminUser({
+        email,
+        role,
+        active,
+        updatedBy: caller.email ?? caller.uid,
+      });
+      console.log(`adminUsers upsert by ${caller.source}:${caller.email ?? caller.uid}`);
+      res.json({ success: true, user: record });
+      return;
+    }
+
+    if (action === "remove") {
+      const email = req.body?.email;
+
+      if (typeof email !== "string" || !email.includes("@")) {
+        res.status(400).json({ error: "A valid email is required." });
+        return;
+      }
+
+      const normalizedTarget = normalizeEmail(email);
+      const target = await getAdminUserByEmail(normalizedTarget);
+      if (!target) {
+        res.json({ success: true });
+        return;
+      }
+
+      if (target.role === "owner") {
+        const ownerCount = await getOwnerCount();
+        if (ownerCount <= 1) {
+          res.status(400).json({ error: "You cannot remove the last active owner." });
+          return;
+        }
+      }
+
+      await deleteAdminUser(normalizedTarget);
+      console.log(`adminUsers remove by ${caller.source}:${caller.email ?? caller.uid}`);
+      res.json({ success: true });
+      return;
+    }
+
+    res.status(400).json({ error: "Invalid action. Use 'list', 'upsert', or 'remove'." });
   }
 );

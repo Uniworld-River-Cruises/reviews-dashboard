@@ -1,4 +1,6 @@
-import { db } from "@/lib/firebase";
+"use client";
+
+import { getClientDb } from "@/lib/firebase";
 import {
   collection,
   doc,
@@ -85,6 +87,7 @@ const EMPTY_FLEET: FleetSummary = {
 // ── Query functions ─────────────────────────────────────────────────────────
 
 export async function getFleetSummary(brand: string): Promise<FleetSummary> {
+  const db = getClientDb();
   // "combined" means we need to merge both brand summaries
   if (brand === "combined") {
     const snap = await getDocs(
@@ -185,6 +188,7 @@ export async function getFleetSummary(brand: string): Promise<FleetSummary> {
 }
 
 export async function getMonthlySummaries(brand: string): Promise<MonthlySummary[]> {
+  const db = getClientDb();
   const ref = collection(db, "monthly_summaries");
   const constraints = brand === "combined"
     ? [orderBy("month", "asc")]
@@ -227,6 +231,7 @@ export async function getEntitySummaries(
   brand: string,
   scope: "ship" | "itinerary" = "itinerary"
 ): Promise<EntitySummary[]> {
+  const db = getClientDb();
   const ref = collection(db, "summaries");
   const constraints = brand === "combined"
     ? [where("scope", "==", scope)]
@@ -283,6 +288,7 @@ export async function getFleetSummaryByDateRange(
   startDate: Date,
   endDate: Date
 ): Promise<FleetSummary> {
+  const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints: QueryConstraint[] = [
     where("dates.created", ">=", startDate.toISOString()),
@@ -362,6 +368,7 @@ export async function getEntitySummariesByDateRange(
   endDate: Date,
   scope: "ship" | "itinerary" = "itinerary"
 ): Promise<EntitySummary[]> {
+  const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints: QueryConstraint[] = [
     where("dates.created", ">=", startDate.toISOString()),
@@ -425,6 +432,7 @@ export async function getFilterOptions(
   startDate: string,
   endDate: string
 ): Promise<FilterOptions> {
+  const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints: QueryConstraint[] = [
     where("dates.created", ">=", startDate),
@@ -478,6 +486,7 @@ export async function getReviewsByTheme(
   theme: string,
   type: "positive" | "negative"
 ): Promise<ThemeReview[]> {
+  const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints = [
     where(`themes.${type}`, "array-contains", theme),

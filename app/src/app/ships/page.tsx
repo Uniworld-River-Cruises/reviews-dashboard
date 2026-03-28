@@ -37,19 +37,25 @@ function ShipsContent() {
 }
 
 function ShipList() {
-  const { brand } = useDashboard();
+  const { brand, dataVersion } = useDashboard();
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("reviewCount");
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     getShips(brand).then((data) => {
       setShips(data);
       setLoading(false);
+    }).catch((err) => {
+      console.error("Failed to load ships", err);
+      setError(err instanceof Error ? err.message : "Unable to load ships right now.");
+      setLoading(false);
     });
-  }, [brand]);
+  }, [brand, dataVersion]);
 
   const filtered = useMemo(() => {
     const result = ships.filter((s) =>
@@ -73,6 +79,14 @@ function ShipList() {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-900">
+        {error}
       </div>
     );
   }

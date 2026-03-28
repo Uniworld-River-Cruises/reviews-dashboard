@@ -1,11 +1,13 @@
-import { auth } from "@/lib/firebase";
+"use client";
+
+import { getClientAuth } from "@/lib/firebase";
 
 const FUNCTIONS_BASE =
   process.env.NEXT_PUBLIC_FUNCTIONS_URL ||
   "https://us-central1-feefo-reviews.cloudfunctions.net";
 
 async function getAuthHeader(): Promise<string> {
-  const user = auth.currentUser;
+  const user = getClientAuth().currentUser;
   if (!user) {
     throw new Error("Please sign in to run this action.");
   }
