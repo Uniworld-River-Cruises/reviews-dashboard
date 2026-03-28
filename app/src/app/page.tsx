@@ -10,8 +10,10 @@ import ReviewPanel from "@/components/dashboard/ReviewPanel";
 import FleetComparisonTable from "@/components/dashboard/FleetComparisonTable";
 import {
   getFleetSummary,
+  getFleetSummaryByDateRange,
   getMonthlySummaries,
   getEntitySummaries,
+  getEntitySummariesByDateRange,
   getReviewsByTheme,
   type FleetSummary,
   type MonthlySummary,
@@ -20,7 +22,7 @@ import {
 } from "@/lib/firestore/queries";
 
 export default function OverviewPage() {
-  const { brand } = useDashboard();
+  const { brand, dateRange } = useDashboard();
 
   const [fleet, setFleet] = useState<FleetSummary | null>(null);
   const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
@@ -38,14 +40,30 @@ export default function OverviewPage() {
     let cancelled = false;
     setLoading(true);
 
+    // Use date-filtered query for KPIs so numbers change with the date picker
+    const isAllTime = dateRange.preset === "All Time";
+    const fleetPromise = isAllTime
+      ? getFleetSummary(brand)
+      : getFleetSummaryByDateRange(brand, dateRange.start, dateRange.end);
+
+    const entityPromise = isAllTime
+      ? getEntitySummaries(brand)
+      : getEntitySummariesByDateRange(brand, dateRange.start, dateRange.end);
+
     Promise.all([
-      getFleetSummary(brand),
+      fleetPromise,
       getMonthlySummaries(brand),
-      getEntitySummaries(brand),
+      entityPromise,
     ]).then(([f, m, e]) => {
       if (cancelled) return;
+
+      // Filter monthly summaries by date range
+      const startMonth = `${dateRange.start.getFullYear()}-${String(dateRange.start.getMonth() + 1).padStart(2, "0")}`;
+      const endMonth = `${dateRange.end.getFullYear()}-${String(dateRange.end.getMonth() + 1).padStart(2, "0")}`;
+      const filteredMonthly = m.filter((ms) => ms.month >= startMonth && ms.month <= endMonth);
+
       setFleet(f);
-      setMonthly(m);
+      setMonthly(filteredMonthly);
       setEntities(e);
       setLoading(false);
     });
@@ -53,7 +71,7 @@ export default function OverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [brand]);
+  }, [brand, dateRange]);
 
   const openPanel = useCallback(
     async (theme: string, type: "positive" | "negative") => {
@@ -81,25 +99,42 @@ export default function OverviewPage() {
     );
   }
 
+  // Only show comparison deltas if there is meaningful previous period data
+  const hasPreviousPeriod = fleet.previousPeriodReviews > 0;
   const reviewDelta = fleet.totalReviews - fleet.previousPeriodReviews;
+  const ratingDiff = fleet.averageRating - fleet.previousPeriodRating;
   const ratingTrendUp = fleet.averageRating >= fleet.previousPeriodRating;
 
+  // Derive ships count from entities if the fleet-level count is 0
+  const shipsCount =
+    fleet.totalShips > 0
+      ? fleet.totalShips
+      : new Set(entities.flatMap((e) => e.ships)).size;
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-[#1B3A5C]">Overview</h1>
+    <div className="space-y-8">
+      <h1 className="text-2xl font-bold text-[#1B3A5C]">Overview</h1>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         <KpiCard
           title="Total Reviews"
           value={fleet.totalReviews.toLocaleString()}
-          delta={`${reviewDelta >= 0 ? "+" : ""}${reviewDelta} vs last period`}
+          delta={
+            hasPreviousPeriod
+              ? `${reviewDelta >= 0 ? "+" : ""}${reviewDelta.toLocaleString()} vs last period`
+              : undefined
+          }
         />
         <KpiCard
           title="Average Rating"
           value={fleet.averageRating.toFixed(2)}
-          trendUp={ratingTrendUp}
-          delta={`${ratingTrendUp ? "+" : ""}${(fleet.averageRating - fleet.previousPeriodRating).toFixed(2)} vs last period`}
+          trendUp={hasPreviousPeriod ? ratingTrendUp : null}
+          delta={
+            hasPreviousPeriod
+              ? `${ratingTrendUp ? "+" : ""}${ratingDiff.toFixed(2)} vs last period`
+              : undefined
+          }
         />
         <KpiCard
           title="5-Star %"
@@ -115,14 +150,12 @@ export default function OverviewPage() {
         />
         <KpiCard
           title="Ships Reviewed"
-          value={fleet.totalShips}
+          value={shipsCount}
         />
       </div>
 
-      {/* Rating Distribution + Rating Trend */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RatingDistributionChart data={fleet.ratingDistribution} />
-      </div>
+      {/* Rating Distribution — full width */}
+      <RatingDistributionChart data={fleet.ratingDistribution} />
 
       {/* Trend Charts (rating + volume side by side) */}
       <TrendChart data={monthly} />

@@ -1,7 +1,22 @@
 "use client";
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useDashboard } from "@/contexts/DashboardContext";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData,
+  QueryConstraint,
+} from "firebase/firestore";
+import { getFilterOptions, type FilterOptions } from "@/lib/firestore/queries";
 import FilterSidebar, {
   type Filters,
   emptyFilters,
@@ -10,353 +25,38 @@ import ReviewCard, { type ReviewData } from "@/components/reviews/ReviewCard";
 import ExportButton from "@/components/reviews/ExportButton";
 
 // ---------------------------------------------------------------------------
-// Mock data — structured to match future Algolia index shape
+// Firestore → ReviewData mapper
 // ---------------------------------------------------------------------------
 
-const MOCK_REVIEWS: ReviewData[] = [
-  {
-    id: "r1",
-    customerName: "Margaret H.",
-    rating: 5,
-    ship: "S.S. Beatrice",
-    itinerary: "Enchanting Danube",
-    brand: "Uniworld",
-    serviceReview:
-      "The crew on the S.S. Beatrice were absolutely exceptional. Every single staff member greeted us by name from day two. Our butler was attentive without being intrusive, and the dining staff remembered our preferences throughout the voyage.",
-    productReview:
-      "The excursions were world-class. The private palace concert in Vienna was a once-in-a-lifetime experience. The ship itself is gorgeous — beautifully appointed staterooms with real marble bathrooms.",
-    positiveThemes: ["Staff", "Excursions", "Accommodation"],
-    negativeThemes: [],
-    bookingType: "Agency",
-    region: "Europe",
-    loyalty: "Returning",
-    date: "2025-11-15",
-  },
-  {
-    id: "r2",
-    customerName: "Robert & Susan T.",
-    rating: 5,
-    ship: "S.S. La Venezia",
-    itinerary: "Gems of Northern Italy",
-    brand: "Uniworld",
-    serviceReview:
-      "From the moment we stepped aboard, the level of service was outstanding. The concierge arranged a special anniversary dinner on the top deck with personalised menus.",
-    productReview:
-      "The food was Michelin-quality. Every meal was a delight, with fresh local ingredients and creative presentation. The wine pairings were exquisite.",
-    positiveThemes: ["Staff", "Food", "Value"],
-    negativeThemes: [],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-10-28",
-  },
-  {
-    id: "r3",
-    customerName: "David L.",
-    rating: 3,
-    ship: "S.S. Bon Voyage",
-    itinerary: "Paris & Normandy",
-    brand: "Uniworld",
-    serviceReview:
-      "Service was generally good but not as polished as I expected given the price point. A couple of requests were forgotten and we had to follow up.",
-    productReview:
-      "The cabin was nicely decorated but felt quite small for the premium we paid. Storage space was limited. The excursion to Giverny was wonderful though.",
-    positiveThemes: ["Excursions"],
-    negativeThemes: ["Space & Size", "Value"],
-    bookingType: "Agency",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-09-12",
-  },
-  {
-    id: "r4",
-    customerName: "Patricia M.",
-    rating: 4,
-    ship: "S.S. Sphinx",
-    itinerary: "Splendors of Egypt & the Nile",
-    brand: "Uniworld",
-    serviceReview:
-      "Excellent service throughout. The Egyptologist guide was incredibly knowledgeable and made the temples come alive with historical context.",
-    productReview:
-      "The food quality was inconsistent — some meals were outstanding while others were disappointing. The breakfast buffet needed more variety after the first few days.",
-    positiveThemes: ["Staff", "Excursions"],
-    negativeThemes: ["Food Quality"],
-    bookingType: "Direct",
-    region: "Africa",
-    loyalty: "Returning",
-    date: "2025-08-20",
-  },
-  {
-    id: "r5",
-    customerName: "",
-    rating: 2,
-    ship: "S.S. Beatrice",
-    itinerary: "Enchanting Danube",
-    brand: "Uniworld",
-    serviceReview:
-      "Disappointed with the overall experience. The ship felt crowded and the dining room was noisy. Staff were pleasant but seemed overwhelmed.",
-    productReview:
-      "The excursions were mostly bus tours with large groups, which felt impersonal. The spa was tiny and often fully booked. For the price, I expected much more exclusivity.",
-    positiveThemes: [],
-    negativeThemes: ["Space & Size", "Value", "Excursions"],
-    bookingType: "Agency",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-07-05",
-  },
-  {
-    id: "r6",
-    customerName: "James & Elizabeth W.",
-    rating: 5,
-    ship: "S.S. Joie de Vivre",
-    itinerary: "Paris & Normandy",
-    brand: "Uniworld",
-    serviceReview:
-      "We have cruised with many luxury lines and Uniworld sets the gold standard. The staff ratio was incredible — it felt like there were more crew than guests.",
-    productReview:
-      "The Claude restaurant was outstanding. Every dinner was a culinary event. The included wines were top-quality, not the usual cheap options you find on other lines.",
-    positiveThemes: ["Staff", "Food", "Value"],
-    negativeThemes: [],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "Returning",
-    date: "2025-10-02",
-  },
-  {
-    id: "r7",
-    customerName: "Helen R.",
-    rating: 4,
-    ship: "S.S. São Gabriel",
-    itinerary: "Portugal's River of Gold",
-    brand: "Uniworld",
-    serviceReview:
-      "Lovely experience overall. The crew were warm and welcoming. The captain's dinner was a highlight.",
-    productReview:
-      "Portugal is stunning from the water. The port wine tasting excursion in Porto was exceptional. Only downside was the Wi-Fi — very slow and unreliable for the entire cruise.",
-    positiveThemes: ["Staff", "Excursions", "Food"],
-    negativeThemes: ["Connectivity"],
-    bookingType: "Agency",
-    region: "Europe",
-    loyalty: "Returning",
-    date: "2025-09-25",
-  },
-  {
-    id: "r8",
-    customerName: "George K.",
-    rating: 1,
-    ship: "S.S. Bon Voyage",
-    itinerary: "Bordeaux, Vineyards & Châteaux",
-    brand: "Uniworld",
-    serviceReview:
-      "Extremely disappointing. Multiple issues with our cabin that were never resolved despite repeated complaints. The air conditioning was broken for two days in August heat.",
-    productReview:
-      "The food was mediocre at best. The wine pairings — on a Bordeaux cruise, of all things — were shockingly poor. Several excursions were cancelled without adequate alternatives.",
-    positiveThemes: [],
-    negativeThemes: ["Food Quality", "Accommodation", "Excursions"],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-08-15",
-  },
-  {
-    id: "r9",
-    customerName: "Sarah & Mark D.",
-    rating: 5,
-    ship: "Ganges Voyager II",
-    itinerary: "India's Golden Triangle & the Sacred Ganges",
-    brand: "Uniworld",
-    serviceReview:
-      "A life-changing experience. The local guides were phenomenal — their passion for sharing Indian culture was infectious. The crew went above and beyond.",
-    productReview:
-      "Every detail was thought through, from the welcome garlands to the traditional dance performances. The Taj Mahal at sunrise was arranged perfectly. Food was authentic and delicious.",
-    positiveThemes: ["Staff", "Excursions", "Food", "Entertainment"],
-    negativeThemes: [],
-    bookingType: "Agency",
-    region: "Asia",
-    loyalty: "Returning",
-    date: "2025-11-01",
-  },
-  {
-    id: "r10",
-    customerName: "William P.",
-    rating: 3,
-    ship: "S.S. La Venezia",
-    itinerary: "Gems of Northern Italy",
-    brand: "Uniworld",
-    serviceReview:
-      "Service was adequate but nothing special. The staff seemed stretched thin and weren't as attentive as on our previous Uniworld cruise.",
-    productReview:
-      "Venice was magical but the ship felt dated compared to newer competitors. The pool area was cramped and the entertainment programme was repetitive.",
-    positiveThemes: ["Excursions"],
-    negativeThemes: ["Space & Size", "Entertainment", "Staff"],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "Returning",
-    date: "2025-06-18",
-  },
-  {
-    id: "r11",
-    customerName: "Caroline T.",
-    rating: 5,
-    ship: "S.S. Beatrice",
-    itinerary: "Enchanting Danube",
-    brand: "Uniworld",
-    serviceReview:
-      "Absolutely flawless. The programme director was brilliant — funny, knowledgeable, and so well-organised. Nothing was too much trouble for any of the staff.",
-    productReview:
-      "Christmas markets along the Danube were enchanting. The ship was beautifully decorated for the season. The gingerbread-making class was a lovely touch.",
-    positiveThemes: ["Staff", "Excursions", "Entertainment"],
-    negativeThemes: [],
-    bookingType: "Agency",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-12-10",
-  },
-  {
-    id: "r12",
-    customerName: "Richard & Anne B.",
-    rating: 4,
-    ship: "S.S. Catherine",
-    itinerary: "Burgundy & Provence",
-    brand: "Uniworld",
-    serviceReview:
-      "Very good cruise with excellent service. The sommelier was a standout — his knowledge and passion for Burgundy wines made the tastings special.",
-    productReview:
-      "Scenic route through Provence was beautiful. The cooking class in Lyon was a highlight. Only minor gripe was the embarkation process which felt disorganised.",
-    positiveThemes: ["Staff", "Food", "Excursions"],
-    negativeThemes: [],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-07-22",
-  },
-  {
-    id: "r13",
-    customerName: "Jennifer L.",
-    rating: 2,
-    ship: "Mekong Jewel",
-    itinerary: "Timeless Wonders of Vietnam, Cambodia & the Mekong",
-    brand: "Uniworld",
-    serviceReview:
-      "The staff tried hard but the language barrier was a significant issue. Several misunderstandings led to missed arrangements.",
-    productReview:
-      "The itinerary was ambitious but exhausting. Too many early starts and long bus rides. The ship itself was comfortable but showing wear. Air conditioning struggled in the heat.",
-    positiveThemes: [],
-    negativeThemes: ["Staff", "Accommodation", "Value"],
-    bookingType: "Agency",
-    region: "Asia",
-    loyalty: "Returning",
-    date: "2025-05-10",
-  },
-  {
-    id: "r14",
-    customerName: "Thomas & Mary G.",
-    rating: 5,
-    ship: "S.S. Joie de Vivre",
-    itinerary: "Paris & Normandy",
-    brand: "Uniworld",
-    serviceReview:
-      "Simply the best holiday we have ever had. The attention to detail is remarkable. Our cabin steward left personalised notes and the most creative towel art each evening.",
-    productReview:
-      "Monet's garden was breathtaking. The D-Day beaches excursion was deeply moving and expertly guided. Every meal was a celebration. The ship is a floating boutique hotel.",
-    positiveThemes: ["Staff", "Excursions", "Food", "Accommodation"],
-    negativeThemes: [],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "First-time",
-    date: "2025-09-05",
-  },
-  {
-    id: "r15",
-    customerName: "Barbara S.",
-    rating: 4,
-    ship: "S.S. Sphinx",
-    itinerary: "Splendors of Egypt & the Nile",
-    brand: "Uniworld",
-    serviceReview:
-      "The crew were wonderful and the guide made Egyptian history fascinating. Felt very safe throughout, which was a concern before booking.",
-    productReview:
-      "Luxor and Karnak were awe-inspiring. The hot air balloon ride over the Valley of Kings was unforgettable. The ship could use a refresh in some common areas though.",
-    positiveThemes: ["Staff", "Excursions"],
-    negativeThemes: ["Accommodation"],
-    bookingType: "Agency",
-    region: "Africa",
-    loyalty: "First-time",
-    date: "2025-10-15",
-  },
-  {
-    id: "r16",
-    customerName: "Andrew C.",
-    rating: 3,
-    ship: "S.S. Catherine",
-    itinerary: "Burgundy & Provence",
-    brand: "Uniworld",
-    serviceReview:
-      "Mixed experience. Dining service was excellent but reception staff were unhelpful when we needed to change an excursion.",
-    productReview:
-      "The route was scenic but some ports felt rushed. Would have preferred fewer stops with more time at each. Wine tastings were the highlight of the trip.",
-    positiveThemes: ["Food"],
-    negativeThemes: ["Staff", "Excursions"],
-    bookingType: "Direct",
-    region: "Europe",
-    loyalty: "Returning",
-    date: "2025-06-30",
-  },
-  {
-    id: "r17",
-    customerName: "Linda & Peter F.",
-    rating: 5,
-    ship: "S.S. São Gabriel",
-    itinerary: "Portugal's River of Gold",
-    brand: "Uniworld",
-    serviceReview:
-      "Perfection from start to finish. The crew created such a warm, family atmosphere. By the end of the voyage, it felt like saying goodbye to friends.",
-    productReview:
-      "The Douro Valley is breathtaking and seeing it from the river is the only way to do it. The quinta visits with private tastings were exceptional. Food was a celebration of Portuguese cuisine.",
-    positiveThemes: ["Staff", "Excursions", "Food", "Value"],
-    negativeThemes: [],
-    bookingType: "Agency",
-    region: "Europe",
-    loyalty: "Returning",
-    date: "2025-10-20",
-  },
-  {
-    id: "r18",
-    customerName: "Janet W.",
-    rating: 4,
-    ship: "Ganges Voyager II",
-    itinerary: "India's Golden Triangle & the Sacred Ganges",
-    brand: "Uniworld",
-    serviceReview:
-      "Wonderful crew who made us feel so welcome. The wellness programme with daily yoga on deck was a lovely addition.",
-    productReview:
-      "India is overwhelming in the best way, and having the ship as a calm retreat was perfect. The only letdown was the farewell dinner — it felt rushed compared to the high standard of other meals.",
-    positiveThemes: ["Staff", "Entertainment"],
-    negativeThemes: ["Food Quality"],
-    bookingType: "Direct",
-    region: "Asia",
-    loyalty: "First-time",
-    date: "2025-11-08",
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Derive filter options from data
-// ---------------------------------------------------------------------------
-
-function deriveOptions(reviews: ReviewData[]) {
-  const unique = <T,>(arr: T[]) => Array.from(new Set(arr)).sort();
+function mapReviewDoc(doc: QueryDocumentSnapshot<DocumentData>): ReviewData {
+  const d = doc.data();
   return {
-    brands: unique(reviews.map((r) => r.brand)),
-    ships: unique(reviews.map((r) => r.ship)),
-    itineraries: unique(reviews.map((r) => r.itinerary)),
-    positiveThemes: unique(reviews.flatMap((r) => r.positiveThemes)),
-    negativeThemes: unique(reviews.flatMap((r) => r.negativeThemes)),
-    bookingTypes: unique(reviews.map((r) => r.bookingType)),
-    regions: unique(reviews.map((r) => r.region)),
-    loyaltyLevels: unique(reviews.map((r) => r.loyalty)),
+    id: doc.id,
+    customerName: d.customer?.displayName || d.customer?.name || "",
+    rating: d.ratings?.product ?? d.ratings?.service ?? 0,
+    ship: d.tags?.ship || "",
+    itinerary: d.tags?.tour || d.product?.title || "",
+    brand: d.brand || "",
+    serviceReview: d.reviews?.serviceText || "",
+    productReview: d.reviews?.productText || "",
+    positiveThemes: d.themes?.positive || [],
+    negativeThemes: d.themes?.negative || [],
+    bookingType: d.tags?.bookingType || "",
+    region: d.tags?.region || "",
+    loyalty: d.tags?.loyalty || "",
+    date: d.dates?.created || "",
   };
 }
+
+// ---------------------------------------------------------------------------
+// Empty filter options
+// ---------------------------------------------------------------------------
+
+const EMPTY_FILTER_OPTIONS: FilterOptions = {
+  brands: [], ratings: [], ships: [], itineraries: [],
+  positiveThemes: [], negativeThemes: [],
+  bookingTypes: [], regions: [], loyaltyLevels: [],
+};
 
 // ---------------------------------------------------------------------------
 // Sort
@@ -423,73 +123,229 @@ function paramsToFilters(searchParams: URLSearchParams): {
 }
 
 // ---------------------------------------------------------------------------
+// Build Firestore constraints from filters (server-side filtering)
+// ---------------------------------------------------------------------------
+
+function buildServerConstraints(
+  brand: string,
+  dateStart: string,
+  dateEnd: string,
+  filters: Filters
+): QueryConstraint[] {
+  const constraints: QueryConstraint[] = [];
+
+  if (brand !== "combined") {
+    constraints.push(where("brand", "==", brand));
+  }
+
+  // Date range
+  constraints.push(where("dates.created", ">=", dateStart));
+  constraints.push(where("dates.created", "<=", dateEnd));
+
+  // Single-value equality filters (Firestore supports these alongside orderBy)
+  // We can only use ONE array-contains or "in" per query, so we pick the most
+  // selective single-value filter for each field.
+
+  if (filters.ship.length === 1) {
+    constraints.push(where("tags.ship", "==", filters.ship[0]));
+  } else if (filters.ship.length > 1 && filters.ship.length <= 30) {
+    constraints.push(where("tags.ship", "in", filters.ship));
+  }
+
+  if (filters.region.length === 1) {
+    constraints.push(where("tags.region", "==", filters.region[0]));
+  } else if (filters.region.length > 1 && filters.region.length <= 30) {
+    constraints.push(where("tags.region", "in", filters.region));
+  }
+
+  if (filters.bookingType.length === 1) {
+    constraints.push(where("tags.bookingType", "==", filters.bookingType[0]));
+  } else if (filters.bookingType.length > 1 && filters.bookingType.length <= 30) {
+    constraints.push(where("tags.bookingType", "in", filters.bookingType));
+  }
+
+  if (filters.loyalty.length === 1) {
+    constraints.push(where("tags.loyalty", "==", filters.loyalty[0]));
+  } else if (filters.loyalty.length > 1 && filters.loyalty.length <= 30) {
+    constraints.push(where("tags.loyalty", "in", filters.loyalty));
+  }
+
+  if (filters.itinerary.length === 1) {
+    constraints.push(where("tags.tour", "==", filters.itinerary[0]));
+  } else if (filters.itinerary.length > 1 && filters.itinerary.length <= 30) {
+    constraints.push(where("tags.tour", "in", filters.itinerary));
+  }
+
+  constraints.push(orderBy("dates.created", "desc"));
+
+  return constraints;
+}
+
+// Filters that must be applied client-side (not supported by Firestore composite queries)
+function applyClientFilters(reviews: ReviewData[], filters: Filters, search: string): ReviewData[] {
+  return reviews.filter((r) => {
+    // Text search
+    if (search) {
+      const q = search.toLowerCase();
+      const haystack = `${r.customerName} ${r.serviceReview} ${r.productReview} ${r.ship} ${r.itinerary}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+
+    // Brand filter (only if not applied server-side via brand selector)
+    if (filters.brand.length && !filters.brand.includes(r.brand)) return false;
+
+    // Rating filter
+    if (filters.rating.length && !filters.rating.includes(r.rating)) return false;
+
+    // Theme filters (array-contains can only be used once per Firestore query)
+    if (
+      filters.positiveThemes.length &&
+      !filters.positiveThemes.some((t) => r.positiveThemes.includes(t))
+    )
+      return false;
+    if (
+      filters.negativeThemes.length &&
+      !filters.negativeThemes.some((t) => r.negativeThemes.includes(t))
+    )
+      return false;
+
+    // These may already be filtered server-side, but double-check for multi-value "in" overflow
+    if (filters.ship.length > 30 && !filters.ship.includes(r.ship)) return false;
+    if (filters.region.length > 30 && !filters.region.includes(r.region)) return false;
+    if (filters.bookingType.length > 30 && !filters.bookingType.includes(r.bookingType)) return false;
+    if (filters.loyalty.length > 30 && !filters.loyalty.includes(r.loyalty)) return false;
+    if (filters.itinerary.length > 30 && !filters.itinerary.includes(r.itinerary)) return false;
+
+    return true;
+  });
+}
+
+// Serialize server-side filter values to a stable string for useEffect deps
+function serverFilterKey(filters: Filters): string {
+  return [
+    filters.ship.join("|"),
+    filters.region.join("|"),
+    filters.bookingType.join("|"),
+    filters.loyalty.join("|"),
+    filters.itinerary.join("|"),
+  ].join("~");
+}
+
+// ---------------------------------------------------------------------------
 // Page content (wrapped in Suspense for useSearchParams)
 // ---------------------------------------------------------------------------
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 50;
+const DISPLAY_PAGE_SIZE = 10;
 
 function ReviewsContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
+  const { brand, dateRange } = useDashboard();
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
   const [search, setSearch] = useState(initial.search);
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [sort, setSort] = useState<SortOption>(initial.sort);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [visibleCount, setVisibleCount] = useState(DISPLAY_PAGE_SIZE);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Sync state to URL
+  // Firestore data
+  const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [hasMoreFirestore, setHasMoreFirestore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Filter options derived from reviews within the date range
+  const [filterOptions, setFilterOptions] = useState<FilterOptions>(EMPTY_FILTER_OPTIONS);
+
+  // Serialize dateRange to stable strings for dependency tracking
+  const dateStart = dateRange.start.toISOString();
+  const dateEnd = dateRange.end.toISOString();
+  const srvFilterKey = serverFilterKey(filters);
+
+  // Load filter options scoped to the selected date range
+  useEffect(() => {
+    getFilterOptions(brand, dateStart, dateEnd).then(setFilterOptions).catch(() => {});
+  }, [brand, dateStart, dateEnd]);
+
+  // Main query — re-fetch when brand, date range, or server-side filters change
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setAllReviews([]);
+    setLastDoc(null);
+    setHasMoreFirestore(true);
+    setVisibleCount(DISPLAY_PAGE_SIZE);
+
+    const ref = collection(db, "reviews");
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters);
+    constraints.push(limit(PAGE_SIZE));
+    const q = query(ref, ...constraints);
+
+    getDocs(q).then((snap) => {
+      if (cancelled) return;
+      const reviews = snap.docs.map(mapReviewDoc);
+      setAllReviews(reviews);
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
+      setLoading(false);
+    });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand, dateStart, dateEnd, srvFilterKey]);
+
+  // Load more from Firestore
+  const loadMoreFromFirestore = useCallback(async () => {
+    if (!lastDoc || !hasMoreFirestore || loadingMore) return;
+    setLoadingMore(true);
+
+    const ref = collection(db, "reviews");
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters);
+    constraints.push(startAfter(lastDoc), limit(PAGE_SIZE));
+    const q = query(ref, ...constraints);
+    const snap = await getDocs(q);
+
+    const newReviews = snap.docs.map(mapReviewDoc);
+    setAllReviews((prev) => [...prev, ...newReviews]);
+    setLastDoc(snap.docs[snap.docs.length - 1] || null);
+    setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
+    setLoadingMore(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastDoc, hasMoreFirestore, loadingMore, brand, dateStart, dateEnd, srvFilterKey]);
+
+  // Sync state to URL using history API directly to avoid Next.js router re-render cycles
   useEffect(() => {
     const qs = filtersToParams(filters, search, sort);
     const newUrl = qs ? `/reviews?${qs}` : "/reviews";
-    router.replace(newUrl, { scroll: false });
-  }, [filters, search, sort, router]);
+    window.history.replaceState(null, "", newUrl);
+  }, [filters, search, sort]);
 
   // Reset visible count when filters/search/sort change
   useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
+    setVisibleCount(DISPLAY_PAGE_SIZE);
   }, [filters, search, sort]);
 
-  const options = useMemo(() => deriveOptions(MOCK_REVIEWS), []);
+  const options = filterOptions;
 
-  // Filter
+  // Client-side filtering (text search, themes, rating, brand sub-filter)
   const filtered = useMemo(() => {
-    return MOCK_REVIEWS.filter((r) => {
-      // Text search
-      if (search) {
-        const q = search.toLowerCase();
-        const haystack = `${r.customerName} ${r.serviceReview} ${r.productReview} ${r.ship} ${r.itinerary}`.toLowerCase();
-        if (!haystack.includes(q)) return false;
-      }
-      // Filters
-      if (filters.brand.length && !filters.brand.includes(r.brand)) return false;
-      if (filters.rating.length && !filters.rating.includes(r.rating)) return false;
-      if (filters.ship.length && !filters.ship.includes(r.ship)) return false;
-      if (filters.itinerary.length && !filters.itinerary.includes(r.itinerary))
-        return false;
-      if (
-        filters.positiveThemes.length &&
-        !filters.positiveThemes.some((t) => r.positiveThemes.includes(t))
-      )
-        return false;
-      if (
-        filters.negativeThemes.length &&
-        !filters.negativeThemes.some((t) => r.negativeThemes.includes(t))
-      )
-        return false;
-      if (filters.bookingType.length && !filters.bookingType.includes(r.bookingType))
-        return false;
-      if (filters.region.length && !filters.region.includes(r.region)) return false;
-      if (filters.loyalty.length && !filters.loyalty.includes(r.loyalty)) return false;
-      return true;
-    });
-  }, [search, filters]);
+    return applyClientFilters(allReviews, filters, search);
+  }, [search, filters, allReviews]);
 
   const sorted = useMemo(() => sortReviews(filtered, sort), [filtered, sort]);
   const visible = sorted.slice(0, visibleCount);
-  const hasMore = visibleCount < sorted.length;
+  const hasMore = visibleCount < sorted.length || hasMoreFirestore;
+
+  const handleLoadMore = useCallback(() => {
+    if (visibleCount < sorted.length) {
+      setVisibleCount((c) => c + DISPLAY_PAGE_SIZE);
+    } else if (hasMoreFirestore) {
+      loadMoreFromFirestore();
+    }
+  }, [visibleCount, sorted.length, hasMoreFirestore, loadMoreFromFirestore]);
 
   const handleThemeClick = useCallback(
     (theme: string, type: "positive" | "negative") => {
@@ -506,6 +362,14 @@ function ReviewsContent() {
     (sum, arr) => sum + arr.length,
     0
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="h-8 w-8 animate-spin rounded-full border-4" style={{ borderColor: 'var(--border)', borderTopColor: 'var(--brand-primary)' }} />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -655,13 +519,25 @@ function ReviewsContent() {
               {hasMore && (
                 <div className="mt-6 text-center">
                   <button
-                    onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 transition-colors"
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 transition-colors disabled:opacity-50"
                   >
-                    Load more reviews
-                    <span className="text-white/70">
-                      ({sorted.length - visibleCount} remaining)
-                    </span>
+                    {loadingMore ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        Load more reviews
+                        {visibleCount < sorted.length && (
+                          <span className="text-white/70">
+                            ({sorted.length - visibleCount} remaining)
+                          </span>
+                        )}
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -682,7 +558,7 @@ export default function ReviewsPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center py-24">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+          <div className="h-8 w-8 animate-spin rounded-full border-4" style={{ borderColor: 'var(--border)', borderTopColor: 'var(--brand-primary)' }} />
         </div>
       }
     >

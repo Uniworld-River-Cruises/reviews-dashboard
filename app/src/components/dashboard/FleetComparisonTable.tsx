@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import HealthBadge from "./HealthBadge";
 import type { EntitySummary } from "@/lib/firestore/queries";
 
@@ -13,7 +14,7 @@ type SortDir = "asc" | "desc";
 
 export default function FleetComparisonTable({ data }: FleetComparisonTableProps) {
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("averageRating");
+  const [sortKey, setSortKey] = useState<SortKey>("reviewCount");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const handleSort = (key: SortKey) => {
@@ -53,6 +54,9 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
     { key: "fiveStarPercent", label: "5-Star %", align: "text-right" },
   ];
 
+  const headerAlign = (col: typeof columns[number]) =>
+    `pb-3 pt-1 font-medium text-gray-500 cursor-pointer select-none whitespace-nowrap ${col.align ?? "text-left"}`;
+
   return (
     <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
@@ -73,29 +77,33 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`pb-3 pt-1 font-medium text-gray-500 cursor-pointer select-none ${col.align ?? "text-left"}`}
+                  className={headerAlign(col)}
                   onClick={() => handleSort(col.key)}
                 >
                   {col.label}
                   <SortIndicator col={col.key} />
                 </th>
               ))}
-              <th className="pb-3 pt-1 font-medium text-gray-500 text-left">Ship(s)</th>
-              <th className="pb-3 pt-1 font-medium text-gray-500 text-center">Health</th>
+              <th className="pb-3 pt-1 font-medium text-gray-500 text-left whitespace-nowrap">Ship(s)</th>
+              <th className="pb-3 pt-1 font-medium text-gray-500 text-right whitespace-nowrap">Health</th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((entity) => (
               <tr
                 key={entity.id}
-                className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                className="border-b border-gray-100 hover:bg-[#1B3A5C]/5 cursor-pointer transition-colors group"
               >
-                <td className="py-3 pr-4 font-medium text-[#1B3A5C]">{entity.name}</td>
+                <td className="py-3 pr-4">
+                  <Link href={`/itineraries/${entity.id}`} className="font-medium text-[#1B3A5C] group-hover:underline">
+                    {entity.name}
+                  </Link>
+                </td>
                 <td className="py-3 pr-4 text-right tabular-nums">{entity.averageRating.toFixed(2)}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{entity.reviewCount.toLocaleString()}</td>
                 <td className="py-3 pr-4 text-right tabular-nums">{entity.fiveStarPercent.toFixed(1)}%</td>
                 <td className="py-3 pr-4 text-gray-600">{entity.ships.join(", ")}</td>
-                <td className="py-3 text-center">
+                <td className="py-3 text-right">
                   <HealthBadge rating={entity.averageRating} />
                 </td>
               </tr>

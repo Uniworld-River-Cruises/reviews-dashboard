@@ -4,7 +4,7 @@ import { parseTags } from "./parse-tags";
 
 export function transformReview(raw: FeefoReview): ReviewDocument {
   const product = raw.products[0];
-  const tags = parseTags(raw.tags);
+  const tags = parseTags(raw.tags, product?.product?.tags);
 
   // Use service.id (feedback ID) as primary ID, fall back to product.id
   const id = raw.service?.id ?? product?.id ?? extractIdFromUrl(raw.url);

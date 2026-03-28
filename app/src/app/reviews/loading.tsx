@@ -1,12 +1,12 @@
-import { SkeletonReviewCard, SkeletonSearchBar } from "@/components/ui/Skeleton";
+import { SkeletonBox, SkeletonReviewCard, SkeletonSearchBar } from "@/components/ui/Skeleton";
 
 export default function ReviewsLoading() {
   return (
     <div>
       {/* Title */}
       <div className="mb-6">
-        <div className="h-7 w-44 animate-pulse rounded bg-gray-200 mb-2" />
-        <div className="h-4 w-72 animate-pulse rounded bg-gray-200" />
+        <SkeletonBox className="h-7 w-44 mb-2" />
+        <SkeletonBox className="h-4 w-72" />
       </div>
 
       {/* Search bar */}
@@ -15,29 +15,29 @@ export default function ReviewsLoading() {
           <SkeletonSearchBar />
         </div>
         <div className="flex items-center gap-3">
-          <div className="h-10 w-24 animate-pulse rounded-lg bg-gray-200" />
-          <div className="h-4 w-20 animate-pulse rounded bg-gray-200" />
+          <SkeletonBox className="h-10 w-24 rounded-lg" />
+          <SkeletonBox className="h-4 w-20" />
         </div>
       </div>
 
       {/* Sort row */}
       <div className="flex items-center justify-between mb-4">
-        <div className="h-9 w-24 animate-pulse rounded-lg bg-gray-200 lg:hidden" />
-        <div className="h-8 w-32 animate-pulse rounded-lg bg-gray-200 ml-auto" />
+        <SkeletonBox className="h-9 w-24 rounded-lg lg:hidden" />
+        <SkeletonBox className="h-8 w-32 rounded-lg ml-auto" />
       </div>
 
       {/* Main layout */}
       <div className="flex gap-6">
-        {/* Sidebar placeholder (hidden on mobile) */}
+        {/* Sidebar placeholder */}
         <div className="hidden lg:block w-64 shrink-0">
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-4">
+          <div className="rounded-lg p-4 shadow-sm space-y-4" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
             {Array.from({ length: 5 }, (_, i) => (
               <div key={i}>
-                <div className="h-4 w-24 animate-pulse rounded bg-gray-200 mb-2" />
+                <SkeletonBox className="h-4 w-24 mb-2" />
                 <div className="space-y-1.5">
-                  <div className="h-3 w-full animate-pulse rounded bg-gray-200" />
-                  <div className="h-3 w-3/4 animate-pulse rounded bg-gray-200" />
-                  <div className="h-3 w-5/6 animate-pulse rounded bg-gray-200" />
+                  <SkeletonBox className="h-3 w-full" />
+                  <SkeletonBox className="h-3 w-3/4" />
+                  <SkeletonBox className="h-3 w-5/6" />
                 </div>
               </div>
             ))}

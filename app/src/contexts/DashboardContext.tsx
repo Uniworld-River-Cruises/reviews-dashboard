@@ -7,16 +7,20 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { subMonths, startOfMonth, startOfYear } from "date-fns";
+import { subMonths, subYears, startOfMonth, startOfYear, startOfWeek } from "date-fns";
 
 export type Brand = "uniworld" | "luxury-gold" | "combined";
 
 export type DatePreset =
+  | "This Week"
   | "This Month"
   | "Last Quarter"
   | "Last 6 Months"
   | "YTD"
   | "Last 12 Months"
+  | "Last 2 Years"
+  | "Last 5 Years"
+  | "Last 10 Years"
   | "All Time"
   | "Custom Range";
 
@@ -42,6 +46,8 @@ export function getDateRangeForPreset(preset: DatePreset): { start: Date; end: D
   const end = now;
 
   switch (preset) {
+    case "This Week":
+      return { start: startOfWeek(now, { weekStartsOn: 1 }), end };
     case "This Month":
       return { start: startOfMonth(now), end };
     case "Last Quarter":
@@ -52,6 +58,12 @@ export function getDateRangeForPreset(preset: DatePreset): { start: Date; end: D
       return { start: startOfYear(now), end };
     case "Last 12 Months":
       return { start: subMonths(now, 12), end };
+    case "Last 2 Years":
+      return { start: subYears(now, 2), end };
+    case "Last 5 Years":
+      return { start: subYears(now, 5), end };
+    case "Last 10 Years":
+      return { start: subYears(now, 10), end };
     case "All Time":
       return { start: new Date(2015, 0, 1), end };
     case "Custom Range":
@@ -68,7 +80,7 @@ function getDefaultDateRange(): DateRange {
 }
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [brand, setBrand] = useState<Brand>("combined");
+  const [brand, setBrand] = useState<Brand>("uniworld");
   const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
 

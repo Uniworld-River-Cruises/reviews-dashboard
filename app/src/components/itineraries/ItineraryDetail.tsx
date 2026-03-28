@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useDashboard } from "@/contexts/DashboardContext";
 import KpiCard from "@/components/dashboard/KpiCard";
 import RatingDistributionChart from "@/components/dashboard/RatingDistributionChart";
 import ThemeChart from "@/components/dashboard/ThemeChart";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/firestore/itinerary-queries";
 
 export default function ItineraryDetail({ slug }: { slug: string }) {
+  const { brand } = useDashboard();
   const [itinerary, setItinerary] = useState<ItinerarySummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
@@ -32,27 +34,27 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getItineraryBySlug(slug).then(async (data) => {
+    getItineraryBySlug(slug, brand).then(async (data) => {
       if (cancelled) return;
       setItinerary(data);
       if (data) {
-        const q = await getItineraryQuotes(data.name, data.ships[0]);
+        const q = await getItineraryQuotes(data.name, data.childItineraries, data.ships[0], brand);
         if (!cancelled) setQuotes(q);
       }
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, brand]);
 
   const openPanel = useCallback(async (theme: string, type: "positive" | "negative") => {
     setPanelTheme(theme);
     setPanelType(type);
     setPanelOpen(true);
     setPanelLoading(true);
-    const reviews = await getReviewsByTheme("uniworld", theme, type);
+    const reviews = await getReviewsByTheme(brand, theme, type);
     setPanelReviews(reviews);
     setPanelLoading(false);
-  }, []);
+  }, [brand]);
 
   const closePanel = useCallback(() => {
     setPanelOpen(false);

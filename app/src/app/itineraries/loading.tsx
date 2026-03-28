@@ -1,17 +1,18 @@
 import { SkeletonCard, SkeletonSearchBar } from "@/components/ui/Skeleton";
+import { SkeletonBox } from "@/components/ui/Skeleton";
 
 export default function ItinerariesLoading() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div className="h-7 w-36 animate-pulse rounded bg-gray-200" />
+      <SkeletonBox className="h-7 w-36" />
 
       {/* Search and Sort */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 max-w-md">
           <SkeletonSearchBar />
         </div>
-        <div className="h-10 w-40 animate-pulse rounded-lg bg-gray-200" />
+        <SkeletonBox className="h-10 w-40 rounded-lg" />
       </div>
 
       {/* Card Grid */}

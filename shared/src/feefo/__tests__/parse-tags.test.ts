@@ -38,4 +38,35 @@ describe("parseTags", () => {
     const result = parseTags(undefined);
     expect(result.ship).toBeNull();
   });
+
+  it("extracts ship and tour from product-level tags", () => {
+    const saleTags: FeefoReviewTag[] = [
+      { type: "SALE", key: "region", values: ["Uniworld (USD)"] },
+      { type: "SALE", key: "loyalty", values: ["NO"] },
+    ];
+    const productTags: FeefoReviewTag[] = [
+      { type: "SALE", key: "ship", values: ["River Tosca"] },
+      { type: "SALE", key: "tour", values: ["Splendors of Egypt & the Nile on the River Tosca (CAI-CAI) 26"] },
+      { type: "SALE", key: "package", values: ["Egypt"] },
+    ];
+
+    const result = parseTags(saleTags, productTags);
+
+    expect(result.ship).toBe("River Tosca");
+    expect(result.tour).toBe("Splendors of Egypt & the Nile on the River Tosca (CAI-CAI) 26");
+    expect(result.package).toBe("Egypt");
+    expect(result.region).toBe("Uniworld (USD)");
+  });
+
+  it("product tags override sale tags for same key", () => {
+    const saleTags: FeefoReviewTag[] = [
+      { type: "SALE", key: "ship", values: ["Old Ship"] },
+    ];
+    const productTags: FeefoReviewTag[] = [
+      { type: "SALE", key: "ship", values: ["Correct Ship"] },
+    ];
+
+    const result = parseTags(saleTags, productTags);
+    expect(result.ship).toBe("Correct Ship");
+  });
 });

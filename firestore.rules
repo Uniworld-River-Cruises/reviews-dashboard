@@ -17,6 +17,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    match /itinerary_mappings/{mappingId} {
+      allow read: if true;
+      allow write: if false;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

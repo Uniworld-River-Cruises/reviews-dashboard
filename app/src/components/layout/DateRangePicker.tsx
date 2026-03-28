@@ -9,11 +9,15 @@ import {
 } from "@/contexts/DashboardContext";
 
 const presets: DatePreset[] = [
+  "This Week",
   "This Month",
   "Last Quarter",
   "Last 6 Months",
   "YTD",
   "Last 12 Months",
+  "Last 2 Years",
+  "Last 5 Years",
+  "Last 10 Years",
   "All Time",
   "Custom Range",
 ];
@@ -26,17 +30,20 @@ export default function DateRangePicker() {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!open) return;
     function handleClickOutside(event: MouseEvent) {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
       ) {
-        setOpen(false);
+        // Delay closing so native date picker interactions aren't interrupted
+        requestAnimationFrame(() => setOpen(false));
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    // Use click (not mousedown) so native date picker popups work
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [open]);
 
   function handlePresetClick(preset: DatePreset) {
     if (preset === "Custom Range") {
@@ -69,11 +76,11 @@ export default function DateRangePicker() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors w-full sm:w-auto"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs sm:text-sm font-medium text-white shadow-sm hover:bg-white/20 transition-colors w-full sm:w-auto"
       >
         <svg
-          className="h-4 w-4 text-gray-500"
+          className="h-4 w-4 text-white/70"
           fill="none"
           viewBox="0 0 24 24"
           strokeWidth={1.5}

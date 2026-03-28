@@ -31,6 +31,7 @@ interface FilterSidebarProps {
   onChange: (filters: Filters) => void;
   options: {
     brands: string[];
+    ratings: number[];
     ships: string[];
     itineraries: string[];
     positiveThemes: string[];
@@ -102,6 +103,13 @@ function CheckboxItem({
   );
 }
 
+function formatBrandName(slug: string): string {
+  return slug
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export default function FilterSidebar({ filters, onChange, options }: FilterSidebarProps) {
   const activeFilterCount = Object.values(filters).reduce(
     (sum, arr) => sum + arr.length,
@@ -130,6 +138,7 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
 
   const chipLabel = (key: keyof Filters, value: string | number) => {
     if (key === "rating") return `${value} star${Number(value) !== 1 ? "s" : ""}`;
+    if (key === "brand") return formatBrandName(String(value));
     return String(value);
   };
 
@@ -182,7 +191,7 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
         {options.brands.map((brand) => (
           <CheckboxItem
             key={brand}
-            label={brand}
+            label={formatBrandName(brand)}
             checked={filters.brand.includes(brand)}
             onChange={() => toggleArrayFilter("brand", brand)}
           />
@@ -191,7 +200,7 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
 
       {/* Star Rating */}
       <FilterSection title="Star Rating" defaultOpen>
-        {[5, 4, 3, 2, 1].map((star) => (
+        {(options.ratings.length > 0 ? options.ratings : [5, 4, 3, 2, 1]).map((star) => (
           <CheckboxItem
             key={star}
             label={`${"★".repeat(star)}${"☆".repeat(5 - star)} (${star})`}

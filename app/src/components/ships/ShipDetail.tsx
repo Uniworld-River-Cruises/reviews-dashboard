@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useDashboard } from "@/contexts/DashboardContext";
 import KpiCard from "@/components/dashboard/KpiCard";
 import HealthBadge from "@/components/dashboard/HealthBadge";
 import RatingDistributionChart from "@/components/dashboard/RatingDistributionChart";
@@ -18,6 +19,7 @@ import {
 } from "@/lib/firestore/ship-queries";
 
 export default function ShipDetail({ slug }: { slug: string }) {
+  const { brand } = useDashboard();
   const [ship, setShip] = useState<ShipSummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
@@ -33,27 +35,27 @@ export default function ShipDetail({ slug }: { slug: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getShipBySlug(slug).then(async (data) => {
+    getShipBySlug(slug, brand).then(async (data) => {
       if (cancelled) return;
       setShip(data);
       if (data) {
-        const q = await getShipQuotes(data.name);
+        const q = await getShipQuotes(data.name, brand);
         if (!cancelled) setQuotes(q);
       }
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, brand]);
 
   const openPanel = useCallback(async (theme: string, type: "positive" | "negative") => {
     setPanelTheme(theme);
     setPanelType(type);
     setPanelOpen(true);
     setPanelLoading(true);
-    const reviews = await getReviewsByTheme("uniworld", theme, type);
+    const reviews = await getReviewsByTheme(brand, theme, type);
     setPanelReviews(reviews);
     setPanelLoading(false);
-  }, []);
+  }, [brand]);
 
   const closePanel = useCallback(() => {
     setPanelOpen(false);

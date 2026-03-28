@@ -1,7 +1,8 @@
 export function SkeletonBox({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded bg-gray-200 ${className}`}
+      className={`animate-pulse rounded ${className}`}
+      style={{ backgroundColor: 'var(--border)' }}
       aria-hidden="true"
     />
   );
@@ -9,7 +10,7 @@ export function SkeletonBox({ className = "" }: { className?: string }) {
 
 export function SkeletonKpi() {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="rounded-lg shadow-sm p-6" style={{ backgroundColor: 'var(--surface)' }}>
       <SkeletonBox className="h-4 w-24 mb-3" />
       <SkeletonBox className="h-8 w-20 mb-2" />
       <SkeletonBox className="h-3 w-32" />
@@ -19,7 +20,7 @@ export function SkeletonKpi() {
 
 export function SkeletonCard() {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="rounded-lg shadow-sm p-6" style={{ backgroundColor: 'var(--surface)' }}>
       <SkeletonBox className="h-5 w-3/4 mb-3" />
       <SkeletonBox className="h-3 w-1/2 mb-5" />
       <div className="grid grid-cols-3 gap-3 mb-4">
@@ -45,7 +46,7 @@ const BAR_HEIGHTS = ["h-[75%]", "h-[45%]", "h-[90%]", "h-[60%]", "h-[35%]", "h-[
 
 export function SkeletonChart() {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="rounded-lg shadow-sm p-6" style={{ backgroundColor: 'var(--surface)' }}>
       <SkeletonBox className="h-5 w-40 mb-4" />
       <div className="flex items-end gap-2 h-48">
         {BAR_HEIGHTS.map((h, i) => (
@@ -58,14 +59,14 @@ export function SkeletonChart() {
 
 export function SkeletonTable() {
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
+    <div className="rounded-lg shadow-sm p-6" style={{ backgroundColor: 'var(--surface)' }}>
       <div className="flex items-center justify-between mb-4">
         <SkeletonBox className="h-5 w-40" />
         <SkeletonBox className="h-8 w-48 rounded-lg" />
       </div>
       <div className="space-y-3">
         {/* Header row */}
-        <div className="flex gap-4 pb-3 border-b border-gray-200">
+        <div className="flex gap-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <SkeletonBox className="h-4 flex-[2]" />
           <SkeletonBox className="h-4 flex-1" />
           <SkeletonBox className="h-4 flex-1" />
@@ -91,7 +92,7 @@ export function SkeletonTable() {
 
 export function SkeletonReviewCard() {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-lg p-5 shadow-sm" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <div className="flex items-center gap-2">
           <SkeletonBox className="h-4 w-28" />

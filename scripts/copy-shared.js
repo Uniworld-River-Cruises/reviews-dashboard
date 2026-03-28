@@ -9,9 +9,13 @@ fs.rmSync(dest, { recursive: true, force: true });
 fs.mkdirSync(dest, { recursive: true });
 
 // Copy dist directory recursively
+// Skip classifier files to avoid pulling in @anthropic-ai/sdk at deploy time
+const SKIP_FILES = new Set(["classifier.js", "classifier.d.ts"]);
+
 function copyDir(s, d) {
   fs.mkdirSync(d, { recursive: true });
   for (const entry of fs.readdirSync(s, { withFileTypes: true })) {
+    if (SKIP_FILES.has(entry.name)) continue;
     const sp = path.join(s, entry.name);
     const dp = path.join(d, entry.name);
     if (entry.isDirectory()) copyDir(sp, dp);

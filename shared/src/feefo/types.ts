@@ -47,6 +47,7 @@ export interface FeefoProduct {
     parent_sku?: string;
     url?: string;
     image_url?: string;
+    tags?: FeefoReviewTag[];
   };
   created_at: string;
 }

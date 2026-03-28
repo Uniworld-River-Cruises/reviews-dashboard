@@ -14,10 +14,9 @@
   },
   "hosting": {
     "public": "app/out",
+    "cleanUrls": true,
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
-      { "source": "/itineraries/**", "destination": "/itineraries.html" },
-      { "source": "/ships/**", "destination": "/ships.html" },
       { "source": "**", "destination": "/index.html" }
     ],
     "headers": [

@@ -1,11 +1,14 @@
 import { db } from "@/lib/firebase";
 import {
   collection,
+  doc,
   query,
   where,
   getDocs,
+  getDoc,
   orderBy,
   limit,
+  QueryConstraint,
 } from "firebase/firestore";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -49,152 +52,425 @@ export interface ThemeReview {
   date: string;
 }
 
-// ── Mock data ──────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
-const MOCK_FLEET_SUMMARY: FleetSummary = {
-  totalReviews: 1247,
-  averageRating: 4.72,
-  fiveStarPercent: 78.3,
-  fourPlusPercent: 94.1,
-  totalItineraries: 42,
-  totalShips: 18,
-  ratingDistribution: [
-    { star: 5, count: 977 },
-    { star: 4, count: 197 },
-    { star: 3, count: 48 },
-    { star: 2, count: 16 },
-    { star: 1, count: 9 },
-  ],
-  previousPeriodReviews: 1120,
-  previousPeriodRating: 4.68,
-  positiveThemes: [
-    { theme: "Exceptional Crew Service", count: 412 },
-    { theme: "Beautiful Itineraries", count: 387 },
-    { theme: "Gourmet Dining", count: 341 },
-    { theme: "Luxurious Accommodations", count: 298 },
-    { theme: "Enriching Excursions", count: 276 },
-    { theme: "Stunning Scenery", count: 254 },
-    { theme: "Smooth Embarkation", count: 198 },
-    { theme: "Cultural Immersion", count: 187 },
-    { theme: "Attentive Butler Service", count: 165 },
-    { theme: "Onboard Entertainment", count: 142 },
-  ],
-  negativeThemes: [
-    { theme: "Wi-Fi Connectivity", count: 89 },
-    { theme: "Cabin Size", count: 67 },
-    { theme: "Shore Excursion Pace", count: 54 },
-    { theme: "Embarkation Delays", count: 41 },
-    { theme: "Noise Levels", count: 38 },
-    { theme: "Menu Variety", count: 34 },
-    { theme: "Air Conditioning Issues", count: 29 },
-    { theme: "Communication Gaps", count: 24 },
-    { theme: "Transfer Logistics", count: 19 },
-    { theme: "Pool Area Crowding", count: 15 },
-  ],
-};
-
-const MOCK_MONTHLY_SUMMARIES: MonthlySummary[] = [
-  { month: "2025-04", averageRating: 4.65, reviewCount: 87 },
-  { month: "2025-05", averageRating: 4.71, reviewCount: 102 },
-  { month: "2025-06", averageRating: 4.68, reviewCount: 118 },
-  { month: "2025-07", averageRating: 4.74, reviewCount: 134 },
-  { month: "2025-08", averageRating: 4.69, reviewCount: 127 },
-  { month: "2025-09", averageRating: 4.77, reviewCount: 115 },
-  { month: "2025-10", averageRating: 4.73, reviewCount: 98 },
-  { month: "2025-11", averageRating: 4.80, reviewCount: 89 },
-  { month: "2025-12", averageRating: 4.76, reviewCount: 78 },
-  { month: "2026-01", averageRating: 4.72, reviewCount: 104 },
-  { month: "2026-02", averageRating: 4.78, reviewCount: 96 },
-  { month: "2026-03", averageRating: 4.75, reviewCount: 99 },
-];
-
-const MOCK_ENTITY_SUMMARIES: EntitySummary[] = [
-  { id: "1", name: "Enchanting Danube", ships: ["S.S. Maria Theresa"], averageRating: 4.89, reviewCount: 142, fiveStarPercent: 87.3 },
-  { id: "2", name: "Castles Along the Rhine", ships: ["S.S. Antoinette"], averageRating: 4.82, reviewCount: 128, fiveStarPercent: 83.6 },
-  { id: "3", name: "European Jewels", ships: ["S.S. Beatrice"], averageRating: 4.76, reviewCount: 115, fiveStarPercent: 80.0 },
-  { id: "4", name: "Brilliant Bordeaux", ships: ["S.S. Bon Voyage"], averageRating: 4.71, reviewCount: 97, fiveStarPercent: 77.3 },
-  { id: "5", name: "Treasures of Egypt", ships: ["S.S. Sphinx"], averageRating: 4.68, reviewCount: 89, fiveStarPercent: 74.2 },
-  { id: "6", name: "Remarkable Rhine & Historic Holland", ships: ["River Duchess"], averageRating: 4.65, reviewCount: 82, fiveStarPercent: 72.0 },
-  { id: "7", name: "Enchanting Mekong", ships: ["Mekong Jewel"], averageRating: 4.58, reviewCount: 76, fiveStarPercent: 68.4 },
-  { id: "8", name: "Delightful Douro", ships: ["S.S. São Gabriel"], averageRating: 4.52, reviewCount: 71, fiveStarPercent: 66.2 },
-  { id: "9", name: "India's Golden Triangle & Ganges", ships: ["Ganges Voyager II"], averageRating: 4.45, reviewCount: 64, fiveStarPercent: 62.5 },
-  { id: "10", name: "Grand China & the Yangtze", ships: ["Century Legend"], averageRating: 4.31, reviewCount: 58, fiveStarPercent: 55.2 },
-  { id: "11", name: "Peruvian Amazon", ships: ["Aria Amazon"], averageRating: 4.78, reviewCount: 53, fiveStarPercent: 81.1 },
-  { id: "12", name: "Venice & the Gems of Northern Italy", ships: ["S.S. La Venezia"], averageRating: 4.85, reviewCount: 94, fiveStarPercent: 85.1 },
-  { id: "13", name: "Splendors of Egypt & the Nile", ships: ["S.S. Sphinx"], averageRating: 4.62, reviewCount: 68, fiveStarPercent: 70.6 },
-  { id: "14", name: "Portuguese Passageways", ships: ["S.S. São Gabriel"], averageRating: 4.48, reviewCount: 61, fiveStarPercent: 63.9 },
-  { id: "15", name: "Timeless Wonders of Vietnam, Cambodia & Mekong", ships: ["Mekong Jewel"], averageRating: 4.39, reviewCount: 49, fiveStarPercent: 59.2 },
-];
-
-function generateMockReviews(theme: string, type: "positive" | "negative"): ThemeReview[] {
-  const positiveTexts = [
-    `The ${theme.toLowerCase()} on this cruise was absolutely outstanding. Every detail was carefully considered and the experience exceeded all our expectations.`,
-    `We were so impressed with the ${theme.toLowerCase()}. The staff went above and beyond to ensure everything was perfect. Would definitely recommend!`,
-    `${theme} was the highlight of our journey. The attention to detail was remarkable and truly set this cruise apart from others we have taken.`,
-    `Cannot say enough about the ${theme.toLowerCase()}. From start to finish, it was a five-star experience that we will cherish forever.`,
-    `The ${theme.toLowerCase()} made our trip unforgettable. We have cruised many times but this was truly special and unique.`,
-  ];
-  const negativeTexts = [
-    `Unfortunately, the ${theme.toLowerCase()} was disappointing. We expected better given the premium price point of this cruise.`,
-    `The ${theme.toLowerCase()} needs improvement. While the rest of the experience was good, this area let us down significantly.`,
-    `We were let down by the ${theme.toLowerCase()}. For a luxury cruise, this should have been handled much better.`,
-    `${theme} was the weakest aspect of our cruise. The crew tried their best but the issue persisted throughout our voyage.`,
-    `Had issues with ${theme.toLowerCase()} during our trip. Management acknowledged the problem but could not resolve it in time.`,
-  ];
-  const names = ["Margaret W.", "Robert T.", "Susan K.", "James P.", "Patricia H."];
-  const itineraries = ["Enchanting Danube", "Castles Along the Rhine", "European Jewels", "Brilliant Bordeaux", "Treasures of Egypt"];
-  const ships = ["S.S. Maria Theresa", "S.S. Antoinette", "S.S. Beatrice", "S.S. Bon Voyage", "S.S. Sphinx"];
-  const texts = type === "positive" ? positiveTexts : negativeTexts;
-
-  return texts.map((text, i) => ({
-    id: `${type}-${theme}-${i}`,
-    guestName: names[i],
-    rating: type === "positive" ? (i < 3 ? 5 : 4) : (i < 2 ? 2 : 3),
-    itinerary: itineraries[i],
-    ship: ships[i],
-    text,
-    date: `2026-0${(i % 3) + 1}-${10 + i}`,
-  }));
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 100);
 }
 
-// ── Query functions (Firestore with mock fallback) ─────────────────────────
+const EMPTY_FLEET: FleetSummary = {
+  totalReviews: 0,
+  averageRating: 0,
+  fiveStarPercent: 0,
+  fourPlusPercent: 0,
+  totalItineraries: 0,
+  totalShips: 0,
+  ratingDistribution: [
+    { star: 5, count: 0 },
+    { star: 4, count: 0 },
+    { star: 3, count: 0 },
+    { star: 2, count: 0 },
+    { star: 1, count: 0 },
+  ],
+  previousPeriodReviews: 0,
+  previousPeriodRating: 0,
+  positiveThemes: [],
+  negativeThemes: [],
+};
 
-const USE_MOCK = true; // Toggle when Firestore is ready
+// ── Query functions ─────────────────────────────────────────────────────────
 
 export async function getFleetSummary(brand: string): Promise<FleetSummary> {
-  if (USE_MOCK) return MOCK_FLEET_SUMMARY;
+  // "combined" means we need to merge both brand summaries
+  if (brand === "combined") {
+    const snap = await getDocs(
+      query(collection(db, "summaries"), where("scope", "==", "fleet"))
+    );
+    if (snap.empty) return EMPTY_FLEET;
 
-  const ref = collection(db, "fleet_summaries");
-  const q = query(ref, where("brand", "==", brand), limit(1));
-  const snap = await getDocs(q);
+    let totalReviews = 0;
+    let reviewsWithComments = 0;
+    let ratingSum = 0;
+    const starDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+    const positiveCounts: Record<string, number> = {};
+    const negativeCounts: Record<string, number> = {};
+    const allShips = new Set<string>();
+    const allItineraries = new Set<string>();
 
-  if (snap.empty) return MOCK_FLEET_SUMMARY;
-  return snap.docs[0].data() as FleetSummary;
+    for (const d of snap.docs) {
+      const data = d.data();
+      totalReviews += data.totalReviews || 0;
+      reviewsWithComments += data.reviewsWithComments || 0;
+      ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
+      const sd = data.starDistribution || {};
+      for (const star of Object.keys(sd)) {
+        starDist[star] = (starDist[star] || 0) + sd[star];
+      }
+      for (const t of data.topPositiveThemes || []) {
+        positiveCounts[t.theme] = (positiveCounts[t.theme] || 0) + t.count;
+      }
+      for (const t of data.topNegativeThemes || []) {
+        negativeCounts[t.theme] = (negativeCounts[t.theme] || 0) + t.count;
+      }
+      for (const s of data.ships || []) allShips.add(s);
+      for (const it of data.itineraries || []) allItineraries.add(it);
+    }
+
+    const avgRating = totalReviews > 0 ? Math.round((ratingSum / totalReviews) * 100) / 100 : 0;
+    const fiveStar = starDist["5"] || 0;
+    const fourPlus = (starDist["5"] || 0) + (starDist["4"] || 0);
+
+    return {
+      totalReviews,
+      averageRating: avgRating,
+      fiveStarPercent: totalReviews > 0 ? Math.round((fiveStar / totalReviews) * 1000) / 10 : 0,
+      fourPlusPercent: totalReviews > 0 ? Math.round((fourPlus / totalReviews) * 1000) / 10 : 0,
+      totalItineraries: allItineraries.size,
+      totalShips: allShips.size,
+      ratingDistribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: starDist[String(star)] || 0 })),
+      previousPeriodReviews: 0,
+      previousPeriodRating: 0,
+      positiveThemes: Object.entries(positiveCounts)
+        .map(([theme, count]) => ({ theme, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+      negativeThemes: Object.entries(negativeCounts)
+        .map(([theme, count]) => ({ theme, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10),
+    };
+  }
+
+  // Single brand: doc ID is the brand name (e.g. "uniworld")
+  const docRef = doc(db, "summaries", brand);
+  const snap = await getDoc(docRef);
+
+  if (!snap.exists()) return EMPTY_FLEET;
+
+  const data = snap.data();
+  const totalReviews = data.totalReviews || 0;
+  const sd = data.starDistribution || {};
+  const fiveStar = sd["5"] || 0;
+  const fourPlus = (sd["5"] || 0) + (sd["4"] || 0);
+
+  // Count unique ships and itineraries from sub-summaries
+  const subSnap = await getDocs(
+    query(collection(db, "summaries"), where("brand", "==", brand), where("scope", "!=", "fleet"))
+  );
+  const ships = new Set<string>();
+  const itineraries = new Set<string>();
+  for (const d of subSnap.docs) {
+    const sub = d.data();
+    if (sub.scope === "ship" && sub.scopeValue) ships.add(sub.scopeValue);
+    if (sub.scope === "itinerary" && sub.scopeValue) itineraries.add(sub.scopeValue);
+  }
+
+  return {
+    totalReviews,
+    averageRating: data.avgRating || 0,
+    fiveStarPercent: totalReviews > 0 ? Math.round((fiveStar / totalReviews) * 1000) / 10 : 0,
+    fourPlusPercent: totalReviews > 0 ? Math.round((fourPlus / totalReviews) * 1000) / 10 : 0,
+    totalItineraries: itineraries.size,
+    totalShips: ships.size,
+    ratingDistribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: sd[String(star)] || 0 })),
+    previousPeriodReviews: 0,
+    previousPeriodRating: 0,
+    positiveThemes: (data.topPositiveThemes || []).slice(0, 10),
+    negativeThemes: (data.topNegativeThemes || []).slice(0, 10),
+  };
 }
 
 export async function getMonthlySummaries(brand: string): Promise<MonthlySummary[]> {
-  if (USE_MOCK) return MOCK_MONTHLY_SUMMARIES;
-
   const ref = collection(db, "monthly_summaries");
-  const q = query(ref, where("brand", "==", brand), orderBy("month", "asc"));
+  const constraints = brand === "combined"
+    ? [orderBy("month", "asc")]
+    : [where("brand", "==", brand), orderBy("month", "asc")];
+  const q = query(ref, ...constraints);
   const snap = await getDocs(q);
 
-  if (snap.empty) return MOCK_MONTHLY_SUMMARIES;
-  return snap.docs.map((d) => d.data() as MonthlySummary);
+  if (snap.empty) return [];
+
+  if (brand === "combined") {
+    // Aggregate by month across brands
+    const byMonth: Record<string, { totalReviews: number; ratingSum: number }> = {};
+    for (const d of snap.docs) {
+      const data = d.data();
+      const month = data.month;
+      if (!byMonth[month]) byMonth[month] = { totalReviews: 0, ratingSum: 0 };
+      byMonth[month].totalReviews += data.totalReviews || 0;
+      byMonth[month].ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
+    }
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([month, agg]) => ({
+        month,
+        averageRating: agg.totalReviews > 0 ? Math.round((agg.ratingSum / agg.totalReviews) * 100) / 100 : 0,
+        reviewCount: agg.totalReviews,
+      }));
+  }
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      month: data.month,
+      averageRating: data.avgRating || 0,
+      reviewCount: data.totalReviews || 0,
+    };
+  });
 }
 
 export async function getEntitySummaries(
   brand: string,
   scope: "ship" | "itinerary" = "itinerary"
 ): Promise<EntitySummary[]> {
-  if (USE_MOCK) return MOCK_ENTITY_SUMMARIES;
-
-  const ref = collection(db, "entity_summaries");
-  const q = query(ref, where("brand", "==", brand), where("scope", "==", scope));
+  const ref = collection(db, "summaries");
+  const constraints = brand === "combined"
+    ? [where("scope", "==", scope)]
+    : [where("brand", "==", brand), where("scope", "==", scope)];
+  const q = query(ref, ...constraints);
   const snap = await getDocs(q);
 
-  if (snap.empty) return MOCK_ENTITY_SUMMARIES;
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as EntitySummary);
+  if (snap.empty) return [];
+
+  // When combined, aggregate duplicate scope values across brands
+  if (brand === "combined") {
+    const byName: Record<string, { totalReviews: number; ratingSum: number; fiveStar: number; ships: Set<string> }> = {};
+    for (const d of snap.docs) {
+      const data = d.data();
+      const name = data.scopeValue || d.id;
+      if (!byName[name]) byName[name] = { totalReviews: 0, ratingSum: 0, fiveStar: 0, ships: new Set() };
+      byName[name].totalReviews += data.totalReviews || 0;
+      byName[name].ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
+      byName[name].fiveStar += (data.starDistribution?.["5"] || 0);
+      for (const s of data.ships || []) byName[name].ships.add(s);
+    }
+    return Object.entries(byName).map(([name, agg]) => ({
+      id: slugify(name),
+      name,
+      ships: [...agg.ships],
+      averageRating: agg.totalReviews > 0 ? Math.round((agg.ratingSum / agg.totalReviews) * 100) / 100 : 0,
+      reviewCount: agg.totalReviews,
+      fiveStarPercent: agg.totalReviews > 0 ? Math.round((agg.fiveStar / agg.totalReviews) * 1000) / 10 : 0,
+    }));
+  }
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    const total = data.totalReviews || 0;
+    const fiveStar = data.starDistribution?.["5"] || 0;
+    const name = data.scopeValue || d.id;
+    return {
+      id: slugify(name),
+      name,
+      ships: data.ships || [],
+      averageRating: data.avgRating || 0,
+      reviewCount: total,
+      fiveStarPercent: total > 0 ? Math.round((fiveStar / total) * 1000) / 10 : 0,
+    };
+  });
+}
+
+/**
+ * Compute fleet summary directly from reviews filtered by date range.
+ * Used when the user selects a date range other than "All Time".
+ */
+export async function getFleetSummaryByDateRange(
+  brand: string,
+  startDate: Date,
+  endDate: Date
+): Promise<FleetSummary> {
+  const ref = collection(db, "reviews");
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", startDate.toISOString()),
+    where("dates.created", "<=", endDate.toISOString()),
+  ];
+  if (brand !== "combined") {
+    constraints.push(where("brand", "==", brand));
+  }
+  constraints.push(orderBy("dates.created", "desc"));
+  const q = query(ref, ...constraints);
+  const snap = await getDocs(q);
+
+  if (snap.empty) return EMPTY_FLEET;
+
+  let ratingSum = 0;
+  const starDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+  const positiveCounts: Record<string, number> = {};
+  const negativeCounts: Record<string, number> = {};
+  const ships = new Set<string>();
+  const itineraries = new Set<string>();
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    const rating = data.rating || data.ratings?.product || data.ratings?.service || 0;
+    ratingSum += rating;
+    const starKey = String(Math.round(rating));
+    starDist[starKey] = (starDist[starKey] || 0) + 1;
+
+    if (data.ship) ships.add(data.ship);
+    if (data.tags?.ship) ships.add(data.tags.ship);
+    if (data.tags?.tour) itineraries.add(data.tags.tour);
+
+    for (const t of data.themes?.positive || []) {
+      positiveCounts[t] = (positiveCounts[t] || 0) + 1;
+    }
+    for (const t of data.themes?.negative || []) {
+      negativeCounts[t] = (negativeCounts[t] || 0) + 1;
+    }
+  }
+
+  const total = snap.docs.length;
+  const avgRating = total > 0 ? Math.round((ratingSum / total) * 100) / 100 : 0;
+  const fiveStar = starDist["5"] || 0;
+  const fourPlus = (starDist["5"] || 0) + (starDist["4"] || 0);
+
+  return {
+    totalReviews: total,
+    averageRating: avgRating,
+    fiveStarPercent: total > 0 ? Math.round((fiveStar / total) * 1000) / 10 : 0,
+    fourPlusPercent: total > 0 ? Math.round((fourPlus / total) * 1000) / 10 : 0,
+    totalItineraries: itineraries.size,
+    totalShips: ships.size,
+    ratingDistribution: [5, 4, 3, 2, 1].map((star) => ({ star, count: starDist[String(star)] || 0 })),
+    previousPeriodReviews: 0,
+    previousPeriodRating: 0,
+    positiveThemes: Object.entries(positiveCounts)
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+    negativeThemes: Object.entries(negativeCounts)
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10),
+  };
+}
+
+/**
+ * Get all filter options (ships, itineraries, themes) from reviews within the date range.
+ * Queries the reviews collection so results reflect the selected time period.
+ */
+/**
+ * Compute entity summaries (itinerary or ship) from reviews within a date range.
+ */
+export async function getEntitySummariesByDateRange(
+  brand: string,
+  startDate: Date,
+  endDate: Date,
+  scope: "ship" | "itinerary" = "itinerary"
+): Promise<EntitySummary[]> {
+  const ref = collection(db, "reviews");
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", startDate.toISOString()),
+    where("dates.created", "<=", endDate.toISOString()),
+    orderBy("dates.created", "desc"),
+  ];
+  if (brand !== "combined") {
+    constraints.unshift(where("brand", "==", brand));
+  }
+  const snap = await getDocs(query(ref, ...constraints));
+
+  if (snap.empty) return [];
+
+  const byName: Record<string, { totalReviews: number; ratingSum: number; fiveStar: number; ships: Set<string> }> = {};
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    const name = scope === "ship"
+      ? (data.tags?.ship || "")
+      : (data.tags?.tour || data.product?.title || "");
+    if (!name) continue;
+
+    if (!byName[name]) byName[name] = { totalReviews: 0, ratingSum: 0, fiveStar: 0, ships: new Set() };
+    byName[name].totalReviews++;
+    const rating = data.ratings?.product ?? data.ratings?.service ?? 0;
+    byName[name].ratingSum += rating;
+    if (Math.round(rating) === 5) byName[name].fiveStar++;
+    if (data.tags?.ship) byName[name].ships.add(data.tags.ship);
+  }
+
+  return Object.entries(byName)
+    .map(([name, agg]) => ({
+      id: slugify(name),
+      name,
+      ships: [...agg.ships],
+      averageRating: agg.totalReviews > 0 ? Math.round((agg.ratingSum / agg.totalReviews) * 100) / 100 : 0,
+      reviewCount: agg.totalReviews,
+      fiveStarPercent: agg.totalReviews > 0 ? Math.round((agg.fiveStar / agg.totalReviews) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.reviewCount - a.reviewCount);
+}
+
+export interface FilterOptions {
+  brands: string[];
+  ratings: number[];
+  ships: string[];
+  itineraries: string[];
+  positiveThemes: string[];
+  negativeThemes: string[];
+  bookingTypes: string[];
+  regions: string[];
+  loyaltyLevels: string[];
+}
+
+/**
+ * Get all filter options from reviews within the date range.
+ * Queries the reviews collection so results reflect the selected time period.
+ */
+export async function getFilterOptions(
+  brand: string,
+  startDate: string,
+  endDate: string
+): Promise<FilterOptions> {
+  const ref = collection(db, "reviews");
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", startDate),
+    where("dates.created", "<=", endDate),
+    orderBy("dates.created", "desc"),
+  ];
+  if (brand !== "combined") {
+    constraints.unshift(where("brand", "==", brand));
+  }
+  const snap = await getDocs(query(ref, ...constraints));
+
+  const brands = new Set<string>();
+  const ratings = new Set<number>();
+  const ships = new Set<string>();
+  const itineraries = new Set<string>();
+  const positiveThemes = new Set<string>();
+  const negativeThemes = new Set<string>();
+  const bookingTypes = new Set<string>();
+  const regions = new Set<string>();
+  const loyaltyLevels = new Set<string>();
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.brand) brands.add(data.brand);
+    const rating = data.ratings?.product ?? data.ratings?.service;
+    if (rating != null) ratings.add(Math.round(rating));
+    if (data.tags?.ship) ships.add(data.tags.ship);
+    if (data.tags?.tour) itineraries.add(data.tags.tour);
+    if (data.tags?.bookingType) bookingTypes.add(data.tags.bookingType);
+    if (data.tags?.region) regions.add(data.tags.region);
+    if (data.tags?.loyalty) loyaltyLevels.add(data.tags.loyalty);
+    for (const t of data.themes?.positive || []) positiveThemes.add(t);
+    for (const t of data.themes?.negative || []) negativeThemes.add(t);
+  }
+
+  return {
+    brands: [...brands].sort(),
+    ratings: [...ratings].sort((a, b) => b - a),
+    ships: [...ships].sort(),
+    itineraries: [...itineraries].sort(),
+    positiveThemes: [...positiveThemes].sort(),
+    negativeThemes: [...negativeThemes].sort(),
+    bookingTypes: [...bookingTypes].sort(),
+    regions: [...regions].sort(),
+    loyaltyLevels: [...loyaltyLevels].sort(),
+  };
 }
 
 export async function getReviewsByTheme(
@@ -202,17 +478,30 @@ export async function getReviewsByTheme(
   theme: string,
   type: "positive" | "negative"
 ): Promise<ThemeReview[]> {
-  if (USE_MOCK) return generateMockReviews(theme, type);
-
   const ref = collection(db, "reviews");
-  const q = query(
-    ref,
-    where("brand", "==", brand),
+  const constraints = [
     where(`themes.${type}`, "array-contains", theme),
-    limit(20)
-  );
+    orderBy("dates.created", "desc"),
+    limit(20),
+  ];
+  if (brand !== "combined") {
+    constraints.unshift(where("brand", "==", brand));
+  }
+  const q = query(ref, ...constraints);
   const snap = await getDocs(q);
 
-  if (snap.empty) return generateMockReviews(theme, type);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ThemeReview);
+  if (snap.empty) return [];
+
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      guestName: data.customer?.displayName || data.customer?.name || "Guest",
+      rating: data.ratings?.product ?? data.ratings?.service ?? 0,
+      itinerary: data.tags?.tour || data.product?.title || "",
+      ship: data.tags?.ship || "",
+      text: data.reviews?.productText || data.reviews?.serviceText || "",
+      date: data.dates?.created || "",
+    };
+  });
 }

@@ -1,12 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function RefreshButton() {
   const { lastSynced, setLastSynced } = useDashboard();
   const [syncing, setSyncing] = useState(false);
+
+  // Load last sync time from Firestore on mount
+  useEffect(() => {
+    if (lastSynced) return;
+    getDoc(doc(db, "sync_meta", "uniworld")).then((snap) => {
+      const data = snap.data();
+      if (data?.lastSyncAt) {
+        setLastSynced(data.lastSyncAt);
+      } else if (data?.startedAt) {
+        setLastSynced(data.startedAt);
+      }
+    }).catch(() => {});
+  }, [lastSynced, setLastSynced]);
 
   const syncLabel = lastSynced
     ? `Synced ${formatDistanceToNow(new Date(lastSynced), { addSuffix: true })}`
@@ -28,13 +43,13 @@ export default function RefreshButton() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="hidden text-xs text-gray-500 sm:inline">
+      <span className="hidden text-xs text-gray-500 sm:inline dark:text-white/60">
         {syncLabel}
       </span>
       <button
         onClick={handleSync}
         disabled={syncing}
-        className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors disabled:opacity-50 dark:bg-white/10 dark:border-white/20 dark:text-white dark:hover:bg-white/20"
       >
         <svg
           className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`}

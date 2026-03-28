@@ -1,5 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { ReviewDocument, Brand } from "@feefo/shared";
+import { ReviewDocument, Brand, normalizeItineraryName } from "@feefo/shared";
+import { getMappingLookup } from "./itinerary-mappings";
 
 interface Summary {
   id: string;
@@ -14,6 +15,7 @@ interface Summary {
   topNegativeThemes: { theme: string; count: number }[];
   ships: string[];
   itineraries: string[];
+  childItineraries: string[];
   lastUpdated: string;
 }
 
@@ -49,12 +51,23 @@ export async function computeSummaries(brand: Brand): Promise<void> {
     await db.collection("summaries").doc(docId).set(summary);
   }
 
-  // Per-itinerary summaries (using tags.tour, NOT product.title)
-  const byItinerary = groupBy(reviews, (r) => r.tags.tour ?? r.product.title);
+  // Per-itinerary summaries — group by effective parent name via mappings
+  const mappingLookup = await getMappingLookup(brand);
+  const resolveParent = (rawTour: string): string =>
+    mappingLookup.get(rawTour) ?? normalizeItineraryName(rawTour);
+
+  const byItinerary = groupBy(reviews, (r) => {
+    const raw = r.tags.tour ?? r.product.title;
+    return raw ? resolveParent(raw) : null;
+  });
   for (const [itinerary, itinReviews] of Object.entries(byItinerary)) {
     if (!itinerary) continue;
     const summary = buildSummary(brand, "itinerary", itinerary, itinReviews);
     summary.ships = [...new Set(itinReviews.map((r) => r.tags.ship).filter(Boolean) as string[])];
+    // Track which raw itinerary names rolled up into this parent
+    summary.childItineraries = [...new Set(
+      itinReviews.map((r) => r.tags.tour ?? r.product.title).filter(Boolean) as string[]
+    )];
     const docId = `${brand}_itinerary_${slugify(itinerary)}`;
     await db.collection("summaries").doc(docId).set(summary);
   }
@@ -169,6 +182,7 @@ function buildSummary(
       .slice(0, 10),
     ships: [],
     itineraries: [],
+    childItineraries: [],
     lastUpdated: new Date().toISOString(),
   };
 }

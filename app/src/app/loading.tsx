@@ -4,7 +4,7 @@ export default function OverviewLoading() {
   return (
     <div className="space-y-6">
       {/* Title */}
-      <div className="h-7 w-32 animate-pulse rounded bg-gray-200" />
+      <div className="h-7 w-32 animate-pulse rounded" style={{ backgroundColor: 'var(--border)' }} />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">

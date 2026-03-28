@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useDashboard } from "@/contexts/DashboardContext";
 import SearchFilter from "@/components/dashboard/SearchFilter";
 import HealthBadge from "@/components/dashboard/HealthBadge";
 import ShipDetail from "@/components/ships/ShipDetail";
@@ -23,17 +24,19 @@ export default function ShipsPage() {
 }
 
 function ShipList() {
+  const { brand } = useDashboard();
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("rating");
+  const [sortBy, setSortBy] = useState<SortOption>("reviewCount");
 
   useEffect(() => {
-    getShips().then((data) => {
+    setLoading(true);
+    getShips(brand).then((data) => {
       setShips(data);
       setLoading(false);
     });
-  }, []);
+  }, [brand]);
 
   const filtered = useMemo(() => {
     const result = ships.filter((s) =>

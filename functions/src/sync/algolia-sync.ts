@@ -1,10 +1,17 @@
-import { algoliasearch } from "algoliasearch";
 import { ReviewDocument } from "@feefo/shared";
 
-const client = algoliasearch(
-  process.env.ALGOLIA_APP_ID!,
-  process.env.ALGOLIA_ADMIN_KEY!
-);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _client: any = null;
+async function getAlgoliaClient() {
+  if (!_client) {
+    const { algoliasearch } = await import("algoliasearch");
+    _client = algoliasearch(
+      process.env.ALGOLIA_APP_ID!,
+      process.env.ALGOLIA_ADMIN_KEY!
+    );
+  }
+  return _client;
+}
 
 const INDEX_NAME = "reviews";
 
@@ -31,6 +38,7 @@ export async function syncToAlgolia(reviews: ReviewDocument[]): Promise<void> {
       createdAtISO: r.dates.created,
     }));
 
+  const client = await getAlgoliaClient();
   for (let i = 0; i < objects.length; i += 1000) {
     const batch = objects.slice(i, i + 1000);
     await client.saveObjects({
@@ -41,6 +49,7 @@ export async function syncToAlgolia(reviews: ReviewDocument[]): Promise<void> {
 }
 
 export async function configureAlgoliaIndex(): Promise<void> {
+  const client = await getAlgoliaClient();
   await client.setSettings({
     indexName: INDEX_NAME,
     indexSettings: {

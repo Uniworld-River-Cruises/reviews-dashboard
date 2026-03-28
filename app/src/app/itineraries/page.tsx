@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useDashboard } from "@/contexts/DashboardContext";
 import SearchFilter from "@/components/dashboard/SearchFilter";
 import HealthBadge from "@/components/dashboard/HealthBadge";
 import ItineraryDetail from "@/components/itineraries/ItineraryDetail";
@@ -23,17 +24,19 @@ export default function ItinerariesPage() {
 }
 
 function ItineraryList() {
+  const { brand } = useDashboard();
   const [itineraries, setItineraries] = useState<ItinerarySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("rating");
+  const [sortBy, setSortBy] = useState<SortOption>("reviewCount");
 
   useEffect(() => {
-    getItineraries().then((data) => {
+    setLoading(true);
+    getItineraries(brand).then((data) => {
       setItineraries(data);
       setLoading(false);
     });
-  }, []);
+  }, [brand]);
 
   const filtered = useMemo(() => {
     const result = itineraries.filter((it) =>
