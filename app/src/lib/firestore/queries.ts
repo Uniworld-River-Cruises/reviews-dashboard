@@ -362,6 +362,27 @@ export async function getFleetSummaryByDateRange(
 /**
  * Compute entity summaries (itinerary or ship) from reviews within a date range.
  */
+/**
+ * Build a rawName → effectiveParentName lookup from the itinerary_mappings collection.
+ * Used to resolve raw tour names to their grouped parent names on the client side.
+ */
+async function getParentNameLookup(brand: string): Promise<Map<string, string>> {
+  const db = getClientDb();
+  const ref = collection(db, "itinerary_mappings");
+  const constraints = brand === "combined"
+    ? []
+    : [where("brand", "==", brand)];
+  const snap = await getDocs(query(ref, ...constraints));
+  const lookup = new Map<string, string>();
+  for (const d of snap.docs) {
+    const m = d.data();
+    if (m.rawName && m.effectiveParentName) {
+      lookup.set(m.rawName, m.effectiveParentName);
+    }
+  }
+  return lookup;
+}
+
 export async function getEntitySummariesByDateRange(
   brand: string,
   startDate: Date,
@@ -378,7 +399,12 @@ export async function getEntitySummariesByDateRange(
   if (brand !== "combined") {
     constraints.unshift(where("brand", "==", brand));
   }
-  const snap = await getDocs(query(ref, ...constraints));
+
+  // Fetch reviews and parent-name mappings in parallel
+  const [snap, parentLookup] = await Promise.all([
+    getDocs(query(ref, ...constraints)),
+    scope === "itinerary" ? getParentNameLookup(brand) : Promise.resolve(new Map<string, string>()),
+  ]);
 
   if (snap.empty) return [];
 
@@ -386,10 +412,15 @@ export async function getEntitySummariesByDateRange(
 
   for (const d of snap.docs) {
     const data = d.data();
-    const name = scope === "ship"
+    const rawName = scope === "ship"
       ? (data.tags?.ship || "")
       : (data.tags?.tour || data.product?.title || "");
-    if (!name) continue;
+    if (!rawName) continue;
+
+    // Resolve raw itinerary names to their parent group name
+    const name = scope === "itinerary"
+      ? (parentLookup.get(rawName) ?? rawName)
+      : rawName;
 
     if (!byName[name]) byName[name] = { totalReviews: 0, ratingSum: 0, fiveStar: 0, ships: new Set() };
     byName[name].totalReviews++;
