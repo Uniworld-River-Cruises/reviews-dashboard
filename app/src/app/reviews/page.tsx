@@ -388,7 +388,10 @@ function ReviewsContent() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-8 w-8 animate-spin rounded-full border-4" style={{ borderColor: 'var(--border)', borderTopColor: 'var(--brand-primary)' }} />
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-4"
+          style={{ borderColor: "var(--spinner-track)", borderTopColor: "var(--spinner-accent)" }}
+        />
       </div>
     );
   }
@@ -588,7 +591,10 @@ export default function ReviewsPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center py-24">
-          <div className="h-8 w-8 animate-spin rounded-full border-4" style={{ borderColor: 'var(--border)', borderTopColor: 'var(--brand-primary)' }} />
+              <div
+                className="h-8 w-8 animate-spin rounded-full border-4"
+                style={{ borderColor: "var(--spinner-track)", borderTopColor: "var(--spinner-accent)" }}
+              />
         </div>
       }
     >

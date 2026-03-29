@@ -16,6 +16,8 @@
   --brand-primary-hover: rgba(27, 58, 92, 0.05);
   --brand-primary-light: rgba(27, 58, 92, 0.1);
   --brand-gold: #C5A258;
+  --spinner-track: #d9e0e8;
+  --spinner-accent: #1B3A5C;
   --nav-bg: #ffffff;
   --nav-border: #e5e7eb;
   --input-bg: #ffffff;
@@ -41,6 +43,8 @@
   --brand-primary-hover: rgba(126, 184, 224, 0.08);
   --brand-primary-light: rgba(126, 184, 224, 0.15);
   --brand-gold: #d4b06a;
+  --spinner-track: #24354e;
+  --spinner-accent: #7EB8E0;
   --nav-bg: #111927;
   --nav-border: #1e2d44;
   --input-bg: #141e30;
@@ -136,6 +140,14 @@ body {
 
 .dark .bg-\[\#1B3A5C\]\/10 {
   background-color: rgba(126, 184, 224, 0.12) !important;
+}
+
+.dark .border-t-\[\#1B3A5C\] {
+  border-top-color: var(--spinner-accent) !important;
+}
+
+.dark .border-t-gray-600 {
+  border-top-color: var(--spinner-accent) !important;
 }
 
 .dark .text-\[\#C5A258\] {
