@@ -29,7 +29,9 @@ initializeApp();
 
 const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS
   ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : true; // default to open for backwards compatibility; set env var in production
+  : process.env.FUNCTIONS_EMULATOR === "true"
+    ? true // allow all origins in the local emulator
+    : false; // fail closed in production when CORS_ALLOWED_ORIGINS is not set
 
 const VALID_BRANDS = new Set(["uniworld", "luxury-gold"]);
 

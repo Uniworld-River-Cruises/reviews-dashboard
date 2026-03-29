@@ -199,7 +199,7 @@ export async function processBatchResults(batchId?: string): Promise<{ processed
       const classification = parseClassification(text);
 
       if (!classification) {
-        console.warn(`Could not parse classification for ${result.custom_id}: ${text.slice(0, 200)}`);
+        console.warn(`Could not parse classification for ${result.custom_id} (response length: ${text.length})`);
       } else {
         writer.update(db.collection("reviews").doc(result.custom_id), {
           "themes.positive": classification.positive,

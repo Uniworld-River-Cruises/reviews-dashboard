@@ -67,11 +67,9 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
       }
 
       // Write this page to Firestore immediately.
-      // Use merge to preserve existing themes on already-classified reviews.
-      // Include the default themes in the write — merge: true will NOT overwrite
-      // nested fields that already exist if we use dot-notation updates instead.
-      // Strategy: write all non-theme fields with merge, then for each doc also
-      // set a default themes.classifiedAt=null only if the doc is new (create).
+      // We intentionally strip `themes` and only merge the remaining fields
+      // so that any existing theme/classification data on a review is preserved
+      // and managed by the batch-classify pipeline, not overwritten by sync.
       const writer = db.bulkWriter();
       for (const doc of pageReviews) {
         const { themes, ...docWithoutThemes } = doc;
