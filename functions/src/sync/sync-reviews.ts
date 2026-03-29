@@ -1,19 +1,37 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { fetchReviews, transformReview, Brand, ReviewDocument } from "@feefo/shared";
-import { writeOperationLog } from "../ops/operation-logs";
+import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
 
 interface SyncResult {
   brand: Brand;
   totalProcessed: number;
+  newReviews: number;
+  updatedReviews: number;
+  unchangedReviews: number;
+  writtenReviews: number;
   errors: string[];
   maxSourceUpdatedAt: string | null;
 }
 
-export async function syncBrand(brand: Brand, fullSync: boolean = false): Promise<SyncResult> {
+interface SyncLogContext {
+  source?: OperationLogSource;
+  actorEmail?: string | null;
+  actorUid?: string | null;
+}
+
+export async function syncBrand(
+  brand: Brand,
+  fullSync: boolean = false,
+  logContext: SyncLogContext = {}
+): Promise<SyncResult> {
   const db = getFirestore();
   const result: SyncResult = {
     brand,
     totalProcessed: 0,
+    newReviews: 0,
+    updatedReviews: 0,
+    unchangedReviews: 0,
+    writtenReviews: 0,
     errors: [],
     maxSourceUpdatedAt: null,
   };
@@ -43,7 +61,9 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
       action: "brand_skipped_locked",
       message: `Skipped ${brand} sync because another run is already in progress`,
       brand,
-      source: "system",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
     });
     return result;
   }
@@ -79,9 +99,30 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
       // We intentionally strip `themes` and only merge the remaining fields
       // so that any existing theme/classification data on a review is preserved
       // and managed by the batch-classify pipeline, not overwritten by sync.
+      const reviewRefs = pageReviews.map((doc) => db.collection("reviews").doc(doc.id));
+      const existingSnapshots =
+        reviewRefs.length > 0 ? await db.getAll(...reviewRefs) : [];
+      const existingById = new Map(existingSnapshots.map((snapshot) => [snapshot.id, snapshot]));
+
       const writer = db.bulkWriter();
       for (const doc of pageReviews) {
         const { themes, ...docWithoutThemes } = doc;
+        const existingSnapshot = existingById.get(doc.id);
+        const existingData = existingSnapshot?.data() as Partial<ReviewDocument> | undefined;
+        const existingLastUpdated =
+          typeof existingData?.dates?.lastUpdated === "string"
+            ? existingData.dates.lastUpdated
+            : null;
+
+        if (!existingSnapshot?.exists) {
+          result.newReviews += 1;
+        } else if (isIncomingReviewNewer(existingLastUpdated, doc.dates.lastUpdated)) {
+          result.updatedReviews += 1;
+        } else {
+          result.unchangedReviews += 1;
+        }
+
+        result.writtenReviews += 1;
         writer.set(db.collection("reviews").doc(doc.id), docWithoutThemes, { merge: true });
       }
       await writer.close();
@@ -110,11 +151,17 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
       type: "sync",
       level: result.errors.length > 0 ? "warning" : "success",
       action: "brand_sync_complete",
-      message: `Completed ${brand} sync`,
+      message: `Finished ${brand} Feefo sync`,
       brand,
-      source: "system",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         totalProcessed: result.totalProcessed,
+        newReviews: result.newReviews,
+        updatedReviews: result.updatedReviews,
+        unchangedReviews: result.unchangedReviews,
+        writtenReviews: result.writtenReviews,
         errorCount: result.errors.length,
         maxSourceUpdatedAt: result.maxSourceUpdatedAt,
       },
@@ -129,10 +176,17 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
       type: "sync",
       level: "error",
       action: "brand_sync_failed",
-      message: `Failed ${brand} sync`,
+      message: `Feefo sync failed for ${brand}`,
       brand,
-      source: "system",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
+        totalProcessed: result.totalProcessed,
+        newReviews: result.newReviews,
+        updatedReviews: result.updatedReviews,
+        unchangedReviews: result.unchangedReviews,
+        writtenReviews: result.writtenReviews,
         error: String(err),
       },
     });
@@ -141,13 +195,16 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
   return result;
 }
 
-export async function syncAll(fullSync: boolean = false): Promise<SyncResult[]> {
+export async function syncAll(
+  fullSync: boolean = false,
+  logContext: SyncLogContext = {}
+): Promise<SyncResult[]> {
   const brands: Brand[] = ["uniworld", "luxury-gold"];
   const results: SyncResult[] = [];
 
   for (const brand of brands) {
     console.log(`Starting sync for ${brand}...`);
-    const result = await syncBrand(brand, fullSync);
+    const result = await syncBrand(brand, fullSync, logContext);
     console.log(
       `${brand}: ${result.totalProcessed} processed, ${result.errors.length} errors`
     );
@@ -155,4 +212,22 @@ export async function syncAll(fullSync: boolean = false): Promise<SyncResult[]> 
   }
 
   return results;
+}
+
+function isIncomingReviewNewer(
+  existingLastUpdated: string | null,
+  incomingLastUpdated: string
+): boolean {
+  if (!existingLastUpdated) {
+    return true;
+  }
+
+  const incomingTime = Date.parse(incomingLastUpdated);
+  const existingTime = Date.parse(existingLastUpdated);
+
+  if (Number.isFinite(incomingTime) && Number.isFinite(existingTime)) {
+    return incomingTime > existingTime;
+  }
+
+  return incomingLastUpdated !== existingLastUpdated;
 }

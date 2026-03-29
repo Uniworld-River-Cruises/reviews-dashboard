@@ -27,6 +27,7 @@ import {
 import {
   listOperationLogs,
   writeOperationLog,
+  type OperationLogSource,
 } from "./ops/operation-logs";
 
 initializeApp();
@@ -165,8 +166,28 @@ interface ClassificationAutomationResult {
   error: string | null;
 }
 
-async function runClassificationAutomation(): Promise<ClassificationAutomationResult> {
+interface OperationLogContext {
+  source: OperationLogSource;
+  actorEmail?: string | null;
+  actorUid?: string | null;
+}
+
+async function runClassificationAutomation(
+  logContext: OperationLogContext
+): Promise<ClassificationAutomationResult> {
   if (!process.env.ANTHROPIC_API_KEY) {
+    await writeOperationLog({
+      type: "classification",
+      level: "warning",
+      action: "automation_skipped_unconfigured",
+      message: "Skipped theme classification because Anthropic is not configured",
+      source: logContext.source,
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
+      details: {
+        missingSetting: "ANTHROPIC_API_KEY",
+      },
+    });
     return {
       processed: 0,
       polledStatus: null,
@@ -192,7 +213,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       currentBatchId &&
       (!currentStatus || ACTIVE_CLASSIFICATION_STATUSES.has(currentStatus))
     ) {
-      const batchResult = await processBatchResults(currentBatchId);
+      const batchResult = await processBatchResults(currentBatchId, logContext);
       processed = batchResult.processed;
       polledStatus = batchResult.status;
 
@@ -217,7 +238,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       }
     }
 
-    const submission = await submitClassificationBatch();
+    const submission = await submitClassificationBatch(logContext);
     return {
       processed,
       polledStatus,
@@ -233,8 +254,10 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       type: "classification",
       level: "error",
       action: "automation_failed",
-      message: "Automatic classification cycle failed",
-      source: "system",
+      message: "Theme classification automation failed",
+      source: logContext.source,
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         error: String(error),
       },
@@ -255,32 +278,45 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
 export const dailySync = onSchedule(
   { schedule: "0 */2 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
+    const logContext: OperationLogContext = { source: "scheduled" };
     await writeOperationLog({
       type: "sync",
       level: "info",
       action: "cycle_started",
-      message: "Scheduled sync cycle started",
-      source: "scheduled",
+      message: "Started scheduled Feefo sync",
+      source: logContext.source,
     });
 
     try {
-      const results = await syncAll(false);
-      const classification = await runClassificationAutomation();
-      await computeSummaries("uniworld");
-      await computeSummaries("luxury-gold");
+      const results = await syncAll(false, logContext);
+      const classification = await runClassificationAutomation(logContext);
+      await computeSummaries("uniworld", logContext);
+      await computeSummaries("luxury-gold", logContext);
       await writeOperationLog({
         type: "sync",
         level: "success",
         action: "cycle_complete",
-        message: "Scheduled sync cycle completed",
-        source: "scheduled",
+        message: "Scheduled Feefo sync finished and summaries were refreshed",
+        source: logContext.source,
         details: {
           brands: results.map((result) => ({
             brand: result.brand,
             totalProcessed: result.totalProcessed,
+            newReviews: result.newReviews,
+            updatedReviews: result.updatedReviews,
+            unchangedReviews: result.unchangedReviews,
+            writtenReviews: result.writtenReviews,
             errorCount: result.errors.length,
           })),
-          classification,
+          classification: {
+            processedReviews: classification.processed,
+            batchStatus: classification.polledStatus,
+            submittedBatchId: classification.submittedBatchId,
+            submittedReviews: classification.submittedCount,
+            themesUpdated: classification.themesUpdated,
+            skippedReason: classification.skippedReason,
+            error: classification.error,
+          },
         },
       });
       console.log(
@@ -292,8 +328,8 @@ export const dailySync = onSchedule(
         type: "sync",
         level: "error",
         action: "cycle_failed",
-        message: "Scheduled sync cycle failed",
-        source: "scheduled",
+        message: "Scheduled Feefo sync failed",
+        source: logContext.source,
         details: {
           error: String(error),
         },
@@ -319,39 +355,57 @@ export const manualSync = onRequest(
     }
 
     const fullSync = req.body?.fullSync === true;
+    const logContext: OperationLogContext = {
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+    };
     await writeOperationLog({
       type: "sync",
       level: "info",
       action: "cycle_started",
-      message: "Manual sync cycle started",
-      source: "manual",
-      actorEmail: caller.email,
-      actorUid: caller.uid,
+      message: "Started manual Feefo sync",
+      source: logContext.source,
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         fullSync,
       },
     });
 
     try {
-      const results = await syncAll(fullSync);
-      const classification = await runClassificationAutomation();
-      await computeSummaries("uniworld");
-      await computeSummaries("luxury-gold");
+      const results = await syncAll(fullSync, logContext);
+      const classification = await runClassificationAutomation(logContext);
+      await computeSummaries("uniworld", logContext);
+      await computeSummaries("luxury-gold", logContext);
       await writeOperationLog({
         type: "sync",
         level: "success",
         action: "cycle_complete",
-        message: "Manual sync cycle completed",
-        source: "manual",
-        actorEmail: caller.email,
-        actorUid: caller.uid,
+        message: "Manual Feefo sync finished and summaries were refreshed",
+        source: logContext.source,
+        actorEmail: logContext.actorEmail ?? null,
+        actorUid: logContext.actorUid ?? null,
         details: {
+          fullSync,
           brands: results.map((result) => ({
             brand: result.brand,
             totalProcessed: result.totalProcessed,
+            newReviews: result.newReviews,
+            updatedReviews: result.updatedReviews,
+            unchangedReviews: result.unchangedReviews,
+            writtenReviews: result.writtenReviews,
             errorCount: result.errors.length,
           })),
-          classification,
+          classification: {
+            processedReviews: classification.processed,
+            batchStatus: classification.polledStatus,
+            submittedBatchId: classification.submittedBatchId,
+            submittedReviews: classification.submittedCount,
+            themesUpdated: classification.themesUpdated,
+            skippedReason: classification.skippedReason,
+            error: classification.error,
+          },
         },
       });
       console.log(`manualSync triggered by ${caller.source}:${caller.email ?? caller.uid}`);
@@ -361,10 +415,10 @@ export const manualSync = onRequest(
         type: "sync",
         level: "error",
         action: "cycle_failed",
-        message: "Manual sync cycle failed",
-        source: "manual",
-        actorEmail: caller.email,
-        actorUid: caller.uid,
+        message: "Manual Feefo sync failed",
+        source: logContext.source,
+        actorEmail: logContext.actorEmail ?? null,
+        actorUid: logContext.actorUid ?? null,
         details: {
           error: String(error),
           fullSync,
@@ -384,9 +438,14 @@ export const batchClassify = onRequest(
     if (!caller) return;
 
     const action = req.body?.action ?? "submit";
+    const logContext: OperationLogContext = {
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+    };
 
     if (action === "submit") {
-      const result = await submitClassificationBatch();
+      const result = await submitClassificationBatch(logContext);
       console.log(`batchClassify submit by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json(result);
       return;
@@ -398,7 +457,7 @@ export const batchClassify = onRequest(
         res.status(400).json({ error: "Invalid batchId format." });
         return;
       }
-      const result = await processBatchResults(batchId);
+      const result = await processBatchResults(batchId, logContext);
       console.log(`batchClassify results by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json(result);
       return;
@@ -454,8 +513,20 @@ export const itineraryMappings = onRequest(
     }
 
     if (action === "recompute") {
-      if (!brand || brand === "uniworld") await computeSummaries("uniworld");
-      if (!brand || brand === "luxury-gold") await computeSummaries("luxury-gold");
+      if (!brand || brand === "uniworld") {
+        await computeSummaries("uniworld", {
+          source: "manual",
+          actorEmail: caller.email,
+          actorUid: caller.uid,
+        });
+      }
+      if (!brand || brand === "luxury-gold") {
+        await computeSummaries("luxury-gold", {
+          source: "manual",
+          actorEmail: caller.email,
+          actorUid: caller.uid,
+        });
+      }
       await writeOperationLog({
         type: "summary",
         level: "info",
