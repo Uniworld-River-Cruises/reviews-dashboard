@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -21,6 +22,8 @@ export default function AuthButton({
   showEmail = true,
   showStatus = true,
 }: AuthButtonProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -69,6 +72,9 @@ export default function AuthButton({
     try {
       const auth = getClientAuth();
       await signOut(auth);
+      if (pathname.startsWith("/admin")) {
+        router.replace("/");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-out failed.");
     } finally {
