@@ -1,5 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { fetchReviews, transformReview, Brand, ReviewDocument } from "@feefo/shared";
+import { writeOperationLog } from "../ops/operation-logs";
 
 interface SyncResult {
   brand: Brand;
@@ -36,6 +37,14 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
 
   if (!lockAcquired) {
     result.errors.push(`Sync already in progress for ${brand}`);
+    await writeOperationLog({
+      type: "sync",
+      level: "warning",
+      action: "brand_skipped_locked",
+      message: `Skipped ${brand} sync because another run is already in progress`,
+      brand,
+      source: "system",
+    });
     return result;
   }
 
@@ -97,12 +106,36 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
       status: "success",
       errorMessage: result.errors.length > 0 ? result.errors.join("; ").slice(0, 5000) : null,
     });
+    await writeOperationLog({
+      type: "sync",
+      level: result.errors.length > 0 ? "warning" : "success",
+      action: "brand_sync_complete",
+      message: `Completed ${brand} sync`,
+      brand,
+      source: "system",
+      details: {
+        totalProcessed: result.totalProcessed,
+        errorCount: result.errors.length,
+        maxSourceUpdatedAt: result.maxSourceUpdatedAt,
+      },
+    });
   } catch (err) {
     result.errors.push(`Sync failed for ${brand}: ${err}`);
     await syncMetaRef.set(
       { status: "error", errorMessage: String(err).slice(0, 5000) },
       { merge: true }
     );
+    await writeOperationLog({
+      type: "sync",
+      level: "error",
+      action: "brand_sync_failed",
+      message: `Failed ${brand} sync`,
+      brand,
+      source: "system",
+      details: {
+        error: String(err),
+      },
+    });
   }
 
   return result;

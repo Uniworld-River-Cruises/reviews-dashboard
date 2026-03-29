@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useDashboard } from "@/contexts/DashboardContext";
@@ -10,6 +11,7 @@ import {
   getCurrentAdminAccess,
   listAdminUsers,
   listKnownUsers,
+  listOperationalLogs,
   removeAdminUser,
   getItineraryMappings,
   upsertAdminUser,
@@ -21,7 +23,9 @@ import {
   type AdminUserAccess,
   type ItineraryMapping,
   type KnownUser,
+  type OperationLogEntry,
 } from "@/lib/firestore/admin-queries";
+import OperationLogsTable from "@/components/admin/OperationLogsTable";
 
 type StatusFilter = "all" | "auto" | "manual" | "unchanged";
 type SortKey = "rawName" | "effectiveParentName" | "reviewCount" | "status";
@@ -76,6 +80,9 @@ export default function AdminPage() {
   const [accessEmail, setAccessEmail] = useState("");
   const [accessRole, setAccessRole] = useState<AdminRole>("sync");
   const [savingAccess, setSavingAccess] = useState(false);
+  const [operationLogs, setOperationLogs] = useState<OperationLogEntry[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [logsExpanded, setLogsExpanded] = useState(true);
   const [mappings, setMappings] = useState<ItineraryMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -94,6 +101,8 @@ export default function AdminPage() {
   const dateStart = dateRange.start.toISOString();
   const dateEnd = dateRange.end.toISOString();
   const canManageUsers = Boolean(currentAccess?.permissions.manageUsers);
+  const canManageMappings = Boolean(currentAccess?.permissions.manageMappings);
+  const canViewLogs = Boolean(currentAccess?.permissions.sync);
 
   const loadAdminAccess = useCallback(async () => {
     setAdminUsersLoading(true);
@@ -115,6 +124,17 @@ export default function AdminPage() {
       setToast(err instanceof Error ? err.message : "Failed to load signed-in users");
     }
     setKnownUsersLoading(false);
+  }, []);
+
+  const loadOperationLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const logs = await listOperationalLogs(24, 100);
+      setOperationLogs(logs);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to load operational logs");
+    }
+    setLogsLoading(false);
   }, []);
 
   const loadMappings = useCallback(async () => {
@@ -189,7 +209,9 @@ export default function AdminPage() {
         if (cancelled) return;
         setCurrentAccess(access);
         const canUseAdminPage =
-          access.permissions.manageMappings || access.permissions.manageUsers;
+          access.permissions.sync ||
+          access.permissions.manageMappings ||
+          access.permissions.manageUsers;
         if (!canUseAdminPage) {
           router.replace("/");
         }
@@ -208,6 +230,20 @@ export default function AdminPage() {
       cancelled = true;
     };
   }, [authResolved, router, user]);
+
+  useEffect(() => {
+    if (checkingPageAccess || !currentAccess) {
+      return;
+    }
+
+    if (currentAccess.permissions.sync) {
+      loadOperationLogs();
+      return;
+    }
+
+    setOperationLogs([]);
+    setLogsLoading(false);
+  }, [checkingPageAccess, currentAccess, loadOperationLogs]);
 
   useEffect(() => {
     if (checkingPageAccess || !currentAccess) {
@@ -667,6 +703,50 @@ export default function AdminPage() {
       </div>
       ) : null}
 
+      {canViewLogs ? (
+        <div className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-5">
+            <div>
+              <h2 className="text-xl font-semibold text-[#1B3A5C]">Operational Logs</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Last 24 hours of sync, classification, and summary activity.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => loadOperationLogs()}
+                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                Refresh Logs
+              </button>
+              <Link
+                href="/admin/logs"
+                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                View All Logs
+              </Link>
+              <button
+                onClick={() => setLogsExpanded((value) => !value)}
+                className="inline-flex items-center rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90"
+              >
+                {logsExpanded ? "Hide Logs" : "Show Logs"}
+              </button>
+            </div>
+          </div>
+          {logsExpanded ? (
+            <div className="px-6 py-5">
+              <OperationLogsTable
+                logs={operationLogs}
+                loading={logsLoading}
+                emptyMessage="No operational logs were recorded in the last 24 hours."
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canManageMappings ? (
+      <>
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-[#1B3A5C]">Itinerary Grouping</h1>
@@ -901,6 +981,14 @@ export default function AdminPage() {
           {toast}
         </div>
       )}
+      </>
+      ) : null}
+
+      {!canManageMappings && toast ? (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-gray-900 px-4 py-3 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      ) : null}
     </div>
   );
 }
