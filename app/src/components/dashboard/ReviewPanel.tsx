@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import type { ThemeReview } from "@/lib/firestore/queries";
 
 interface ReviewPanelProps {
-  theme: string;
-  type: "positive" | "negative";
+  title: string;
+  subtitle: string;
+  accent?: "positive" | "negative" | "neutral";
   reviews: ThemeReview[];
   loading: boolean;
   onClose: () => void;
@@ -21,9 +22,20 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function QuoteCard({ review, type }: { review: ThemeReview; type: "positive" | "negative" }) {
+function QuoteCard({
+  review,
+  accent,
+}: {
+  review: ThemeReview;
+  accent: "positive" | "negative" | "neutral";
+}) {
   const [expanded, setExpanded] = useState(false);
-  const borderClass = type === "negative" ? "border-l-4 border-l-red-400" : "border-l-4 border-l-[#1B3A5C]";
+  const borderClass =
+    accent === "negative"
+      ? "border-l-4 border-l-red-400"
+      : accent === "positive"
+        ? "border-l-4 border-l-[#1B3A5C]"
+        : "border-l-4 border-l-[#C5A258]";
 
   return (
     <div className={`bg-gray-50 rounded-lg p-4 ${borderClass}`}>
@@ -51,7 +63,14 @@ function QuoteCard({ review, type }: { review: ThemeReview; type: "positive" | "
   );
 }
 
-export default function ReviewPanel({ theme, type, reviews, loading, onClose }: ReviewPanelProps) {
+export default function ReviewPanel({
+  title,
+  subtitle,
+  accent = "neutral",
+  reviews,
+  loading,
+  onClose,
+}: ReviewPanelProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -78,13 +97,11 @@ export default function ReviewPanel({ theme, type, reviews, loading, onClose }: 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b">
           <div>
-            <h2 className="text-lg font-semibold text-[#1B3A5C]">{theme}</h2>
+            <h2 className="text-lg font-semibold text-[#1B3A5C]">{title}</h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              {reviews.length} review{reviews.length !== 1 ? "s" : ""} &middot;{" "}
-              <span className={type === "positive" ? "text-[#1B3A5C]" : "text-red-500"}>
-                {type === "positive" ? "Positive" : "Negative"}
-              </span>
+              {reviews.length} review{reviews.length !== 1 ? "s" : ""}
             </p>
+            <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
           </div>
           <button
             onClick={onClose}
@@ -104,10 +121,10 @@ export default function ReviewPanel({ theme, type, reviews, loading, onClose }: 
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
             </div>
           ) : reviews.length === 0 ? (
-            <p className="text-center text-gray-500 py-12">No reviews found for this theme.</p>
+            <p className="text-center text-gray-500 py-12">No matching reviews were found.</p>
           ) : (
             reviews.map((review) => (
-              <QuoteCard key={review.id} review={review} type={type} />
+              <QuoteCard key={review.id} review={review} accent={accent} />
             ))
           )}
         </div>

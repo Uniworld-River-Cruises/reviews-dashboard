@@ -14,7 +14,8 @@ import {
   getMonthlySummaries,
   getEntitySummaries,
   getEntitySummariesByDateRange,
-  getReviewsByTheme,
+  getReviewsForOverviewSelection,
+  type OverviewSelectionFilter,
   type FleetSummary,
   type MonthlySummary,
   type EntitySummary,
@@ -32,8 +33,9 @@ export default function OverviewPage() {
 
   // Review panel state
   const [panelOpen, setPanelOpen] = useState(false);
-  const [panelTheme, setPanelTheme] = useState("");
-  const [panelType, setPanelType] = useState<"positive" | "negative">("positive");
+  const [panelTitle, setPanelTitle] = useState("");
+  const [panelSubtitle, setPanelSubtitle] = useState("");
+  const [panelAccent, setPanelAccent] = useState<"positive" | "negative" | "neutral">("neutral");
   const [panelReviews, setPanelReviews] = useState<ThemeReview[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
 
@@ -86,22 +88,34 @@ export default function OverviewPage() {
   }, [brand, dateRange, dataVersion]);
 
   const openPanel = useCallback(
-    async (theme: string, type: "positive" | "negative") => {
-      setPanelTheme(theme);
-      setPanelType(type);
+    async (selection: {
+      title: string;
+      subtitle: string;
+      accent: "positive" | "negative" | "neutral";
+      filter: OverviewSelectionFilter;
+    }) => {
+      setPanelTitle(selection.title);
+      setPanelSubtitle(selection.subtitle);
+      setPanelAccent(selection.accent);
       setPanelOpen(true);
+      setPanelReviews([]);
       setPanelLoading(true);
       try {
-        const reviews = await getReviewsByTheme(brand, theme, type);
+        const reviews = await getReviewsForOverviewSelection(
+          brand,
+          dateRange.start,
+          dateRange.end,
+          selection.filter
+        );
         setPanelReviews(reviews);
       } catch (err) {
-        console.error("Failed to load theme reviews", err);
+        console.error("Failed to load overview panel reviews", err);
         setPanelReviews([]);
       } finally {
         setPanelLoading(false);
       }
     },
-    [brand]
+    [brand, dateRange.end, dateRange.start]
   );
 
   const closePanel = useCallback(() => {
@@ -189,10 +203,30 @@ export default function OverviewPage() {
       </div>
 
       {/* Rating Distribution — full width */}
-      <RatingDistributionChart data={fleet.ratingDistribution} />
+      <RatingDistributionChart
+        data={fleet.ratingDistribution}
+        onBarClick={(star) =>
+          openPanel({
+            title: `${star} Star Reviews`,
+            subtitle: `Reviews matching the ${star}-star rating selection`,
+            accent: "neutral",
+            filter: { kind: "rating", star },
+          })
+        }
+      />
 
       {/* Trend Charts (rating + volume side by side) */}
-      <TrendChart data={monthly} />
+      <TrendChart
+        data={monthly}
+        onSelectMonth={(month) =>
+          openPanel({
+            title: `Reviews from ${month}`,
+            subtitle: "Reviews included in the selected month",
+            accent: "neutral",
+            filter: { kind: "month", month },
+          })
+        }
+      />
 
       {/* Theme Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -200,13 +234,27 @@ export default function OverviewPage() {
           title="Top 10 Positive Themes"
           data={fleet.positiveThemes}
           type="positive"
-          onBarClick={(theme) => openPanel(theme, "positive")}
+          onBarClick={(theme) =>
+            openPanel({
+              title: theme,
+              subtitle: "Reviews matching the selected positive theme",
+              accent: "positive",
+              filter: { kind: "theme", theme, sentiment: "positive" },
+            })
+          }
         />
         <ThemeChart
           title="Top 10 Negative Themes"
           data={fleet.negativeThemes}
           type="negative"
-          onBarClick={(theme) => openPanel(theme, "negative")}
+          onBarClick={(theme) =>
+            openPanel({
+              title: theme,
+              subtitle: "Reviews matching the selected negative theme",
+              accent: "negative",
+              filter: { kind: "theme", theme, sentiment: "negative" },
+            })
+          }
         />
       </div>
 
@@ -216,8 +264,9 @@ export default function OverviewPage() {
       {/* Review Slide-out Panel */}
       {panelOpen && (
         <ReviewPanel
-          theme={panelTheme}
-          type={panelType}
+          title={panelTitle}
+          subtitle={panelSubtitle}
+          accent={panelAccent}
           reviews={panelReviews}
           loading={panelLoading}
           onClose={closePanel}

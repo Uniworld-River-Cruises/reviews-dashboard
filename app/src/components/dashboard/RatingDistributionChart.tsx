@@ -12,6 +12,7 @@ import {
 
 interface RatingDistributionChartProps {
   data: { star: number; count: number }[];
+  onBarClick?: (star: number) => void;
 }
 
 const STAR_COLORS: Record<number, string> = {
@@ -22,7 +23,23 @@ const STAR_COLORS: Record<number, string> = {
   1: "#ef4444",
 };
 
-export default function RatingDistributionChart({ data }: RatingDistributionChartProps) {
+const TOOLTIP_STYLE = {
+  backgroundColor: "#172338",
+  border: "1px solid #2d3b58",
+  borderRadius: "12px",
+  color: "#f8fafc",
+  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.28)",
+};
+
+const TOOLTIP_LABEL_STYLE = {
+  color: "#f8fafc",
+  fontWeight: 600,
+};
+
+export default function RatingDistributionChart({
+  data,
+  onBarClick,
+}: RatingDistributionChartProps) {
   const chartData = [...data].sort((a, b) => b.star - a.star).map((d) => ({
     label: `${d.star} Star`,
     count: d.count,
@@ -37,10 +54,23 @@ export default function RatingDistributionChart({ data }: RatingDistributionChar
           <XAxis type="number" tick={{ fontSize: 12 }} />
           <YAxis type="category" dataKey="label" width={60} tick={{ fontSize: 12 }} />
           <Tooltip
+            cursor={false}
+            contentStyle={TOOLTIP_STYLE}
+            labelStyle={TOOLTIP_LABEL_STYLE}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
-          <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+          <Bar
+            dataKey="count"
+            radius={[0, 4, 4, 0]}
+            cursor={onBarClick ? "pointer" : "default"}
+            activeBar={false}
+            onClick={(_, index) => {
+              if (index >= 0 && chartData[index]) {
+                onBarClick?.(chartData[index].star);
+              }
+            }}
+          >
             {chartData.map((entry) => (
               <Cell key={`cell-${entry.star}`} fill={STAR_COLORS[entry.star]} />
             ))}
