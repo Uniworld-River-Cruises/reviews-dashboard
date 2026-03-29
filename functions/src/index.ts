@@ -110,6 +110,21 @@ function ensurePost(req: any, res: any): boolean {
   return true;
 }
 
+function getEffectivePermissions(
+  allowedByLegacyEmailList: boolean,
+  adminUser: Awaited<ReturnType<typeof getAdminUserByEmail>>
+) {
+  return {
+    sync: allowedByLegacyEmailList || hasPermission(adminUser, "sync"),
+    batchClassify:
+      allowedByLegacyEmailList || hasPermission(adminUser, "batchClassify"),
+    manageMappings:
+      allowedByLegacyEmailList || hasPermission(adminUser, "manageMappings"),
+    manageUsers:
+      allowedByLegacyEmailList || hasPermission(adminUser, "manageUsers"),
+  };
+}
+
 // Scheduled sync every 6 hours in UTC - fetch reviews + compute summaries (no classification)
 export const dailySync = onSchedule(
   { schedule: "0 */6 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
@@ -231,10 +246,46 @@ export const adminUsers = onRequest(
   { timeoutSeconds: 120, memory: "512MiB", invoker: "public", cors: true },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
+    const action = req.body?.action ?? "list";
+
+    if (action === "current") {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        res.status(401).json({ error: "Missing bearer token." });
+        return;
+      }
+
+      const token = authHeader.slice("Bearer ".length).trim();
+
+      try {
+        const decoded = await getAuth().verifyIdToken(token);
+        const email = decoded.email?.toLowerCase() ?? null;
+        const allowedEmails = parseAllowedEmails();
+        const adminUser = await getAdminUserByEmail(email);
+        const allowedByLegacyEmailList =
+          allowedEmails.size > 0 && Boolean(email && allowedEmails.has(email));
+        const permissions = getEffectivePermissions(
+          allowedByLegacyEmailList,
+          adminUser
+        );
+
+        res.json({
+          access: {
+            email,
+            role: adminUser?.role ?? (allowedByLegacyEmailList ? "admin" : null),
+            active: adminUser?.active ?? allowedByLegacyEmailList,
+            allowed: Object.values(permissions).some(Boolean),
+            permissions,
+          },
+        });
+      } catch {
+        res.status(401).json({ error: "Invalid bearer token." });
+      }
+      return;
+    }
+
     const caller = await authorizeRequest(req, res, "manageUsers");
     if (!caller) return;
-
-    const action = req.body?.action ?? "list";
 
     if (action === "list") {
       const users = await listAdminUsers();
@@ -297,6 +348,8 @@ export const adminUsers = onRequest(
       return;
     }
 
-    res.status(400).json({ error: "Invalid action. Use 'list', 'upsert', or 'remove'." });
+    res
+      .status(400)
+      .json({ error: "Invalid action. Use 'current', 'list', 'upsert', or 'remove'." });
   }
 );
