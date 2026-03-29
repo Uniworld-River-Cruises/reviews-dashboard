@@ -194,16 +194,11 @@ body {
   border-color: var(--border) !important;
 }
 
-/* Remove browser focus rings from clickable chart surfaces.
-   The review side panel provides the visible selected state. */
-.recharts-wrapper:focus,
-.recharts-wrapper:focus-visible,
-.recharts-wrapper svg:focus,
-.recharts-wrapper svg:focus-visible,
-.recharts-wrapper [tabindex]:focus,
-.recharts-wrapper [tabindex]:focus-visible,
-.recharts-wrapper *:focus,
-.recharts-wrapper *:focus-visible {
+/* Remove browser focus rings from clickable chart surfaces for mouse focus only.
+   Keyboard focus keeps its normal visible indicator. */
+.recharts-wrapper:focus:not(:focus-visible),
+.recharts-wrapper svg:focus:not(:focus-visible),
+.recharts-wrapper [tabindex]:focus:not(:focus-visible) {
   outline: none !important;
   box-shadow: none !important;
 }
