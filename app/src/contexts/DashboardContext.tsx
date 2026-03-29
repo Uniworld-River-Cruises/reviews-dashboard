@@ -110,7 +110,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const handleSetDateRange = useCallback((range: DateRange) => {
     setDateRangeState(range);
     try {
-      localStorage.setItem("pref:datePreset", JSON.stringify(range.preset));
+      if (range.preset === "Custom Range") {
+        // Can't reconstruct custom dates on hydration, so clear the key
+        localStorage.removeItem("pref:datePreset");
+      } else {
+        localStorage.setItem("pref:datePreset", JSON.stringify(range.preset));
+      }
     } catch {
       // Ignore
     }
