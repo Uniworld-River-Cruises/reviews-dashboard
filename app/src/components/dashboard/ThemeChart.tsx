@@ -18,6 +18,19 @@ interface ThemeChartProps {
   onBarClick: (theme: string) => void;
 }
 
+const TOOLTIP_STYLE = {
+  backgroundColor: "#172338",
+  border: "1px solid #2d3b58",
+  borderRadius: "12px",
+  color: "#f8fafc",
+  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.28)",
+};
+
+const TOOLTIP_LABEL_STYLE = {
+  color: "#f8fafc",
+  fontWeight: 600,
+};
+
 const POSITIVE_COLORS = [
   "#1B3A5C", "#1e4a73", "#22578a", "#2d6aa0", "#3b82f6",
   "#4a8ed9", "#5c9be0", "#71a9e6", "#8ab8ec", "#a3c7f2",
@@ -61,6 +74,9 @@ export default function ThemeChart({ title, data, type, onBarClick }: ThemeChart
             tick={{ fontSize: isMobile ? 10 : 11 }}
           />
           <Tooltip
+            cursor={false}
+            contentStyle={TOOLTIP_STYLE}
+            labelStyle={TOOLTIP_LABEL_STYLE}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
@@ -68,6 +84,7 @@ export default function ThemeChart({ title, data, type, onBarClick }: ThemeChart
             dataKey="count"
             radius={[0, 4, 4, 0]}
             cursor="pointer"
+            activeBar={false}
             onClick={(_, index) => {
               if (index >= 0 && data[index]) onBarClick(data[index].theme);
             }}

@@ -11,6 +11,7 @@ import {
   orderBy,
   limit,
   QueryConstraint,
+  type DocumentData,
 } from "firebase/firestore";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -53,6 +54,13 @@ export interface ThemeReview {
   text: string;
   date: string;
 }
+
+export type OverviewSelectionFilter =
+  | { kind: "theme"; theme: string; sentiment: "positive" | "negative" }
+  | { kind: "rating"; star: number }
+  | { kind: "month"; month: string };
+
+const PANEL_REVIEW_LIMIT = 100;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -501,16 +509,80 @@ export async function getReviewsByTheme(
 
   if (snap.empty) return [];
 
-  return snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      guestName: data.customer?.displayName || data.customer?.name || "Guest",
-      rating: data.ratings?.product ?? data.ratings?.service ?? 0,
-      itinerary: data.tags?.tour || data.product?.title || "",
-      ship: data.tags?.ship || "",
-      text: data.reviews?.productText || data.reviews?.serviceText || "",
-      date: data.dates?.created || "",
-    };
-  });
+  return snap.docs.map(mapReviewDoc);
+}
+
+export async function getReviewsForOverviewSelection(
+  brand: string,
+  startDate: Date,
+  endDate: Date,
+  filter: OverviewSelectionFilter
+): Promise<ThemeReview[]> {
+  const db = getClientDb();
+  const ref = collection(db, "reviews");
+  const monthBounds =
+    filter.kind === "month" ? getMonthBounds(filter.month) : null;
+  const queryStart = monthBounds?.start ?? startDate.toISOString();
+  const queryEnd = monthBounds?.end ?? endDate.toISOString();
+  const endOperator = monthBounds ? "<" : "<=";
+
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", queryStart),
+    where("dates.created", endOperator, queryEnd),
+    orderBy("dates.created", "desc"),
+  ];
+
+  if (brand !== "combined") {
+    constraints.push(where("brand", "==", brand));
+  }
+
+  const snap = await getDocs(query(ref, ...constraints));
+  if (snap.empty) return [];
+
+  return snap.docs
+    .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
+    .filter(({ data }) => matchesOverviewSelection(data, filter))
+    .slice(0, PANEL_REVIEW_LIMIT)
+    .map(({ id, data }) => mapReviewDoc({ id, data }));
+}
+
+function mapReviewDoc(
+  review: { id: string; data: DocumentData }
+): ThemeReview {
+  const data = review.data;
+  return {
+    id: review.id,
+    guestName: data.customer?.displayName || data.customer?.name || "Guest",
+    rating: data.ratings?.product ?? data.ratings?.service ?? 0,
+    itinerary: data.tags?.tour || data.product?.title || "",
+    ship: data.tags?.ship || "",
+    text: data.reviews?.productText || data.reviews?.serviceText || "",
+    date: data.dates?.created || "",
+  };
+}
+
+function matchesOverviewSelection(data: DocumentData, filter: OverviewSelectionFilter): boolean {
+  if (filter.kind === "theme") {
+    const values = data.themes?.[filter.sentiment] || [];
+    return Array.isArray(values) && values.includes(filter.theme);
+  }
+
+  if (filter.kind === "rating") {
+    const rating = data.ratings?.product ?? data.ratings?.service ?? null;
+    return rating !== null && Math.round(rating) === filter.star;
+  }
+
+  const created = typeof data.dates?.created === "string" ? data.dates.created : "";
+  return created.startsWith(filter.month);
+}
+
+function getMonthBounds(month: string): { start: string; end: string } {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const start = new Date(Date.UTC(year, monthIndex - 1, 1));
+  const end = new Date(Date.UTC(year, monthIndex, 1));
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
 }

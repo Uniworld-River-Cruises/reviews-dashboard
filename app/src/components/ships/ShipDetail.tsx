@@ -133,7 +133,16 @@ export default function ShipDetail({ slug }: { slug: string }) {
         </div>
       </div>
       <QuotesSection positiveQuotes={quotes.positive} negativeQuotes={quotes.negative} />
-      {panelOpen && <ReviewPanel theme={panelTheme} type={panelType} reviews={panelReviews} loading={panelLoading} onClose={closePanel} />}
+      {panelOpen && (
+        <ReviewPanel
+          title={panelTheme}
+          subtitle={`Reviews matching the selected ${panelType} theme`}
+          accent={panelType}
+          reviews={panelReviews}
+          loading={panelLoading}
+          onClose={closePanel}
+        />
+      )}
     </div>
   );
 }

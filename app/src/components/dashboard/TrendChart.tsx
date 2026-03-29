@@ -16,7 +16,21 @@ import { format, parseISO } from "date-fns";
 
 interface TrendChartProps {
   data: { month: string; averageRating: number; reviewCount: number }[];
+  onSelectMonth?: (month: string) => void;
 }
+
+const TOOLTIP_STYLE = {
+  backgroundColor: "#172338",
+  border: "1px solid #2d3b58",
+  borderRadius: "12px",
+  color: "#f8fafc",
+  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.28)",
+};
+
+const TOOLTIP_LABEL_STYLE = {
+  color: "#f8fafc",
+  fontWeight: 600,
+};
 
 function formatMonth(month: string): string {
   try {
@@ -38,7 +52,7 @@ function useIsMobile(breakpoint = 640) {
   return isMobile;
 }
 
-export default function TrendChart({ data }: TrendChartProps) {
+export default function TrendChart({ data, onSelectMonth }: TrendChartProps) {
   const isMobile = useIsMobile();
   const chartHeight = isMobile ? 200 : 260;
   const chartData = data.map((d) => ({
@@ -59,6 +73,9 @@ export default function TrendChart({ data }: TrendChartProps) {
             <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} />
             <YAxis domain={[4.0, 5.0]} tick={{ fontSize: 11 }} />
             <Tooltip
+              cursor={{ stroke: "#36506f", strokeWidth: 1, strokeDasharray: "3 3" }}
+              contentStyle={TOOLTIP_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [Number(value).toFixed(2), "Avg Rating"]}
             />
@@ -67,8 +84,26 @@ export default function TrendChart({ data }: TrendChartProps) {
               dataKey="averageRating"
               stroke="#1B3A5C"
               strokeWidth={2}
-              dot={{ r: isMobile ? 3 : 4, fill: "#1B3A5C" }}
-              activeDot={{ r: isMobile ? 4 : 6 }}
+              dot={(dotProps) => (
+                <circle
+                  cx={dotProps.cx}
+                  cy={dotProps.cy}
+                  r={isMobile ? 3 : 4}
+                  fill="#1B3A5C"
+                  className={onSelectMonth ? "cursor-pointer" : undefined}
+                  onClick={() => {
+                    if (onSelectMonth && typeof dotProps.payload?.month === "string") {
+                      onSelectMonth(dotProps.payload.month);
+                    }
+                  }}
+                />
+              )}
+              activeDot={{
+                r: isMobile ? 4 : 6,
+                fill: "#7CC0FF",
+                stroke: "#1B3A5C",
+                strokeWidth: 2,
+              }}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -85,10 +120,24 @@ export default function TrendChart({ data }: TrendChartProps) {
             <XAxis dataKey="label" tick={{ fontSize: isMobile ? 9 : 11 }} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip
+              cursor={false}
+              contentStyle={TOOLTIP_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
             />
-            <Bar dataKey="reviewCount" fill="#C5A258" radius={[4, 4, 0, 0]} />
+            <Bar
+              dataKey="reviewCount"
+              fill="#C5A258"
+              radius={[4, 4, 0, 0]}
+              cursor={onSelectMonth ? "pointer" : "default"}
+              activeBar={false}
+              onClick={(_, index) => {
+                if (onSelectMonth && index >= 0 && chartData[index]) {
+                  onSelectMonth(chartData[index].month);
+                }
+              }}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
