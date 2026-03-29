@@ -30,8 +30,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans" style={{ backgroundColor: 'var(--background)' }}>
         <ThemeProvider>
           <DashboardProvider>
-            <Header />
-            <Navigation />
+            <div className="sticky top-0 z-40">
+              <Header />
+              <Navigation />
+            </div>
             <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
               {children}
             </main>

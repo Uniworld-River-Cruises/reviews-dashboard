@@ -55,7 +55,7 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
   ];
 
   const headerAlign = (col: typeof columns[number]) =>
-    `pb-3 pt-1 font-medium text-gray-500 cursor-pointer select-none whitespace-nowrap ${col.align ?? "text-left"}`;
+    `pb-3 pt-1 font-medium text-gray-500 cursor-pointer select-none whitespace-nowrap ${col.key === "name" ? "pr-6 text-left" : "px-4"} ${col.align ?? "text-left"}`;
 
   return (
     <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
@@ -71,7 +71,7 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
+        <table className="w-full text-sm min-w-[800px]">
           <thead>
             <tr className="border-b border-gray-200">
               {columns.map((col) => (
@@ -84,8 +84,8 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
                   <SortIndicator col={col.key} />
                 </th>
               ))}
-              <th className="pb-3 pt-1 font-medium text-gray-500 text-left whitespace-nowrap">Ship(s)</th>
-              <th className="pb-3 pt-1 font-medium text-gray-500 text-right whitespace-nowrap">Health</th>
+              <th className="pb-3 pt-1 pl-6 font-medium text-gray-500 text-left whitespace-nowrap">Ship(s)</th>
+              <th className="pb-3 pt-1 pl-6 font-medium text-gray-500 text-right whitespace-nowrap">Health</th>
             </tr>
           </thead>
           <tbody>
@@ -94,16 +94,16 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
                 key={entity.id}
                 className="border-b border-gray-100 hover:bg-[#1B3A5C]/5 cursor-pointer transition-colors group"
               >
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-6 w-[40%]">
                   <Link href={`/itineraries?slug=${encodeURIComponent(entity.id)}`} className="font-medium text-[#1B3A5C] group-hover:underline">
                     {entity.name}
                   </Link>
                 </td>
-                <td className="py-3 pr-4 text-right tabular-nums">{entity.averageRating.toFixed(2)}</td>
-                <td className="py-3 pr-4 text-right tabular-nums">{entity.reviewCount.toLocaleString()}</td>
-                <td className="py-3 pr-4 text-right tabular-nums">{entity.fiveStarPercent.toFixed(1)}%</td>
-                <td className="py-3 pr-4 text-gray-600">{entity.ships.join(", ")}</td>
-                <td className="py-3 text-right">
+                <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">{entity.averageRating.toFixed(2)}</td>
+                <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">{entity.reviewCount.toLocaleString()}</td>
+                <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">{entity.fiveStarPercent.toFixed(1)}%</td>
+                <td className="py-3 pl-6 pr-4 text-gray-600">{entity.ships.join(", ")}</td>
+                <td className="py-3 pl-6 text-right">
                   <HealthBadge rating={entity.averageRating} />
                 </td>
               </tr>

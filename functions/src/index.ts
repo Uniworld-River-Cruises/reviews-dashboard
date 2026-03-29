@@ -3,6 +3,7 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onRequest } from "firebase-functions/v2/https";
+import { timingSafeEqual } from "crypto";
 import { syncAll } from "./sync/sync-reviews";
 import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
@@ -29,6 +30,23 @@ import {
 } from "./ops/operation-logs";
 
 initializeApp();
+
+const DEFAULT_ORIGINS = [
+  "https://feefo-reviews.web.app",
+  "https://feefo-reviews.firebaseapp.com",
+];
+
+const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : process.env.FUNCTIONS_EMULATOR === "true"
+    ? true // allow all origins in the local emulator
+    : DEFAULT_ORIGINS; // restrict to known Firebase Hosting domains
+
+const VALID_BRANDS = new Set(["uniworld", "luxury-gold"]);
+
+function isValidBrand(value: unknown): value is "uniworld" | "luxury-gold" {
+  return typeof value === "string" && VALID_BRANDS.has(value);
+}
 
 interface AuthorizedCaller {
   uid: string;
@@ -60,8 +78,12 @@ async function authorizeRequest(
 ): Promise<AuthorizedCaller | null> {
   const sharedToken = process.env.SYNC_API_TOKEN;
   const suppliedSharedToken = getSharedTokenHeader(req);
-  if (sharedToken && suppliedSharedToken === sharedToken) {
-    return { uid: "shared-token", email: null, source: "shared-token", role: "service" };
+  if (sharedToken && suppliedSharedToken) {
+    const a = Buffer.from(sharedToken);
+    const b = Buffer.from(suppliedSharedToken);
+    if (a.length === b.length && timingSafeEqual(a, b)) {
+      return { uid: "shared-token", email: null, source: "shared-token", role: "service" };
+    }
   }
 
   const authHeader = req.headers.authorization;
@@ -283,7 +305,7 @@ export const dailySync = onSchedule(
 
 // On-demand sync - fetch reviews + tags from Feefo, compute summaries
 export const manualSync = onRequest(
-  { timeoutSeconds: 3600, memory: "2GiB", invoker: "public", cors: true },
+  { timeoutSeconds: 3600, memory: "2GiB", invoker: "public", cors: ALLOWED_ORIGINS },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
     const caller = await authorizeRequest(req, res, "sync");
@@ -355,7 +377,7 @@ export const manualSync = onRequest(
 
 // Submit unclassified reviews to Anthropic Batch API (50% cheaper, no rate limits)
 export const batchClassify = onRequest(
-  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: true },
+  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
     const caller = await authorizeRequest(req, res, "batchClassify");
@@ -372,6 +394,10 @@ export const batchClassify = onRequest(
 
     if (action === "results") {
       const batchId = req.body?.batchId;
+      if (batchId && (typeof batchId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(batchId))) {
+        res.status(400).json({ error: "Invalid batchId format." });
+        return;
+      }
       const result = await processBatchResults(batchId);
       console.log(`batchClassify results by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json(result);
@@ -384,7 +410,7 @@ export const batchClassify = onRequest(
 
 // Rebuild itinerary mappings (auto-grouping) - preserves manual overrides
 export const itineraryMappings = onRequest(
-  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: true },
+  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
     const caller = await authorizeRequest(req, res, "manageMappings");
@@ -392,6 +418,11 @@ export const itineraryMappings = onRequest(
 
     const action = req.body?.action ?? "rebuild";
     const brand = req.body?.brand as string | undefined;
+
+    if (brand && !isValidBrand(brand)) {
+      res.status(400).json({ error: "brand must be 'uniworld' or 'luxury-gold'." });
+      return;
+    }
 
     if (action === "rebuild") {
       const results: Record<string, { created: number; updated: number }> = {};
@@ -408,12 +439,12 @@ export const itineraryMappings = onRequest(
 
     if (action === "update") {
       const { rawName, manualParentName } = req.body;
-      if (!brand || !rawName) {
-        res.status(400).json({ error: "brand and rawName are required" });
+      if (!isValidBrand(brand) || !rawName) {
+        res.status(400).json({ error: "brand (uniworld/luxury-gold) and rawName are required" });
         return;
       }
       await updateItineraryMapping(
-        brand as "uniworld" | "luxury-gold",
+        brand,
         rawName,
         manualParentName ?? null
       );
@@ -463,7 +494,7 @@ export const adminLogs = onRequest(
 
 // Manage runtime admin access stored in Firestore.
 export const adminUsers = onRequest(
-  { timeoutSeconds: 120, memory: "512MiB", invoker: "public", cors: true },
+  { timeoutSeconds: 120, memory: "512MiB", invoker: "public", cors: ALLOWED_ORIGINS },
   async (req, res) => {
     if (!ensurePost(req, res)) return;
     const action = req.body?.action ?? "list";

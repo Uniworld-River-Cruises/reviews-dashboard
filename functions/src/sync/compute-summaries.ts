@@ -194,10 +194,11 @@ function buildSummary(
   const negativeCounts: Record<string, number> = {};
 
   for (const r of reviews) {
-    for (const theme of r.themes.positive) {
+    const themes = r.themes ?? { positive: [], negative: [] };
+    for (const theme of themes.positive ?? []) {
       positiveCounts[theme] = (positiveCounts[theme] || 0) + 1;
     }
-    for (const theme of r.themes.negative) {
+    for (const theme of themes.negative ?? []) {
       negativeCounts[theme] = (negativeCounts[theme] || 0) + 1;
     }
   }

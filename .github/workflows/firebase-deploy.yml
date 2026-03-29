@@ -55,40 +55,43 @@ jobs:
         run: npm ci --prefix app
 
       - name: Create frontend environment file
+        env:
+          FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
         run: |
-          cat <<EOF > app/.env.local
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID=feefo-reviews
-          NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=feefo-reviews.firebaseapp.com
-          NEXT_PUBLIC_FUNCTIONS_URL=https://us-central1-feefo-reviews.cloudfunctions.net
-          EOF
+          {
+            echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID=feefo-reviews"
+            echo "NEXT_PUBLIC_FIREBASE_API_KEY=${FIREBASE_API_KEY}"
+            echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=feefo-reviews.firebaseapp.com"
+            echo "NEXT_PUBLIC_FUNCTIONS_URL=https://us-central1-feefo-reviews.cloudfunctions.net"
+          } > app/.env.local
 
       - name: Create production functions environment file
+        env:
+          FEEFO_UNI_ID: ${{ secrets.FEEFO_UNIWORLD_CLIENT_ID }}
+          FEEFO_UNI_SECRET: ${{ secrets.FEEFO_UNIWORLD_CLIENT_SECRET }}
+          FEEFO_LG_ID: ${{ secrets.FEEFO_LUXURY_GOLD_CLIENT_ID }}
+          FEEFO_LG_SECRET: ${{ secrets.FEEFO_LUXURY_GOLD_CLIENT_SECRET }}
+          V_ADMIN_EMAILS: ${{ secrets.ADMIN_EMAILS }}
+          V_ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          V_ALGOLIA_APP_ID: ${{ secrets.ALGOLIA_APP_ID }}
+          V_ALGOLIA_ADMIN_KEY: ${{ secrets.ALGOLIA_ADMIN_KEY }}
+          V_REQUIRE_ADMIN_CLAIM: ${{ secrets.REQUIRE_ADMIN_CLAIM }}
+          V_SYNC_API_TOKEN: ${{ secrets.SYNC_API_TOKEN }}
+          V_CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
         run: |
-          cat <<EOF > functions/.env.feefo-reviews
-          FEEFO_UNIWORLD_CLIENT_ID=${{ secrets.FEEFO_UNIWORLD_CLIENT_ID }}
-          FEEFO_UNIWORLD_CLIENT_SECRET=${{ secrets.FEEFO_UNIWORLD_CLIENT_SECRET }}
-          FEEFO_LUXURY_GOLD_CLIENT_ID=${{ secrets.FEEFO_LUXURY_GOLD_CLIENT_ID }}
-          FEEFO_LUXURY_GOLD_CLIENT_SECRET=${{ secrets.FEEFO_LUXURY_GOLD_CLIENT_SECRET }}
-          EOF
-          if [ -n "${{ secrets.ADMIN_EMAILS }}" ]; then
-            echo "ADMIN_EMAILS=${{ secrets.ADMIN_EMAILS }}" >> functions/.env.feefo-reviews
-          fi
-          if [ -n "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
-            echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> functions/.env.feefo-reviews
-          fi
-          if [ -n "${{ secrets.ALGOLIA_APP_ID }}" ]; then
-            echo "ALGOLIA_APP_ID=${{ secrets.ALGOLIA_APP_ID }}" >> functions/.env.feefo-reviews
-          fi
-          if [ -n "${{ secrets.ALGOLIA_ADMIN_KEY }}" ]; then
-            echo "ALGOLIA_ADMIN_KEY=${{ secrets.ALGOLIA_ADMIN_KEY }}" >> functions/.env.feefo-reviews
-          fi
-          if [ -n "${{ secrets.REQUIRE_ADMIN_CLAIM }}" ]; then
-            echo "REQUIRE_ADMIN_CLAIM=${{ secrets.REQUIRE_ADMIN_CLAIM }}" >> functions/.env.feefo-reviews
-          fi
-          if [ -n "${{ secrets.SYNC_API_TOKEN }}" ]; then
-            echo "SYNC_API_TOKEN=${{ secrets.SYNC_API_TOKEN }}" >> functions/.env.feefo-reviews
-          fi
+          {
+            echo "FEEFO_UNIWORLD_CLIENT_ID=${FEEFO_UNI_ID}"
+            echo "FEEFO_UNIWORLD_CLIENT_SECRET=${FEEFO_UNI_SECRET}"
+            echo "FEEFO_LUXURY_GOLD_CLIENT_ID=${FEEFO_LG_ID}"
+            echo "FEEFO_LUXURY_GOLD_CLIENT_SECRET=${FEEFO_LG_SECRET}"
+          } > functions/.env.feefo-reviews
+          [ -n "${V_ADMIN_EMAILS}" ] && echo "ADMIN_EMAILS=${V_ADMIN_EMAILS}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_ANTHROPIC_API_KEY}" ] && echo "ANTHROPIC_API_KEY=${V_ANTHROPIC_API_KEY}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_ALGOLIA_APP_ID}" ] && echo "ALGOLIA_APP_ID=${V_ALGOLIA_APP_ID}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_ALGOLIA_ADMIN_KEY}" ] && echo "ALGOLIA_ADMIN_KEY=${V_ALGOLIA_ADMIN_KEY}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_REQUIRE_ADMIN_CLAIM}" ] && echo "REQUIRE_ADMIN_CLAIM=${V_REQUIRE_ADMIN_CLAIM}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_SYNC_API_TOKEN}" ] && echo "SYNC_API_TOKEN=${V_SYNC_API_TOKEN}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_CORS_ALLOWED_ORIGINS}" ] && echo "CORS_ALLOWED_ORIGINS=${V_CORS_ALLOWED_ORIGINS}" >> functions/.env.feefo-reviews || true
 
       - name: Build frontend
         run: npm --prefix app run build

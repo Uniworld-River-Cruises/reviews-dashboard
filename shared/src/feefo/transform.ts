@@ -1,6 +1,8 @@
-import { FeefoReview } from "./types";
+import { FeefoReview, Brand } from "./types";
 import { ReviewDocument } from "../types/review";
 import { parseTags } from "./parse-tags";
+
+const VALID_BRANDS: Set<string> = new Set(["uniworld", "luxury-gold"]);
 
 export function transformReview(raw: FeefoReview): ReviewDocument {
   const product = raw.products[0];
@@ -8,6 +10,12 @@ export function transformReview(raw: FeefoReview): ReviewDocument {
 
   // Use service.id (feedback ID) as primary ID, fall back to product.id
   const id = raw.service?.id ?? product?.id ?? extractIdFromUrl(raw.url);
+
+  const merchantId = raw.merchant.identifier;
+  if (!VALID_BRANDS.has(merchantId)) {
+    throw new Error(`Unknown merchant identifier: ${merchantId}`);
+  }
+  const brand = merchantId as Brand;
 
   const serviceText = raw.service?.review ?? null;
   const productText = product?.review ?? null;
@@ -19,7 +27,7 @@ export function transformReview(raw: FeefoReview): ReviewDocument {
   return {
     id,
     feedbackUrl: raw.url,
-    brand: raw.merchant.identifier as ReviewDocument["brand"],
+    brand,
     customer: {
       name: raw.customer.name ?? null,
       displayName: raw.customer.display_name ?? null,

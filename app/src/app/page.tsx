@@ -110,6 +110,9 @@ export default function OverviewPage() {
           selection.filter
         );
         setPanelReviews(reviews);
+      } catch (err) {
+        console.error("Failed to load overview panel reviews", err);
+        setPanelReviews([]);
       } finally {
         setPanelLoading(false);
       }
