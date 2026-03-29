@@ -32,6 +32,10 @@ const TOOLTIP_LABEL_STYLE = {
   fontWeight: 600,
 };
 
+const TOOLTIP_ITEM_STYLE = {
+  color: "#cbd5e1",
+};
+
 function formatMonth(month: string): string {
   try {
     return format(parseISO(`${month}-01`), "MMM yy");
@@ -76,6 +80,7 @@ export default function TrendChart({ data, onSelectMonth }: TrendChartProps) {
               cursor={{ stroke: "#36506f", strokeWidth: 1, strokeDasharray: "3 3" }}
               contentStyle={TOOLTIP_STYLE}
               labelStyle={TOOLTIP_LABEL_STYLE}
+              itemStyle={TOOLTIP_ITEM_STYLE}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [Number(value).toFixed(2), "Avg Rating"]}
             />
@@ -123,6 +128,7 @@ export default function TrendChart({ data, onSelectMonth }: TrendChartProps) {
               cursor={false}
               contentStyle={TOOLTIP_STYLE}
               labelStyle={TOOLTIP_LABEL_STYLE}
+              itemStyle={TOOLTIP_ITEM_STYLE}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
             />

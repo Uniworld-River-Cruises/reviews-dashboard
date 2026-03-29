@@ -31,6 +31,10 @@ const TOOLTIP_LABEL_STYLE = {
   fontWeight: 600,
 };
 
+const TOOLTIP_ITEM_STYLE = {
+  color: "#cbd5e1",
+};
+
 const POSITIVE_COLORS = [
   "#1B3A5C", "#1e4a73", "#22578a", "#2d6aa0", "#3b82f6",
   "#4a8ed9", "#5c9be0", "#71a9e6", "#8ab8ec", "#a3c7f2",
@@ -77,6 +81,7 @@ export default function ThemeChart({ title, data, type, onBarClick }: ThemeChart
             cursor={false}
             contentStyle={TOOLTIP_STYLE}
             labelStyle={TOOLTIP_LABEL_STYLE}
+            itemStyle={TOOLTIP_ITEM_STYLE}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
