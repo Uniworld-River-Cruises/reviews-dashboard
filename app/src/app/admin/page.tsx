@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { useRouter } from "next/navigation";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { getClientDb } from "@/lib/firebase";
+import { getClientAuth, getClientDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, QueryConstraint } from "firebase/firestore";
 import {
+  getCurrentAdminAccess,
   listAdminUsers,
   removeAdminUser,
   getItineraryMappings,
@@ -13,6 +16,7 @@ import {
   triggerRebuildMappings,
   triggerRecomputeSummaries,
   type AdminRole,
+  type CurrentAdminAccess,
   type AdminUserAccess,
   type ItineraryMapping,
 } from "@/lib/firestore/admin-queries";
@@ -57,7 +61,12 @@ function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const { brand, dateRange, dataVersion } = useDashboard();
+  const [user, setUser] = useState<User | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [currentAccess, setCurrentAccess] = useState<CurrentAdminAccess | null>(null);
+  const [checkingPageAccess, setCheckingPageAccess] = useState(true);
   const [adminUsers, setAdminUsers] = useState<AdminUserAccess[]>([]);
   const [adminUsersLoading, setAdminUsersLoading] = useState(true);
   const [accessEmail, setAccessEmail] = useState("");
@@ -80,14 +89,15 @@ export default function AdminPage() {
 
   const dateStart = dateRange.start.toISOString();
   const dateEnd = dateRange.end.toISOString();
+  const canManageUsers = Boolean(currentAccess?.permissions.manageUsers);
 
   const loadAdminAccess = useCallback(async () => {
     setAdminUsersLoading(true);
     try {
       const users = await listAdminUsers();
       setAdminUsers(users);
-    } catch {
-      setToast("Failed to load admin access");
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to load admin access");
     }
     setAdminUsersLoading(false);
   }, []);
@@ -131,12 +141,84 @@ export default function AdminPage() {
   }, [brand, dateStart, dateEnd, dataVersion]);
 
   useEffect(() => {
-    loadAdminAccess();
-  }, [loadAdminAccess]);
+    try {
+      const auth = getClientAuth();
+      return onAuthStateChanged(auth, (nextUser) => {
+        setUser(nextUser);
+        setAuthResolved(true);
+      });
+    } catch {
+      setAuthResolved(true);
+      router.replace("/");
+      return;
+    }
+  }, [router]);
 
   useEffect(() => {
+    if (!authResolved) {
+      return;
+    }
+
+    if (!user) {
+      setCurrentAccess(null);
+      setCheckingPageAccess(false);
+      router.replace("/");
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingPageAccess(true);
+
+    getCurrentAdminAccess()
+      .then((access) => {
+        if (cancelled) return;
+        setCurrentAccess(access);
+        const canUseAdminPage =
+          access.permissions.manageMappings || access.permissions.manageUsers;
+        if (!canUseAdminPage) {
+          router.replace("/");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCurrentAccess(null);
+        router.replace("/");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setCheckingPageAccess(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authResolved, router, user]);
+
+  useEffect(() => {
+    if (checkingPageAccess || !currentAccess) {
+      return;
+    }
+
+    if (currentAccess.permissions.manageUsers) {
+      loadAdminAccess();
+      return;
+    }
+
+    setAdminUsers([]);
+    setAdminUsersLoading(false);
+  }, [checkingPageAccess, currentAccess, loadAdminAccess]);
+
+  useEffect(() => {
+    if (checkingPageAccess || !currentAccess) {
+      return;
+    }
+
+    if (!currentAccess.permissions.manageMappings) {
+      return;
+    }
+
     loadMappings();
-  }, [loadMappings]);
+  }, [checkingPageAccess, currentAccess, loadMappings]);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -354,8 +436,17 @@ export default function AdminPage() {
     { key: "status", label: "Status", align: "text-center" },
   ];
 
+  if (!authResolved || checkingPageAccess) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+      </div>
+    );
+  }
+
   return (
     <div>
+      {canManageUsers ? (
       <div className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 px-6 py-5">
           <h2 className="text-xl font-semibold text-[#1B3A5C]">Access Control</h2>
@@ -490,6 +581,7 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+      ) : null}
 
       {/* Header */}
       <div className="mb-6">
