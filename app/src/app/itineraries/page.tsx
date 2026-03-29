@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { usePersistedState } from "@/hooks/usePersistedState";
 import SearchFilter from "@/components/dashboard/SearchFilter";
 import HealthBadge from "@/components/dashboard/HealthBadge";
 import ItineraryDetail from "@/components/itineraries/ItineraryDetail";
@@ -43,8 +44,8 @@ function ItineraryList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("reviewCount");
-  const [viewMode, setViewMode] = useState<ViewMode>("cards");
+  const [sortBy, setSortBy] = usePersistedState<SortOption>("pref:itineraries:sort", "reviewCount");
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:itineraries:viewMode", "cards");
 
   useEffect(() => {
     setLoading(true);

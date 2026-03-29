@@ -4,10 +4,12 @@ import {
   createContext,
   useContext,
   useState,
+  useEffect,
   useCallback,
   type ReactNode,
 } from "react";
 import { subMonths, subYears, startOfMonth, startOfYear, startOfWeek } from "date-fns";
+import { usePersistedState } from "@/hooks/usePersistedState";
 
 export type Brand = "uniworld" | "luxury-gold" | "combined";
 
@@ -43,6 +45,8 @@ interface DashboardContextValue {
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
 
+const DEFAULT_PRESET: DatePreset = "Last 12 Months";
+
 export function getDateRangeForPreset(preset: DatePreset): { start: Date; end: Date } {
   const now = new Date();
   const end = now;
@@ -76,23 +80,45 @@ export function getDateRangeForPreset(preset: DatePreset): { start: Date; end: D
 }
 
 function getDefaultDateRange(): DateRange {
-  const preset: DatePreset = "Last 12 Months";
-  const { start, end } = getDateRangeForPreset(preset);
-  return { start, end, preset };
+  const { start, end } = getDateRangeForPreset(DEFAULT_PRESET);
+  return { start, end, preset: DEFAULT_PRESET };
 }
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [brand, setBrand] = useState<Brand>("uniworld");
-  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+  const [brand, setBrand] = usePersistedState<Brand>("pref:brand", "uniworld");
+  const [dateRange, setDateRangeState] = useState<DateRange>(getDefaultDateRange);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
 
-  const handleSetDateRange = useCallback((range: DateRange) => {
-    setDateRange(range);
+  // Hydrate date range from persisted preset on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("pref:datePreset");
+      if (stored) {
+        const preset = JSON.parse(stored) as DatePreset;
+        // For Custom Range, we can't reconstruct the dates, so skip
+        if (preset !== "Custom Range") {
+          const { start, end } = getDateRangeForPreset(preset);
+          setDateRangeState({ start, end, preset });
+        }
+      }
+    } catch {
+      // Ignore
+    }
   }, []);
 
-  const handleSetBrand = useCallback((b: Brand) => {
-    setBrand(b);
+  const handleSetDateRange = useCallback((range: DateRange) => {
+    setDateRangeState(range);
+    try {
+      if (range.preset === "Custom Range") {
+        // Can't reconstruct custom dates on hydration, so clear the key
+        localStorage.removeItem("pref:datePreset");
+      } else {
+        localStorage.setItem("pref:datePreset", JSON.stringify(range.preset));
+      }
+    } catch {
+      // Ignore
+    }
   }, []);
 
   const handleSetLastSynced = useCallback((value: string | null) => {
@@ -107,7 +133,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     <DashboardContext.Provider
       value={{
         brand,
-        setBrand: handleSetBrand,
+        setBrand,
         dateRange,
         setDateRange: handleSetDateRange,
         lastSynced,
