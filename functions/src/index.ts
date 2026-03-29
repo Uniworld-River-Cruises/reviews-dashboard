@@ -144,14 +144,106 @@ function getEffectivePermissions(
   };
 }
 
-// Scheduled sync every 6 hours in UTC - fetch reviews + compute summaries (no classification)
+const ACTIVE_CLASSIFICATION_STATUSES = new Set(["processing", "in_progress", "canceling"]);
+
+interface ClassificationAutomationResult {
+  processed: number;
+  polledStatus: string | null;
+  submittedBatchId: string | null;
+  submittedCount: number;
+  themesUpdated: boolean;
+  skippedReason: string | null;
+  error: string | null;
+}
+
+async function runClassificationAutomation(): Promise<ClassificationAutomationResult> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return {
+      processed: 0,
+      polledStatus: null,
+      submittedBatchId: null,
+      submittedCount: 0,
+      themesUpdated: false,
+      skippedReason: "ANTHROPIC_API_KEY not set",
+      error: null,
+    };
+  }
+
+  try {
+    const db = getFirestore();
+    const batchMeta = (await db.collection("sync_meta").doc("batch_classify").get()).data();
+    const currentBatchId = typeof batchMeta?.batchId === "string" ? batchMeta.batchId : null;
+    const currentStatus = typeof batchMeta?.status === "string" ? batchMeta.status : null;
+
+    let processed = 0;
+    let polledStatus = currentStatus;
+    let themesUpdated = false;
+
+    if (
+      currentBatchId &&
+      (!currentStatus || ACTIVE_CLASSIFICATION_STATUSES.has(currentStatus))
+    ) {
+      const batchResult = await processBatchResults(currentBatchId);
+      processed = batchResult.processed;
+      polledStatus = batchResult.status;
+
+      if (batchResult.status === "complete" && batchResult.processed > 0) {
+        themesUpdated = true;
+      }
+
+      if (
+        batchResult.status !== "complete" &&
+        batchResult.status !== "ended_no_results" &&
+        batchResult.status !== "no_batch"
+      ) {
+        return {
+          processed,
+          polledStatus,
+          submittedBatchId: null,
+          submittedCount: 0,
+          themesUpdated,
+          skippedReason: "Existing classification batch still in progress",
+          error: null,
+        };
+      }
+    }
+
+    const submission = await submitClassificationBatch();
+    return {
+      processed,
+      polledStatus,
+      submittedBatchId: submission.batchId,
+      submittedCount: submission.totalUnclassified,
+      themesUpdated,
+      skippedReason: submission.totalUnclassified === 0 ? "No unclassified reviews found" : null,
+      error: submission.error,
+    };
+  } catch (error) {
+    console.error("Automatic classification cycle failed:", error);
+    return {
+      processed: 0,
+      polledStatus: null,
+      submittedBatchId: null,
+      submittedCount: 0,
+      themesUpdated: false,
+      skippedReason: null,
+      error: String(error),
+    };
+  }
+}
+
+// Scheduled sync every 2 hours in UTC - fetch reviews, recompute summaries, and advance theme classification.
 export const dailySync = onSchedule(
-  { schedule: "0 */6 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
+  { schedule: "0 */2 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
     const results = await syncAll(false);
+    const classification = await runClassificationAutomation();
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
-    console.log("Scheduled sync complete:", JSON.stringify(results));
+    console.log(
+      "Scheduled sync complete:",
+      JSON.stringify({ syncResults: results, classification })
+    );
   }
 );
 
@@ -172,10 +264,11 @@ export const manualSync = onRequest(
 
     const fullSync = req.body?.fullSync === true;
     const results = await syncAll(fullSync);
+    const classification = await runClassificationAutomation();
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
     console.log(`manualSync triggered by ${caller.source}:${caller.email ?? caller.uid}`);
-    res.json({ success: true, results });
+    res.json({ success: true, results, classification });
   }
 );
 
