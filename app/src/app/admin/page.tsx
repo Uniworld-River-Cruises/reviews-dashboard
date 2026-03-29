@@ -9,6 +9,7 @@ import { collection, query, where, getDocs, orderBy, QueryConstraint } from "fir
 import {
   getCurrentAdminAccess,
   listAdminUsers,
+  listKnownUsers,
   removeAdminUser,
   getItineraryMappings,
   upsertAdminUser,
@@ -19,6 +20,7 @@ import {
   type CurrentAdminAccess,
   type AdminUserAccess,
   type ItineraryMapping,
+  type KnownUser,
 } from "@/lib/firestore/admin-queries";
 
 type StatusFilter = "all" | "auto" | "manual" | "unchanged";
@@ -69,6 +71,8 @@ export default function AdminPage() {
   const [checkingPageAccess, setCheckingPageAccess] = useState(true);
   const [adminUsers, setAdminUsers] = useState<AdminUserAccess[]>([]);
   const [adminUsersLoading, setAdminUsersLoading] = useState(true);
+  const [knownUsers, setKnownUsers] = useState<KnownUser[]>([]);
+  const [knownUsersLoading, setKnownUsersLoading] = useState(true);
   const [accessEmail, setAccessEmail] = useState("");
   const [accessRole, setAccessRole] = useState<AdminRole>("sync");
   const [savingAccess, setSavingAccess] = useState(false);
@@ -100,6 +104,17 @@ export default function AdminPage() {
       setToast(err instanceof Error ? err.message : "Failed to load admin access");
     }
     setAdminUsersLoading(false);
+  }, []);
+
+  const loadKnownUsers = useCallback(async () => {
+    setKnownUsersLoading(true);
+    try {
+      const users = await listKnownUsers();
+      setKnownUsers(users);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to load signed-in users");
+    }
+    setKnownUsersLoading(false);
   }, []);
 
   const loadMappings = useCallback(async () => {
@@ -201,12 +216,15 @@ export default function AdminPage() {
 
     if (currentAccess.permissions.manageUsers) {
       loadAdminAccess();
+      loadKnownUsers();
       return;
     }
 
     setAdminUsers([]);
     setAdminUsersLoading(false);
-  }, [checkingPageAccess, currentAccess, loadAdminAccess]);
+    setKnownUsers([]);
+    setKnownUsersLoading(false);
+  }, [checkingPageAccess, currentAccess, loadAdminAccess, loadKnownUsers]);
 
   useEffect(() => {
     if (checkingPageAccess || !currentAccess) {
@@ -300,6 +318,7 @@ export default function AdminPage() {
       setAccessEmail("");
       setAccessRole("sync");
       await loadAdminAccess();
+      await loadKnownUsers();
       setToast("Access saved");
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Failed to save access");
@@ -312,6 +331,7 @@ export default function AdminPage() {
     try {
       await removeAdminUser(email);
       await loadAdminAccess();
+      await loadKnownUsers();
       setToast("Access removed");
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Failed to remove access");
@@ -451,8 +471,8 @@ export default function AdminPage() {
         <div className="border-b border-gray-200 px-6 py-5">
           <h2 className="text-xl font-semibold text-[#1B3A5C]">Access Control</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Owners can add or remove who is allowed to sync data and use protected admin
-            actions.
+            Owners can promote people who have signed in and manage who is allowed to sync
+            data and use protected admin actions.
           </p>
         </div>
         <div className="grid gap-6 px-6 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -525,10 +545,46 @@ export default function AdminPage() {
 
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
-              Grant Access
+              Grant Or Update Access
             </h3>
             <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
               <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Signed-in users
+                  </label>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const email = e.target.value;
+                      if (!email) return;
+                      const selected = knownUsers.find((user) => user.email === email);
+                      setAccessEmail(email);
+                      setAccessRole(selected?.role ?? "sync");
+                      e.target.value = "";
+                    }}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                  >
+                    <option value="">Choose a user who has already signed in</option>
+                    {knownUsers.map((knownUser) => {
+                      const label = knownUser.displayName
+                        ? `${knownUser.displayName} (${knownUser.email})`
+                        : knownUser.email;
+                      return (
+                        <option key={knownUser.email} value={knownUser.email}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="mt-2 text-xs text-gray-500">
+                    {knownUsersLoading
+                      ? "Loading signed-in users..."
+                      : knownUsers.length > 0
+                        ? "Pick a signed-in user to prefill the form and update their role."
+                        : "Known users will appear here after they sign in at least once."}
+                  </p>
+                </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Email
@@ -541,6 +597,34 @@ export default function AdminPage() {
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
                   />
                 </div>
+                {knownUsers.length > 0 ? (
+                  <div className="rounded-lg bg-white p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Recent Sign-Ins
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {knownUsers.slice(0, 8).map((knownUser) => (
+                        <button
+                          key={knownUser.email}
+                          type="button"
+                          onClick={() => {
+                            setAccessEmail(knownUser.email);
+                            setAccessRole(knownUser.role ?? "sync");
+                          }}
+                          className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+                          title={
+                            knownUser.lastSeenAt
+                              ? `Last seen ${new Date(knownUser.lastSeenAt).toLocaleString()}`
+                              : knownUser.email
+                          }
+                        >
+                          {knownUser.email}
+                          {knownUser.role ? ` • ${knownUser.role}` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Role
@@ -574,7 +658,7 @@ export default function AdminPage() {
                   disabled={savingAccess}
                   className="inline-flex items-center rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 disabled:opacity-50"
                 >
-                  {savingAccess ? "Saving..." : "Grant Access"}
+                  {savingAccess ? "Saving..." : "Save Access"}
                 </button>
               </div>
             </div>

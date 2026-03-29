@@ -12,7 +12,9 @@ import {
   getOwnerCount,
   hasPermission,
   listAdminUsers,
+  listKnownUsers,
   normalizeEmail,
+  upsertKnownUser,
   upsertAdminUser,
   type AccessPermission,
   type AdminRole,
@@ -269,6 +271,17 @@ export const adminUsers = onRequest(
           adminUser
         );
 
+        if (email) {
+          await upsertKnownUser({
+            email,
+            uid: decoded.uid,
+            displayName:
+              typeof decoded.name === "string" ? decoded.name : null,
+            photoURL:
+              typeof decoded.picture === "string" ? decoded.picture : null,
+          });
+        }
+
         res.json({
           access: {
             email,
@@ -290,6 +303,21 @@ export const adminUsers = onRequest(
     if (action === "list") {
       const users = await listAdminUsers();
       res.json({ users });
+      return;
+    }
+
+    if (action === "known") {
+      const users = await listAdminUsers();
+      const byEmail = new Map(users.map((user) => [user.email, user]));
+      const knownUsers = (await listKnownUsers()).map((knownUser) => {
+        const currentAccess = byEmail.get(knownUser.email);
+        return {
+          ...knownUser,
+          role: currentAccess?.role ?? null,
+          active: currentAccess?.active ?? null,
+        };
+      });
+      res.json({ knownUsers });
       return;
     }
 
@@ -350,6 +378,8 @@ export const adminUsers = onRequest(
 
     res
       .status(400)
-      .json({ error: "Invalid action. Use 'current', 'list', 'upsert', or 'remove'." });
+      .json({
+        error: "Invalid action. Use 'current', 'list', 'known', 'upsert', or 'remove'.",
+      });
   }
 );
