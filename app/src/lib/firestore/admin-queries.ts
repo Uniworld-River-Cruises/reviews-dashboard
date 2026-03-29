@@ -16,6 +16,12 @@ export interface ItineraryMapping {
 
 export type AdminRole = "owner" | "admin" | "sync";
 
+export type AdminAccessPermission =
+  | "sync"
+  | "batchClassify"
+  | "manageMappings"
+  | "manageUsers";
+
 export interface AdminUserAccess {
   email: string;
   role: AdminRole;
@@ -24,6 +30,14 @@ export interface AdminUserAccess {
   updatedAt?: string;
   createdBy?: string | null;
   updatedBy?: string | null;
+}
+
+export interface CurrentAdminAccess {
+  email: string | null;
+  role: AdminRole | null;
+  active: boolean;
+  allowed: boolean;
+  permissions: Record<AdminAccessPermission, boolean>;
 }
 
 export async function getItineraryMappings(brand: string): Promise<ItineraryMapping[]> {
@@ -71,6 +85,13 @@ export async function listAdminUsers(): Promise<AdminUserAccess[]> {
     action: "list",
   });
   return response.users ?? [];
+}
+
+export async function getCurrentAdminAccess(): Promise<CurrentAdminAccess> {
+  const response = await postFunction<{ access: CurrentAdminAccess }>("adminUsers", {
+    action: "current",
+  });
+  return response.access;
 }
 
 export async function upsertAdminUser(

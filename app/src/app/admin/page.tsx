@@ -360,8 +360,8 @@ export default function AdminPage() {
         <div className="border-b border-gray-200 px-6 py-5">
           <h2 className="text-xl font-semibold text-[#1B3A5C]">Access Control</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Admin access now lives in Firestore, not GitHub. Owners can add or remove
-            who is allowed to sync data and use protected admin actions.
+            Owners can add or remove who is allowed to sync data and use protected admin
+            actions.
           </p>
         </div>
         <div className="grid gap-6 px-6 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">

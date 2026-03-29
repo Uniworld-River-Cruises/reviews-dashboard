@@ -1,22 +1,90 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import AuthButton from "./AuthButton";
 import RefreshButton from "./RefreshButton";
-import { hasFirebaseWebConfig } from "@/lib/firebase";
+import { getClientAuth, hasFirebaseWebConfig } from "@/lib/firebase";
+import { getCurrentAdminAccess } from "@/lib/firestore/admin-queries";
 
-const tabs = [
+const baseTabs = [
   { href: "/", label: "Overview" },
   { href: "/itineraries", label: "Itineraries" },
   { href: "/ships", label: "Ships" },
   { href: "/reviews", label: "Reviews" },
-  { href: "/admin", label: "Admin" },
 ];
 
 export default function Navigation() {
   const pathname = usePathname();
   const showAuthControls = hasFirebaseWebConfig();
+  const [user, setUser] = useState<User | null>(null);
+  const [showAdminTab, setShowAdminTab] = useState(false);
+  const [checkingAdminAccess, setCheckingAdminAccess] = useState(showAuthControls);
+
+  useEffect(() => {
+    if (!showAuthControls) {
+      setUser(null);
+      setShowAdminTab(false);
+      setCheckingAdminAccess(false);
+      return;
+    }
+
+    try {
+      const auth = getClientAuth();
+      return onAuthStateChanged(auth, (nextUser) => {
+        setUser(nextUser);
+        if (!nextUser) {
+          setShowAdminTab(false);
+          setCheckingAdminAccess(false);
+        } else {
+          setCheckingAdminAccess(true);
+        }
+      });
+    } catch {
+      setUser(null);
+      setShowAdminTab(false);
+      setCheckingAdminAccess(false);
+      return;
+    }
+  }, [showAuthControls]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!showAuthControls || !user) {
+      setShowAdminTab(false);
+      return;
+    }
+
+    setCheckingAdminAccess(true);
+
+    getCurrentAdminAccess()
+      .then((access) => {
+        if (cancelled) return;
+        setShowAdminTab(
+          Boolean(access.permissions.manageMappings || access.permissions.manageUsers)
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setShowAdminTab(false);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setCheckingAdminAccess(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showAuthControls, user]);
+
+  const tabs = [...baseTabs];
+  if (showAdminTab || (pathname.startsWith("/admin") && checkingAdminAccess)) {
+    tabs.push({ href: "/admin", label: "Admin" });
+  }
 
   return (
     <nav className="border-b border-gray-200 bg-white shadow-sm dark:bg-[#111927] dark:border-[#1e2d44]">
