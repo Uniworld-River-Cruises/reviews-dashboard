@@ -10,8 +10,10 @@ import {
   getDoc,
   orderBy,
   limit,
+  startAfter,
   QueryConstraint,
   type DocumentData,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ export type OverviewSelectionFilter =
   | { kind: "month"; month: string };
 
 const PANEL_REVIEW_LIMIT = 100;
+const PANEL_REVIEW_BATCH_SIZE = 200;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -540,7 +543,9 @@ export async function getReviewsByTheme(
 
   if (snap.empty) return [];
 
-  return snap.docs.map(mapReviewDoc);
+  return snap.docs.map((docSnap) =>
+    mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
+  );
 }
 
 export async function getReviewsForOverviewSelection(
@@ -549,32 +554,15 @@ export async function getReviewsForOverviewSelection(
   endDate: Date,
   filter: OverviewSelectionFilter
 ): Promise<ThemeReview[]> {
-  const db = getClientDb();
-  const ref = collection(db, "reviews");
-  const monthBounds =
-    filter.kind === "month" ? getMonthBounds(filter.month) : null;
-  const queryStart = monthBounds?.start ?? startDate.toISOString();
-  const queryEnd = monthBounds?.end ?? endDate.toISOString();
-  const endOperator = monthBounds ? "<" : "<=";
-
-  const constraints: QueryConstraint[] = [
-    where("dates.created", ">=", queryStart),
-    where("dates.created", endOperator, queryEnd),
-    orderBy("dates.created", "desc"),
-  ];
-
-  if (brand !== "combined") {
-    constraints.push(where("brand", "==", brand));
+  if (filter.kind === "theme") {
+    return getThemeSelectionReviews(brand, startDate, endDate, filter);
   }
 
-  const snap = await getDocs(query(ref, ...constraints));
-  if (snap.empty) return [];
+  if (filter.kind === "month") {
+    return getMonthSelectionReviews(brand, filter.month);
+  }
 
-  return snap.docs
-    .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() }))
-    .filter(({ data }) => matchesOverviewSelection(data, filter))
-    .slice(0, PANEL_REVIEW_LIMIT)
-    .map(({ id, data }) => mapReviewDoc({ id, data }));
+  return getRatingSelectionReviews(brand, startDate, endDate, filter.star);
 }
 
 function mapReviewDoc(
@@ -616,4 +604,121 @@ function getMonthBounds(month: string): { start: string; end: string } {
     start: start.toISOString(),
     end: end.toISOString(),
   };
+}
+
+function buildDateRangeConstraints(
+  brand: string,
+  start: string,
+  end: string,
+  endOperator: "<" | "<=" = "<="
+): QueryConstraint[] {
+  const constraints: QueryConstraint[] = [
+    where("dates.created", ">=", start),
+    where("dates.created", endOperator, end),
+  ];
+
+  if (brand !== "combined") {
+    constraints.push(where("brand", "==", brand));
+  }
+
+  constraints.push(orderBy("dates.created", "desc"));
+  return constraints;
+}
+
+async function getThemeSelectionReviews(
+  brand: string,
+  startDate: Date,
+  endDate: Date,
+  filter: Extract<OverviewSelectionFilter, { kind: "theme" }>
+): Promise<ThemeReview[]> {
+  const db = getClientDb();
+  const ref = collection(db, "reviews");
+  const constraints = [
+    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString()),
+    where(`themes.${filter.sentiment}`, "array-contains", filter.theme),
+    limit(PANEL_REVIEW_LIMIT),
+  ];
+
+  try {
+    const snap = await getDocs(query(ref, ...constraints));
+    return snap.docs.map((docSnap) =>
+      mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
+    );
+  } catch (error) {
+    console.warn("Falling back to paged theme filtering for overview selection", error);
+    return getFilteredPagedReviews(brand, startDate, endDate, filter);
+  }
+}
+
+async function getMonthSelectionReviews(brand: string, month: string): Promise<ThemeReview[]> {
+  const db = getClientDb();
+  const ref = collection(db, "reviews");
+  const bounds = getMonthBounds(month);
+  const constraints = [
+    ...buildDateRangeConstraints(brand, bounds.start, bounds.end, "<"),
+    limit(PANEL_REVIEW_LIMIT),
+  ];
+  const snap = await getDocs(query(ref, ...constraints));
+  return snap.docs.map((docSnap) =>
+    mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
+  );
+}
+
+async function getRatingSelectionReviews(
+  brand: string,
+  startDate: Date,
+  endDate: Date,
+  star: number
+): Promise<ThemeReview[]> {
+  return getFilteredPagedReviews(brand, startDate, endDate, {
+    kind: "rating",
+    star,
+  });
+}
+
+async function getFilteredPagedReviews(
+  brand: string,
+  startDate: Date,
+  endDate: Date,
+  filter: OverviewSelectionFilter
+): Promise<ThemeReview[]> {
+  const db = getClientDb();
+  const ref = collection(db, "reviews");
+  const constraints = buildDateRangeConstraints(
+    brand,
+    startDate.toISOString(),
+    endDate.toISOString()
+  );
+  const reviews: ThemeReview[] = [];
+  let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null;
+
+  while (reviews.length < PANEL_REVIEW_LIMIT) {
+    const pageConstraints = [...constraints, limit(PANEL_REVIEW_BATCH_SIZE)];
+    if (lastDoc) {
+      pageConstraints.push(startAfter(lastDoc));
+    }
+
+    const snap = await getDocs(query(ref, ...pageConstraints));
+    if (snap.empty) {
+      break;
+    }
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (matchesOverviewSelection(data, filter)) {
+        reviews.push(mapReviewDoc({ id: docSnap.id, data }));
+        if (reviews.length >= PANEL_REVIEW_LIMIT) {
+          break;
+        }
+      }
+    }
+
+    if (snap.docs.length < PANEL_REVIEW_BATCH_SIZE) {
+      break;
+    }
+
+    lastDoc = snap.docs[snap.docs.length - 1];
+  }
+
+  return reviews;
 }

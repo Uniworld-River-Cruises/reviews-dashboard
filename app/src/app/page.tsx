@@ -15,6 +15,7 @@ import {
   getEntitySummaries,
   getEntitySummariesByDateRange,
   getReviewsForOverviewSelection,
+  type OverviewSelectionFilter,
   type FleetSummary,
   type MonthlySummary,
   type EntitySummary,
@@ -91,10 +92,7 @@ export default function OverviewPage() {
       title: string;
       subtitle: string;
       accent: "positive" | "negative" | "neutral";
-      filter:
-        | { kind: "theme"; theme: string; sentiment: "positive" | "negative" }
-        | { kind: "rating"; star: number }
-        | { kind: "month"; month: string };
+      filter: OverviewSelectionFilter;
     }) => {
       setPanelTitle(selection.title);
       setPanelSubtitle(selection.subtitle);
