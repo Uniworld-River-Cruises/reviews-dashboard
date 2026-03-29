@@ -39,7 +39,7 @@ function ItinerariesContent() {
 }
 
 function ItineraryList() {
-  const { brand, dataVersion } = useDashboard();
+  const { brand, dateRange, dataVersion } = useDashboard();
   const [itineraries, setItineraries] = useState<ItinerarySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +50,7 @@ function ItineraryList() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getItineraries(brand).then((data) => {
+    getItineraries(brand, dateRange).then((data) => {
       setItineraries(data);
       setLoading(false);
     }).catch((err) => {
@@ -58,7 +58,7 @@ function ItineraryList() {
       setError(err instanceof Error ? err.message : "Unable to load itineraries right now.");
       setLoading(false);
     });
-  }, [brand, dataVersion]);
+  }, [brand, dateRange, dataVersion]);
 
   const filtered = useMemo(() => {
     const result = itineraries.filter((it) =>
