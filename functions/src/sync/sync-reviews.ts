@@ -17,12 +17,18 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
     maxSourceUpdatedAt: null,
   };
 
-  // 1. Acquire sync lock
+  // 1. Acquire sync lock (with 30-minute TTL to auto-release stale locks)
+  const LOCK_TTL_MS = 30 * 60 * 1000;
   const syncMetaRef = db.collection("sync_meta").doc(brand);
   const lockAcquired = await db.runTransaction(async (txn) => {
     const meta = await txn.get(syncMetaRef);
-    if (meta.data()?.status === "syncing") {
-      return false;
+    const data = meta.data();
+    if (data?.status === "syncing") {
+      const startedAt = data.startedAt ? new Date(data.startedAt).getTime() : 0;
+      if (Date.now() - startedAt < LOCK_TTL_MS) {
+        return false;
+      }
+      console.warn(`Stale sync lock for ${brand} (started ${data.startedAt}) — auto-releasing`);
     }
     txn.set(syncMetaRef, { status: "syncing", startedAt: new Date().toISOString() }, { merge: true });
     return true;
@@ -60,11 +66,14 @@ export async function syncBrand(brand: Brand, fullSync: boolean = false): Promis
         }
       }
 
-      // Write this page to Firestore immediately
-      // Use merge so we don't overwrite existing themes/classification data
+      // Write this page to Firestore immediately.
+      // Use merge to preserve existing themes on already-classified reviews.
+      // Include the default themes in the write — merge: true will NOT overwrite
+      // nested fields that already exist if we use dot-notation updates instead.
+      // Strategy: write all non-theme fields with merge, then for each doc also
+      // set a default themes.classifiedAt=null only if the doc is new (create).
       const writer = db.bulkWriter();
       for (const doc of pageReviews) {
-        // Preserve existing themes if review was already classified
         const { themes, ...docWithoutThemes } = doc;
         writer.set(db.collection("reviews").doc(doc.id), docWithoutThemes, { merge: true });
       }

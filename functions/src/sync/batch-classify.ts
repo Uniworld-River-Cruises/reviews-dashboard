@@ -19,7 +19,9 @@ interface BatchClassifyResult {
 export async function submitClassificationBatch(): Promise<BatchClassifyResult> {
   const db = getFirestore();
 
-  // 1. Find all reviews with comments that haven't been classified
+  // 1. Find all reviews with comments that haven't been classified.
+  // In Firestore, where("field", "==", null) matches both explicit null values
+  // AND documents where the field (or parent map) doesn't exist.
   const unclassifiedQuery = db.collection("reviews")
     .where("hasComment", "==", true)
     .where("themes.classifiedAt", "==", null)
@@ -196,7 +198,9 @@ export async function processBatchResults(batchId?: string): Promise<{ processed
       const text = result.result.message.content[0]?.text ?? "";
       const classification = parseClassification(text);
 
-      if (classification) {
+      if (!classification) {
+        console.warn(`Could not parse classification for ${result.custom_id}: ${text.slice(0, 200)}`);
+      } else {
         writer.update(db.collection("reviews").doc(result.custom_id), {
           "themes.positive": classification.positive,
           "themes.negative": classification.negative,

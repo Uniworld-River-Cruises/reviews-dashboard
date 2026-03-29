@@ -59,9 +59,15 @@ export default function ShipDetail({ slug }: { slug: string }) {
     setPanelType(type);
     setPanelOpen(true);
     setPanelLoading(true);
-    const reviews = await getReviewsByTheme(brand, theme, type);
-    setPanelReviews(reviews);
-    setPanelLoading(false);
+    try {
+      const reviews = await getReviewsByTheme(brand, theme, type);
+      setPanelReviews(reviews);
+    } catch (err) {
+      console.error("Failed to load theme reviews", err);
+      setPanelReviews([]);
+    } finally {
+      setPanelLoading(false);
+    }
   }, [brand]);
 
   const closePanel = useCallback(() => {
