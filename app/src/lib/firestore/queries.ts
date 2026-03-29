@@ -526,14 +526,17 @@ export async function getFilterOptions(
 export async function getReviewsByTheme(
   brand: string,
   theme: string,
-  type: "positive" | "negative"
+  type: "positive" | "negative",
+  startDate?: Date,
+  endDate?: Date
 ): Promise<ThemeReview[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
+  const fetchLimit = startDate && endDate ? 100 : 20;
   const constraints = [
     where(`themes.${type}`, "array-contains", theme),
     orderBy("dates.created", "desc"),
-    limit(20),
+    limit(fetchLimit),
   ];
   if (brand !== "combined") {
     constraints.unshift(where("brand", "==", brand));
@@ -543,7 +546,19 @@ export async function getReviewsByTheme(
 
   if (snap.empty) return [];
 
-  return snap.docs.map((docSnap) =>
+  const filteredDocs =
+    startDate && endDate
+      ? snap.docs.filter((docSnap) => {
+          const created = docSnap.data().dates?.created;
+          return (
+            typeof created === "string" &&
+            created >= startDate.toISOString() &&
+            created <= endDate.toISOString()
+          );
+        })
+      : snap.docs;
+
+  return filteredDocs.slice(0, 20).map((docSnap) =>
     mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
   );
 }

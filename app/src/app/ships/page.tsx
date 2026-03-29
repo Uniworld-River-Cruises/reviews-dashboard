@@ -38,7 +38,7 @@ function ShipsContent() {
 }
 
 function ShipList() {
-  const { brand, dataVersion } = useDashboard();
+  const { brand, dateRange, dataVersion } = useDashboard();
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ function ShipList() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getShips(brand).then((data) => {
+    getShips(brand, dateRange).then((data) => {
       setShips(data);
       setLoading(false);
     }).catch((err) => {
@@ -57,7 +57,7 @@ function ShipList() {
       setError(err instanceof Error ? err.message : "Unable to load ships right now.");
       setLoading(false);
     });
-  }, [brand, dataVersion]);
+  }, [brand, dateRange, dataVersion]);
 
   const filtered = useMemo(() => {
     const result = ships.filter((s) =>
