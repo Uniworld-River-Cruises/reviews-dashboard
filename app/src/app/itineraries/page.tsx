@@ -45,7 +45,7 @@ function ItineraryList() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = usePersistedState<SortOption>("pref:itineraries:sort", "reviewCount");
-  const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:itineraries:viewMode", "cards");
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:listViewMode", "cards");
 
   useEffect(() => {
     setLoading(true);
