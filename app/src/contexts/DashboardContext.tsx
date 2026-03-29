@@ -4,7 +4,6 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   useCallback,
   type ReactNode,
 } from "react";
@@ -12,6 +11,10 @@ import { subMonths, subYears, startOfMonth, startOfYear, startOfWeek } from "dat
 import { usePersistedState } from "@/hooks/usePersistedState";
 
 export type Brand = "uniworld" | "luxury-gold" | "combined";
+
+export function brandHasShips(brand: Brand): boolean {
+  return brand !== "luxury-gold";
+}
 
 export type DatePreset =
   | "This Week"
@@ -84,28 +87,34 @@ function getDefaultDateRange(): DateRange {
   return { start, end, preset: DEFAULT_PRESET };
 }
 
+function getInitialDateRange(): DateRange {
+  if (typeof window === "undefined") {
+    return getDefaultDateRange();
+  }
+
+  try {
+    const stored = localStorage.getItem("pref:datePreset");
+    if (!stored) {
+      return getDefaultDateRange();
+    }
+
+    const preset = JSON.parse(stored) as DatePreset;
+    if (preset === "Custom Range") {
+      return getDefaultDateRange();
+    }
+
+    const { start, end } = getDateRangeForPreset(preset);
+    return { start, end, preset };
+  } catch {
+    return getDefaultDateRange();
+  }
+}
+
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [brand, setBrand] = usePersistedState<Brand>("pref:brand", "uniworld");
-  const [dateRange, setDateRangeState] = useState<DateRange>(getDefaultDateRange);
+  const [dateRange, setDateRangeState] = useState<DateRange>(getInitialDateRange);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
-
-  // Hydrate date range from persisted preset on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("pref:datePreset");
-      if (stored) {
-        const preset = JSON.parse(stored) as DatePreset;
-        // For Custom Range, we can't reconstruct the dates, so skip
-        if (preset !== "Custom Range") {
-          const { start, end } = getDateRangeForPreset(preset);
-          setDateRangeState({ start, end, preset });
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  }, []);
 
   const handleSetDateRange = useCallback((range: DateRange) => {
     setDateRangeState(range);

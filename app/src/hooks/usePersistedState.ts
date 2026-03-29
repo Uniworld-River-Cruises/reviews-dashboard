@@ -14,23 +14,25 @@ export function usePersistedState<T>(
   key: string,
   defaultValue: T
 ): [T, Dispatch<SetStateAction<T>>] {
-  const [state, setState] = useState<T>(defaultValue);
+  const readStoredValue = useCallback((): T => {
+    if (typeof window === "undefined") {
+      return defaultValue;
+    }
+
+    try {
+      const stored = localStorage.getItem(key);
+      return stored !== null ? (JSON.parse(stored) as T) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  }, [defaultValue, key]);
+
+  const [state, setState] = useState<T>(readStoredValue);
 
   // Hydrate from localStorage on mount (or when key changes)
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(key);
-      if (stored !== null) {
-        setState(JSON.parse(stored) as T);
-      } else {
-        // Reset to default when key changes and nothing is stored
-        setState(defaultValue);
-      }
-    } catch {
-      setState(defaultValue);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+    setState(readStoredValue());
+  }, [readStoredValue]);
 
   const setPersistedState: Dispatch<SetStateAction<T>> = useCallback(
     (action: SetStateAction<T>) => {
