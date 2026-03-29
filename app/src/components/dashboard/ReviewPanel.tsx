@@ -95,7 +95,7 @@ export default function ReviewPanel({
       {/* Panel */}
       <div className="relative w-full max-w-full sm:max-w-md bg-white shadow-xl flex flex-col animate-slide-in-right">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-[#1e2d44]">
           <div>
             <h2 className="text-lg font-semibold text-[#1B3A5C]">{title}</h2>
             <p className="text-sm text-gray-500 mt-0.5">
