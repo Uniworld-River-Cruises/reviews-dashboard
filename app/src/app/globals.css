@@ -190,6 +190,25 @@ body, .bg-white, .bg-gray-50 {
   border-color: var(--border) !important;
 }
 
+/* Remove browser focus rings from clickable chart surfaces.
+   The review side panel provides the visible selected state. */
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-wrapper svg:focus,
+.recharts-wrapper svg:focus-visible,
+.recharts-wrapper [tabindex]:focus,
+.recharts-wrapper [tabindex]:focus-visible,
+.recharts-wrapper *:focus,
+.recharts-wrapper *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.recharts-wrapper,
+.recharts-wrapper svg {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @keyframes slide-in-right {
   from {
     transform: translateX(100%);
