@@ -2,11 +2,14 @@ import { getFirestore } from "firebase-admin/firestore";
 import { POSITIVE_THEMES, NEGATIVE_THEMES, VALID_POSITIVE_NAMES, VALID_NEGATIVE_NAMES } from "@feefo/shared";
 
 const BATCH_SIZE = 10000; // Max requests per Anthropic batch
+const ACTIVE_BATCH_STATUSES = new Set(["processing", "in_progress", "canceling", "submitting"]);
+const SUBMISSION_LOCK_WINDOW_MS = 10 * 60 * 1000;
 
 interface BatchClassifyResult {
   totalUnclassified: number;
   batchId: string | null;
   error: string | null;
+  status: string;
 }
 
 /**
@@ -18,6 +21,53 @@ interface BatchClassifyResult {
  */
 export async function submitClassificationBatch(): Promise<BatchClassifyResult> {
   const db = getFirestore();
+  const batchMetaRef = db.collection("sync_meta").doc("batch_classify");
+  const lockToken = `lock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const lockExpiresAt = new Date(Date.now() + SUBMISSION_LOCK_WINDOW_MS).toISOString();
+
+  const reservation = await db.runTransaction(async (txn) => {
+    const meta = await txn.get(batchMetaRef);
+    const data = meta.data();
+    const currentStatus = typeof data?.status === "string" ? data.status : null;
+    const currentBatchId = typeof data?.batchId === "string" ? data.batchId : null;
+    const currentLockExpiresAt =
+      typeof data?.submissionLockExpiresAt === "string" ? data.submissionLockExpiresAt : null;
+    const activeSubmissionLock =
+      currentStatus === "submitting" &&
+      Boolean(currentLockExpiresAt && new Date(currentLockExpiresAt).getTime() > Date.now());
+    const activeBatch =
+      Boolean(currentBatchId) && Boolean(currentStatus && ACTIVE_BATCH_STATUSES.has(currentStatus));
+
+    if (activeSubmissionLock || activeBatch) {
+      return {
+        acquired: false,
+        batchId: currentBatchId,
+        status: currentStatus ?? (activeSubmissionLock ? "submitting" : "processing"),
+      };
+    }
+
+    txn.set(
+      batchMetaRef,
+      {
+        status: "submitting",
+        submissionLockToken: lockToken,
+        submissionLockExpiresAt: lockExpiresAt,
+        lastChecked: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    return { acquired: true, batchId: currentBatchId, status: "submitting" };
+  });
+
+  if (!reservation.acquired) {
+    return {
+      totalUnclassified: 0,
+      batchId: reservation.batchId ?? null,
+      error: null,
+      status: reservation.status,
+    };
+  }
 
   // 1. Find all reviews with comments that haven't been classified
   const unclassifiedQuery = db.collection("reviews")
@@ -28,7 +78,16 @@ export async function submitClassificationBatch(): Promise<BatchClassifyResult> 
   const snapshot = await unclassifiedQuery.get();
 
   if (snapshot.empty) {
-    return { totalUnclassified: 0, batchId: null, error: null };
+    await batchMetaRef.set(
+      {
+        status: "idle",
+        submissionLockToken: null,
+        submissionLockExpiresAt: null,
+        lastChecked: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    return { totalUnclassified: 0, batchId: null, error: null, status: "idle" };
   }
 
   console.log(`Found ${snapshot.size} unclassified reviews`);
@@ -91,18 +150,38 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
     console.log(`Batch submitted: ${batch.id} (${batch.processing_status}), ${requests.length} requests`);
 
     // Store batch ID in Firestore for polling
-    await db.collection("sync_meta").doc("batch_classify").set({
-      batchId: batch.id,
-      submittedAt: new Date().toISOString(),
-      totalRequests: requests.length,
-      status: "processing",
-    });
+    await batchMetaRef.set(
+      {
+        batchId: batch.id,
+        submittedAt: new Date().toISOString(),
+        totalRequests: requests.length,
+        status: batch.processing_status,
+        submissionLockToken: null,
+        submissionLockExpiresAt: null,
+      },
+      { merge: true }
+    );
 
-    return { totalUnclassified: snapshot.size, batchId: batch.id, error: null };
+    return {
+      totalUnclassified: snapshot.size,
+      batchId: batch.id,
+      error: null,
+      status: batch.processing_status,
+    };
   } catch (err) {
     const errorMsg = String(err);
     console.error(`Batch submission failed: ${errorMsg}`);
-    return { totalUnclassified: snapshot.size, batchId: null, error: errorMsg };
+    await batchMetaRef.set(
+      {
+        status: "error",
+        errorMessage: errorMsg.slice(0, 5000),
+        submissionLockToken: null,
+        submissionLockExpiresAt: null,
+        lastChecked: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    return { totalUnclassified: snapshot.size, batchId: null, error: errorMsg, status: "error" };
   }
 }
 

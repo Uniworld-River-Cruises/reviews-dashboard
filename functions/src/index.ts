@@ -134,7 +134,7 @@ interface ClassificationAutomationResult {
   polledStatus: string | null;
   submittedBatchId: string | null;
   submittedCount: number;
-  recomputedSummaries: boolean;
+  themesUpdated: boolean;
   skippedReason: string | null;
   error: string | null;
 }
@@ -146,7 +146,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       polledStatus: null,
       submittedBatchId: null,
       submittedCount: 0,
-      recomputedSummaries: false,
+      themesUpdated: false,
       skippedReason: "ANTHROPIC_API_KEY not set",
       error: null,
     };
@@ -160,7 +160,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
 
     let processed = 0;
     let polledStatus = currentStatus;
-    let recomputedSummaries = false;
+    let themesUpdated = false;
 
     if (
       currentBatchId &&
@@ -171,9 +171,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       polledStatus = batchResult.status;
 
       if (batchResult.status === "complete" && batchResult.processed > 0) {
-        await computeSummaries("uniworld");
-        await computeSummaries("luxury-gold");
-        recomputedSummaries = true;
+        themesUpdated = true;
       }
 
       if (
@@ -186,7 +184,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
           polledStatus,
           submittedBatchId: null,
           submittedCount: 0,
-          recomputedSummaries,
+          themesUpdated,
           skippedReason: "Existing classification batch still in progress",
           error: null,
         };
@@ -199,7 +197,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       polledStatus,
       submittedBatchId: submission.batchId,
       submittedCount: submission.totalUnclassified,
-      recomputedSummaries,
+      themesUpdated,
       skippedReason: submission.totalUnclassified === 0 ? "No unclassified reviews found" : null,
       error: submission.error,
     };
@@ -210,7 +208,7 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
       polledStatus: null,
       submittedBatchId: null,
       submittedCount: 0,
-      recomputedSummaries: false,
+      themesUpdated: false,
       skippedReason: null,
       error: String(error),
     };
@@ -222,9 +220,9 @@ export const dailySync = onSchedule(
   { schedule: "0 */2 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
     const results = await syncAll(false);
+    const classification = await runClassificationAutomation();
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
-    const classification = await runClassificationAutomation();
     console.log(
       "Scheduled sync complete:",
       JSON.stringify({ syncResults: results, classification })
@@ -249,9 +247,9 @@ export const manualSync = onRequest(
 
     const fullSync = req.body?.fullSync === true;
     const results = await syncAll(fullSync);
+    const classification = await runClassificationAutomation();
     await computeSummaries("uniworld");
     await computeSummaries("luxury-gold");
-    const classification = await runClassificationAutomation();
     console.log(`manualSync triggered by ${caller.source}:${caller.email ?? caller.uid}`);
     res.json({ success: true, results, classification });
   }
