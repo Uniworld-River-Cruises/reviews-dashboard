@@ -27,11 +27,16 @@ import {
 
 initializeApp();
 
+const DEFAULT_ORIGINS = [
+  "https://feefo-reviews.web.app",
+  "https://feefo-reviews.firebaseapp.com",
+];
+
 const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS
   ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
   : process.env.FUNCTIONS_EMULATOR === "true"
     ? true // allow all origins in the local emulator
-    : false; // fail closed in production when CORS_ALLOWED_ORIGINS is not set
+    : DEFAULT_ORIGINS; // restrict to known Firebase Hosting domains
 
 const VALID_BRANDS = new Set(["uniworld", "luxury-gold"]);
 
