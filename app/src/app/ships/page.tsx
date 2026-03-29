@@ -45,7 +45,7 @@ function ShipList() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = usePersistedState<SortOption>("pref:ships:sort", "reviewCount");
-  const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:ships:viewMode", "cards");
+  const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:listViewMode", "cards");
 
   useEffect(() => {
     setLoading(true);
