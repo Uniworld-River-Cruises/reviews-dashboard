@@ -1,5 +1,6 @@
 "use client";
 
+import { format } from "date-fns";
 import { getClientDb } from "@/lib/firebase";
 import {
   collection,
@@ -38,6 +39,18 @@ export interface MonthlySummary {
   reviewCount: number;
 }
 
+export type TrendGranularity = "day" | "week" | "month";
+
+export interface TrendPoint {
+  key: string;
+  label: string;
+  fullLabel: string;
+  averageRating: number | null;
+  reviewCount: number;
+  periodStart: string;
+  periodEnd: string;
+}
+
 export interface EntitySummary {
   id: string;
   name: string;
@@ -60,7 +73,8 @@ export interface ThemeReview {
 export type OverviewSelectionFilter =
   | { kind: "theme"; theme: string; sentiment: "positive" | "negative" }
   | { kind: "rating"; star: number }
-  | { kind: "month"; month: string };
+  | { kind: "month"; month: string }
+  | { kind: "period"; start: string; end: string; label: string };
 
 const PANEL_REVIEW_LIMIT = 100;
 const PANEL_REVIEW_BATCH_SIZE = 200;
@@ -236,6 +250,36 @@ export async function getMonthlySummaries(brand: string): Promise<MonthlySummary
       reviewCount: data.totalReviews || 0,
     };
   });
+}
+
+export async function getTrendSeries(
+  brand: string,
+  startDate: Date,
+  endDate: Date
+): Promise<{ granularity: TrendGranularity; points: TrendPoint[] }> {
+  const rangeDays = getRangeLengthInDays(startDate, endDate);
+  const granularity: TrendGranularity =
+    rangeDays <= 45 ? "day" : rangeDays <= 366 ? "week" : "month";
+
+  if (granularity === "month") {
+    const monthly = await getMonthlySummaries(brand);
+    return {
+      granularity,
+      points: buildMonthlyTrendPoints(monthly, startDate, endDate),
+    };
+  }
+
+  const db = getClientDb();
+  const ref = collection(db, "reviews");
+  const constraints = [
+    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString()),
+  ];
+  const snap = await getDocs(query(ref, ...constraints));
+
+  return {
+    granularity,
+    points: buildAdaptiveTrendPoints(snap.docs.map((docSnap) => docSnap.data()), startDate, endDate, granularity),
+  };
 }
 
 export async function getEntitySummaries(
@@ -573,6 +617,10 @@ export async function getReviewsForOverviewSelection(
     return getThemeSelectionReviews(brand, startDate, endDate, filter);
   }
 
+  if (filter.kind === "period") {
+    return getPeriodSelectionReviews(brand, filter.start, filter.end);
+  }
+
   if (filter.kind === "month") {
     return getMonthSelectionReviews(brand, filter.month);
   }
@@ -607,6 +655,9 @@ function matchesOverviewSelection(data: DocumentData, filter: OverviewSelectionF
   }
 
   const created = typeof data.dates?.created === "string" ? data.dates.created : "";
+  if (filter.kind === "period") {
+    return created >= filter.start && created < filter.end;
+  }
   return created.startsWith(filter.month);
 }
 
@@ -619,6 +670,192 @@ function getMonthBounds(month: string): { start: string; end: string } {
     start: start.toISOString(),
     end: end.toISOString(),
   };
+}
+
+function getRangeLengthInDays(startDate: Date, endDate: Date): number {
+  const start = Date.UTC(
+    startDate.getUTCFullYear(),
+    startDate.getUTCMonth(),
+    startDate.getUTCDate()
+  );
+  const end = Date.UTC(
+    endDate.getUTCFullYear(),
+    endDate.getUTCMonth(),
+    endDate.getUTCDate()
+  );
+
+  return Math.max(1, Math.floor((end - start) / 86400000) + 1);
+}
+
+function toUtcDayKey(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    date.getUTCDate()
+  ).padStart(2, "0")}`;
+}
+
+function parseUtcDayKey(dayKey: string): Date {
+  return new Date(`${dayKey}T00:00:00.000Z`);
+}
+
+function addUtcDays(dayKey: string, amount: number): string {
+  const date = parseUtcDayKey(dayKey);
+  date.setUTCDate(date.getUTCDate() + amount);
+  return toUtcDayKey(date);
+}
+
+function getUtcWeekStartKey(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const utcDate = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  );
+  const day = utcDate.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  utcDate.setUTCDate(utcDate.getUTCDate() + offset);
+  return toUtcDayKey(utcDate);
+}
+
+function addUtcWeeks(dayKey: string, amount: number): string {
+  return addUtcDays(dayKey, amount * 7);
+}
+
+function toUtcMonthKey(value: Date | string): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseUtcMonthKey(monthKey: string): Date {
+  return new Date(`${monthKey}-01T00:00:00.000Z`);
+}
+
+function addUtcMonths(monthKey: string, amount: number): string {
+  const date = parseUtcMonthKey(monthKey);
+  date.setUTCMonth(date.getUTCMonth() + amount);
+  return toUtcMonthKey(date);
+}
+
+function formatPeriodLabel(
+  granularity: TrendGranularity,
+  periodStart: string,
+  periodEnd: string
+): { label: string; fullLabel: string } {
+  if (granularity === "day") {
+    const start = parseUtcDayKey(periodStart);
+    return {
+      label: format(start, "MMM d"),
+      fullLabel: format(start, "MMM d, yyyy"),
+    };
+  }
+
+  if (granularity === "week") {
+    const start = parseUtcDayKey(periodStart);
+    const exclusiveEnd = parseUtcDayKey(periodEnd);
+    const inclusiveEnd = new Date(exclusiveEnd);
+    inclusiveEnd.setUTCDate(inclusiveEnd.getUTCDate() - 1);
+    return {
+      label: format(start, "MMM d"),
+      fullLabel: `${format(start, "MMM d")} - ${format(inclusiveEnd, "MMM d, yyyy")}`,
+    };
+  }
+
+  const start = parseUtcMonthKey(periodStart);
+  return {
+    label: format(start, "MMM yy"),
+    fullLabel: format(start, "MMMM yyyy"),
+  };
+}
+
+function buildAdaptiveTrendPoints(
+  docs: DocumentData[],
+  startDate: Date,
+  endDate: Date,
+  granularity: Extract<TrendGranularity, "day" | "week">
+): TrendPoint[] {
+  const bucketStats = new Map<string, { ratingSum: number; ratingCount: number; reviewCount: number }>();
+  const rangeStartKey = granularity === "day" ? toUtcDayKey(startDate) : getUtcWeekStartKey(startDate);
+  const rangeEndKey = granularity === "day" ? toUtcDayKey(endDate) : getUtcWeekStartKey(endDate);
+  const selectedStartIso = startDate.toISOString();
+  const selectedEndExclusiveIso = `${addUtcDays(toUtcDayKey(endDate), 1)}T00:00:00.000Z`;
+
+  for (const data of docs) {
+    const created = typeof data.dates?.created === "string" ? data.dates.created : null;
+    if (!created) continue;
+
+    const bucketKey = granularity === "day" ? toUtcDayKey(created) : getUtcWeekStartKey(created);
+    const current = bucketStats.get(bucketKey) ?? { ratingSum: 0, ratingCount: 0, reviewCount: 0 };
+    const rating = data.ratings?.product ?? data.ratings?.service ?? null;
+
+    current.reviewCount += 1;
+    if (typeof rating === "number" && Number.isFinite(rating)) {
+      current.ratingSum += rating;
+      current.ratingCount += 1;
+    }
+    bucketStats.set(bucketKey, current);
+  }
+
+  const points: TrendPoint[] = [];
+  let bucketKey = rangeStartKey;
+  while (bucketKey <= rangeEndKey) {
+    const stats = bucketStats.get(bucketKey) ?? { ratingSum: 0, ratingCount: 0, reviewCount: 0 };
+    const nextBucketKey = granularity === "day" ? addUtcDays(bucketKey, 1) : addUtcWeeks(bucketKey, 1);
+    const rawPeriodStart = `${bucketKey}T00:00:00.000Z`;
+    const rawPeriodEnd = `${nextBucketKey}T00:00:00.000Z`;
+    const periodStart = rawPeriodStart < selectedStartIso ? selectedStartIso : rawPeriodStart;
+    const periodEnd = rawPeriodEnd > selectedEndExclusiveIso ? selectedEndExclusiveIso : rawPeriodEnd;
+    const labels = formatPeriodLabel(
+      granularity,
+      toUtcDayKey(periodStart),
+      toUtcDayKey(periodEnd)
+    );
+
+    points.push({
+      key: bucketKey,
+      label: labels.label,
+      fullLabel: labels.fullLabel,
+      averageRating:
+        stats.ratingCount > 0
+          ? Math.round((stats.ratingSum / stats.ratingCount) * 100) / 100
+          : null,
+      reviewCount: stats.reviewCount,
+      periodStart,
+      periodEnd,
+    });
+
+    bucketKey = nextBucketKey;
+  }
+
+  return points;
+}
+
+function buildMonthlyTrendPoints(
+  monthly: MonthlySummary[],
+  startDate: Date,
+  endDate: Date
+): TrendPoint[] {
+  const statsByMonth = new Map(monthly.map((entry) => [entry.month, entry]));
+  const points: TrendPoint[] = [];
+  let monthKey = toUtcMonthKey(startDate);
+  const endMonthKey = toUtcMonthKey(endDate);
+
+  while (monthKey <= endMonthKey) {
+    const stats = statsByMonth.get(monthKey);
+    const nextMonthKey = addUtcMonths(monthKey, 1);
+    const labels = formatPeriodLabel("month", monthKey, nextMonthKey);
+
+    points.push({
+      key: monthKey,
+      label: labels.label,
+      fullLabel: labels.fullLabel,
+      averageRating: stats ? stats.averageRating : null,
+      reviewCount: stats?.reviewCount ?? 0,
+      periodStart: `${monthKey}-01T00:00:00.000Z`,
+      periodEnd: `${nextMonthKey}-01T00:00:00.000Z`,
+    });
+
+    monthKey = nextMonthKey;
+  }
+
+  return points;
 }
 
 function buildDateRangeConstraints(
@@ -666,11 +903,19 @@ async function getThemeSelectionReviews(
 }
 
 async function getMonthSelectionReviews(brand: string, month: string): Promise<ThemeReview[]> {
+  const bounds = getMonthBounds(month);
+  return getPeriodSelectionReviews(brand, bounds.start, bounds.end);
+}
+
+async function getPeriodSelectionReviews(
+  brand: string,
+  periodStart: string,
+  periodEnd: string
+): Promise<ThemeReview[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
-  const bounds = getMonthBounds(month);
   const constraints = [
-    ...buildDateRangeConstraints(brand, bounds.start, bounds.end, "<"),
+    ...buildDateRangeConstraints(brand, periodStart, periodEnd, "<"),
     limit(PANEL_REVIEW_LIMIT),
   ];
   const snap = await getDocs(query(ref, ...constraints));
