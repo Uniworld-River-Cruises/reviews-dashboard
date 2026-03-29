@@ -64,7 +64,11 @@ export default function Navigation() {
       .then((access) => {
         if (cancelled) return;
         setShowAdminTab(
-          Boolean(access.permissions.manageMappings || access.permissions.manageUsers)
+          Boolean(
+            access.permissions.sync ||
+              access.permissions.manageMappings ||
+              access.permissions.manageUsers
+          )
         );
       })
       .catch(() => {

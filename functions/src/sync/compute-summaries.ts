@@ -1,6 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { ReviewDocument, Brand, normalizeItineraryName } from "@feefo/shared";
 import { getMappingLookup } from "./itinerary-mappings";
+import { writeOperationLog } from "../ops/operation-logs";
 
 interface Summary {
   id: string;
@@ -29,54 +30,87 @@ interface MonthlySummary {
 }
 
 export async function computeSummaries(brand: Brand): Promise<void> {
-  const db = getFirestore();
-  const snapshot = await db
-    .collection("reviews")
-    .where("brand", "==", brand)
-    .get();
+  try {
+    const db = getFirestore();
+    const snapshot = await db
+      .collection("reviews")
+      .where("brand", "==", brand)
+      .get();
 
-  const reviews = snapshot.docs.map((doc) => doc.data() as ReviewDocument);
+    const reviews = snapshot.docs.map((doc) => doc.data() as ReviewDocument);
 
-  // Fleet-level summary
-  const fleetSummary = buildSummary(brand, "fleet", null, reviews);
-  await db.collection("summaries").doc(brand).set(fleetSummary);
+    // Fleet-level summary
+    const fleetSummary = buildSummary(brand, "fleet", null, reviews);
+    await db.collection("summaries").doc(brand).set(fleetSummary);
 
-  // Per-ship summaries
-  const byShip = groupBy(reviews, (r) => r.tags.ship);
-  for (const [ship, shipReviews] of Object.entries(byShip)) {
-    if (!ship) continue;
-    const summary = buildSummary(brand, "ship", ship, shipReviews);
-    summary.itineraries = [...new Set(shipReviews.map((r) => r.tags.tour).filter(Boolean) as string[])];
-    const docId = `${brand}_ship_${slugify(ship)}`;
-    await db.collection("summaries").doc(docId).set(summary);
+    // Per-ship summaries
+    const byShip = groupBy(reviews, (r) => r.tags.ship);
+    for (const [ship, shipReviews] of Object.entries(byShip)) {
+      if (!ship) continue;
+      const summary = buildSummary(brand, "ship", ship, shipReviews);
+      summary.itineraries = [
+        ...new Set(shipReviews.map((r) => r.tags.tour).filter(Boolean) as string[]),
+      ];
+      const docId = `${brand}_ship_${slugify(ship)}`;
+      await db.collection("summaries").doc(docId).set(summary);
+    }
+
+    // Per-itinerary summaries - group by effective parent name via mappings
+    const mappingLookup = await getMappingLookup(brand);
+    const resolveParent = (rawTour: string): string =>
+      mappingLookup.get(rawTour) ?? normalizeItineraryName(rawTour);
+
+    const byItinerary = groupBy(reviews, (r) => {
+      const raw = r.tags.tour ?? r.product.title;
+      return raw ? resolveParent(raw) : null;
+    });
+
+    for (const [itinerary, itinReviews] of Object.entries(byItinerary)) {
+      if (!itinerary) continue;
+      const summary = buildSummary(brand, "itinerary", itinerary, itinReviews);
+      summary.ships = [
+        ...new Set(itinReviews.map((r) => r.tags.ship).filter(Boolean) as string[]),
+      ];
+      // Track which raw itinerary names rolled up into this parent.
+      summary.childItineraries = [
+        ...new Set(
+          itinReviews.map((r) => r.tags.tour ?? r.product.title).filter(Boolean) as string[]
+        ),
+      ];
+      const docId = `${brand}_itinerary_${slugify(itinerary)}`;
+      await db.collection("summaries").doc(docId).set(summary);
+    }
+
+    await computeMonthlySummaries(brand, reviews);
+    await cleanStaleSummaries(brand, byShip, byItinerary);
+
+    await writeOperationLog({
+      type: "summary",
+      level: "success",
+      action: "recompute",
+      message: `Recomputed summaries for ${brand}`,
+      brand,
+      source: "system",
+      details: {
+        reviewCount: reviews.length,
+        shipCount: Object.keys(byShip).length,
+        itineraryCount: Object.keys(byItinerary).length,
+      },
+    });
+  } catch (error) {
+    await writeOperationLog({
+      type: "summary",
+      level: "error",
+      action: "recompute",
+      message: `Failed to recompute summaries for ${brand}`,
+      brand,
+      source: "system",
+      details: {
+        error: String(error),
+      },
+    });
+    throw error;
   }
-
-  // Per-itinerary summaries — group by effective parent name via mappings
-  const mappingLookup = await getMappingLookup(brand);
-  const resolveParent = (rawTour: string): string =>
-    mappingLookup.get(rawTour) ?? normalizeItineraryName(rawTour);
-
-  const byItinerary = groupBy(reviews, (r) => {
-    const raw = r.tags.tour ?? r.product.title;
-    return raw ? resolveParent(raw) : null;
-  });
-  for (const [itinerary, itinReviews] of Object.entries(byItinerary)) {
-    if (!itinerary) continue;
-    const summary = buildSummary(brand, "itinerary", itinerary, itinReviews);
-    summary.ships = [...new Set(itinReviews.map((r) => r.tags.ship).filter(Boolean) as string[])];
-    // Track which raw itinerary names rolled up into this parent
-    summary.childItineraries = [...new Set(
-      itinReviews.map((r) => r.tags.tour ?? r.product.title).filter(Boolean) as string[]
-    )];
-    const docId = `${brand}_itinerary_${slugify(itinerary)}`;
-    await db.collection("summaries").doc(docId).set(summary);
-  }
-
-  // Monthly summaries for trend charts
-  await computeMonthlySummaries(brand, reviews);
-
-  // Clean stale summaries
-  await cleanStaleSummaries(brand, byShip, byItinerary);
 }
 
 async function computeMonthlySummaries(brand: Brand, reviews: ReviewDocument[]): Promise<void> {
@@ -90,7 +124,9 @@ async function computeMonthlySummaries(brand: Brand, reviews: ReviewDocument[]):
 
   for (const [month, monthReviews] of Object.entries(byMonth)) {
     if (!month) continue;
-    const ratings = monthReviews.map((r) => r.ratings.product).filter((r): r is number => r !== null);
+    const ratings = monthReviews
+      .map((r) => r.ratings.product)
+      .filter((r): r is number => r !== null);
     const starDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
     for (const r of ratings) {
       starDist[String(Math.round(r))] = (starDist[String(Math.round(r))] || 0) + 1;
@@ -101,7 +137,12 @@ async function computeMonthlySummaries(brand: Brand, reviews: ReviewDocument[]):
       brand,
       month,
       totalReviews: monthReviews.length,
-      avgRating: ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 100) / 100 : 0,
+      avgRating:
+        ratings.length > 0
+          ? Math.round(
+              (ratings.reduce((a, b) => a + b, 0) / ratings.length) * 100
+            ) / 100
+          : 0,
       starDistribution: starDist,
     };
 
@@ -117,9 +158,7 @@ async function cleanStaleSummaries(
   byItinerary: Record<string, ReviewDocument[]>
 ): Promise<void> {
   const db = getFirestore();
-  const existing = await db.collection("summaries")
-    .where("brand", "==", brand)
-    .get();
+  const existing = await db.collection("summaries").where("brand", "==", brand).get();
 
   const writer = db.bulkWriter();
 

@@ -23,6 +23,10 @@ import {
   rebuildMappings as rebuildItineraryMappings,
   updateMapping as updateItineraryMapping,
 } from "./sync/itinerary-mappings";
+import {
+  listOperationLogs,
+  writeOperationLog,
+} from "./ops/operation-logs";
 
 initializeApp();
 
@@ -203,6 +207,16 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
     };
   } catch (error) {
     console.error("Automatic classification cycle failed:", error);
+    await writeOperationLog({
+      type: "classification",
+      level: "error",
+      action: "automation_failed",
+      message: "Automatic classification cycle failed",
+      source: "system",
+      details: {
+        error: String(error),
+      },
+    });
     return {
       processed: 0,
       polledStatus: null,
@@ -219,14 +233,51 @@ async function runClassificationAutomation(): Promise<ClassificationAutomationRe
 export const dailySync = onSchedule(
   { schedule: "0 */2 * * *", timeZone: "UTC", timeoutSeconds: 540, memory: "1GiB" },
   async () => {
-    const results = await syncAll(false);
-    const classification = await runClassificationAutomation();
-    await computeSummaries("uniworld");
-    await computeSummaries("luxury-gold");
-    console.log(
-      "Scheduled sync complete:",
-      JSON.stringify({ syncResults: results, classification })
-    );
+    await writeOperationLog({
+      type: "sync",
+      level: "info",
+      action: "cycle_started",
+      message: "Scheduled sync cycle started",
+      source: "scheduled",
+    });
+
+    try {
+      const results = await syncAll(false);
+      const classification = await runClassificationAutomation();
+      await computeSummaries("uniworld");
+      await computeSummaries("luxury-gold");
+      await writeOperationLog({
+        type: "sync",
+        level: "success",
+        action: "cycle_complete",
+        message: "Scheduled sync cycle completed",
+        source: "scheduled",
+        details: {
+          brands: results.map((result) => ({
+            brand: result.brand,
+            totalProcessed: result.totalProcessed,
+            errorCount: result.errors.length,
+          })),
+          classification,
+        },
+      });
+      console.log(
+        "Scheduled sync complete:",
+        JSON.stringify({ syncResults: results, classification })
+      );
+    } catch (error) {
+      await writeOperationLog({
+        type: "sync",
+        level: "error",
+        action: "cycle_failed",
+        message: "Scheduled sync cycle failed",
+        source: "scheduled",
+        details: {
+          error: String(error),
+        },
+      });
+      throw error;
+    }
   }
 );
 
@@ -246,12 +297,59 @@ export const manualSync = onRequest(
     }
 
     const fullSync = req.body?.fullSync === true;
-    const results = await syncAll(fullSync);
-    const classification = await runClassificationAutomation();
-    await computeSummaries("uniworld");
-    await computeSummaries("luxury-gold");
-    console.log(`manualSync triggered by ${caller.source}:${caller.email ?? caller.uid}`);
-    res.json({ success: true, results, classification });
+    await writeOperationLog({
+      type: "sync",
+      level: "info",
+      action: "cycle_started",
+      message: "Manual sync cycle started",
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+      details: {
+        fullSync,
+      },
+    });
+
+    try {
+      const results = await syncAll(fullSync);
+      const classification = await runClassificationAutomation();
+      await computeSummaries("uniworld");
+      await computeSummaries("luxury-gold");
+      await writeOperationLog({
+        type: "sync",
+        level: "success",
+        action: "cycle_complete",
+        message: "Manual sync cycle completed",
+        source: "manual",
+        actorEmail: caller.email,
+        actorUid: caller.uid,
+        details: {
+          brands: results.map((result) => ({
+            brand: result.brand,
+            totalProcessed: result.totalProcessed,
+            errorCount: result.errors.length,
+          })),
+          classification,
+        },
+      });
+      console.log(`manualSync triggered by ${caller.source}:${caller.email ?? caller.uid}`);
+      res.json({ success: true, results, classification });
+    } catch (error) {
+      await writeOperationLog({
+        type: "sync",
+        level: "error",
+        action: "cycle_failed",
+        message: "Manual sync cycle failed",
+        source: "manual",
+        actorEmail: caller.email,
+        actorUid: caller.uid,
+        details: {
+          error: String(error),
+          fullSync,
+        },
+      });
+      throw error;
+    }
   }
 );
 
@@ -327,12 +425,39 @@ export const itineraryMappings = onRequest(
     if (action === "recompute") {
       if (!brand || brand === "uniworld") await computeSummaries("uniworld");
       if (!brand || brand === "luxury-gold") await computeSummaries("luxury-gold");
+      await writeOperationLog({
+        type: "summary",
+        level: "info",
+        action: "manual_recompute_requested",
+        message: "Manual summary recompute completed",
+        brand: brand ?? "combined",
+        source: "manual",
+        actorEmail: caller.email,
+        actorUid: caller.uid,
+      });
       console.log(`itineraryMappings recompute by ${caller.source}:${caller.email ?? caller.uid}`);
       res.json({ success: true });
       return;
     }
 
     res.status(400).json({ error: "Invalid action. Use 'rebuild', 'update', or 'recompute'." });
+  }
+);
+
+export const adminLogs = onRequest(
+  { timeoutSeconds: 120, memory: "512MiB", invoker: "public", cors: true },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "sync");
+    if (!caller) return;
+
+    const hours =
+      typeof req.body?.hours === "number" && req.body.hours > 0 ? req.body.hours : null;
+    const limit =
+      typeof req.body?.limit === "number" && req.body.limit > 0 ? req.body.limit : undefined;
+
+    const logs = await listOperationLogs({ hours, limit });
+    res.json({ logs });
   }
 );
 

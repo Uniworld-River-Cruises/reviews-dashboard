@@ -51,6 +51,24 @@ export interface KnownUser {
   active: boolean | null;
 }
 
+export type OperationLogType = "sync" | "classification" | "summary";
+export type OperationLogLevel = "info" | "success" | "warning" | "error";
+export type OperationLogSource = "scheduled" | "manual" | "system";
+
+export interface OperationLogEntry {
+  id: string;
+  type: OperationLogType;
+  level: OperationLogLevel;
+  action: string;
+  message: string;
+  createdAt: string;
+  brand?: string | null;
+  source?: OperationLogSource;
+  actorEmail?: string | null;
+  actorUid?: string | null;
+  details?: Record<string, unknown> | null;
+}
+
 export async function getItineraryMappings(brand: string): Promise<ItineraryMapping[]> {
   const db = getClientDb();
   const ref = collection(db, "itinerary_mappings");
@@ -131,4 +149,15 @@ export async function removeAdminUser(email: string): Promise<void> {
     action: "remove",
     email,
   });
+}
+
+export async function listOperationalLogs(
+  hours?: number | null,
+  limit?: number
+): Promise<OperationLogEntry[]> {
+  const response = await postFunction<{ logs?: OperationLogEntry[] }>("adminLogs", {
+    hours: typeof hours === "number" ? hours : null,
+    limit,
+  });
+  return response.logs ?? [];
 }

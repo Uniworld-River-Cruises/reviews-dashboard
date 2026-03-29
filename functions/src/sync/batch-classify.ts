@@ -1,5 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { POSITIVE_THEMES, NEGATIVE_THEMES, VALID_POSITIVE_NAMES, VALID_NEGATIVE_NAMES } from "@feefo/shared";
+import { writeOperationLog } from "../ops/operation-logs";
 
 const BATCH_SIZE = 10000; // Max requests per Anthropic batch
 const ACTIVE_BATCH_STATUSES = new Set(["processing", "in_progress", "canceling", "submitting"]);
@@ -61,6 +62,17 @@ export async function submitClassificationBatch(): Promise<BatchClassifyResult> 
   });
 
   if (!reservation.acquired) {
+    await writeOperationLog({
+      type: "classification",
+      level: "info",
+      action: "batch_submit_skipped",
+      message: "Skipped classification batch submission because another batch is already active",
+      source: "system",
+      details: {
+        batchId: reservation.batchId ?? null,
+        status: reservation.status,
+      },
+    });
     return {
       totalUnclassified: 0,
       batchId: reservation.batchId ?? null,
@@ -87,6 +99,13 @@ export async function submitClassificationBatch(): Promise<BatchClassifyResult> 
       },
       { merge: true }
     );
+    await writeOperationLog({
+      type: "classification",
+      level: "info",
+      action: "batch_submit_skipped",
+      message: "No unclassified reviews were found for classification",
+      source: "system",
+    });
     return { totalUnclassified: 0, batchId: null, error: null, status: "idle" };
   }
 
@@ -161,6 +180,17 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
       },
       { merge: true }
     );
+    await writeOperationLog({
+      type: "classification",
+      level: "success",
+      action: "batch_submitted",
+      message: `Submitted classification batch ${batch.id}`,
+      source: "system",
+      details: {
+        totalRequests: requests.length,
+        status: batch.processing_status,
+      },
+    });
 
     return {
       totalUnclassified: snapshot.size,
@@ -181,6 +211,17 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
       },
       { merge: true }
     );
+    await writeOperationLog({
+      type: "classification",
+      level: "error",
+      action: "batch_submit_failed",
+      message: "Failed to submit classification batch",
+      source: "system",
+      details: {
+        error: errorMsg,
+        attemptedCount: snapshot.size,
+      },
+    });
     return { totalUnclassified: snapshot.size, batchId: null, error: errorMsg, status: "error" };
   }
 }
@@ -229,6 +270,17 @@ export async function processBatchResults(batchId?: string): Promise<{ processed
       { status: batchStatus.processing_status, lastChecked: new Date().toISOString() },
       { merge: true }
     );
+    await writeOperationLog({
+      type: "classification",
+      level: "info",
+      action: "batch_poll_in_progress",
+      message: `Classification batch ${batchId} is still ${batchStatus.processing_status}`,
+      source: "system",
+      details: {
+        batchId,
+        requestCounts: batchStatus.request_counts as unknown as Record<string, unknown>,
+      },
+    });
     return { processed: 0, status: batchStatus.processing_status };
   }
 
@@ -297,6 +349,18 @@ export async function processBatchResults(batchId?: string): Promise<{ processed
     completedAt: new Date().toISOString(),
     processed,
     total: lines.length,
+  });
+  await writeOperationLog({
+    type: "classification",
+    level: "success",
+    action: "batch_complete",
+    message: `Completed classification batch ${batchId}`,
+    source: "system",
+    details: {
+      batchId,
+      processed,
+      total: lines.length,
+    },
   });
 
   console.log(`Batch ${batchId}: wrote ${processed}/${lines.length} classifications to Firestore`);
