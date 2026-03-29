@@ -36,6 +36,10 @@ const TOOLTIP_LABEL_STYLE = {
   fontWeight: 600,
 };
 
+const TOOLTIP_ITEM_STYLE = {
+  color: "#cbd5e1",
+};
+
 export default function RatingDistributionChart({
   data,
   onBarClick,
@@ -57,6 +61,7 @@ export default function RatingDistributionChart({
             cursor={false}
             contentStyle={TOOLTIP_STYLE}
             labelStyle={TOOLTIP_LABEL_STYLE}
+            itemStyle={TOOLTIP_ITEM_STYLE}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
