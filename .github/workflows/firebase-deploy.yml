@@ -85,13 +85,13 @@ jobs:
             echo "FEEFO_LUXURY_GOLD_CLIENT_ID=${FEEFO_LG_ID}"
             echo "FEEFO_LUXURY_GOLD_CLIENT_SECRET=${FEEFO_LG_SECRET}"
           } > functions/.env.feefo-reviews
-          [ -n "${V_ADMIN_EMAILS}" ] && echo "ADMIN_EMAILS=${V_ADMIN_EMAILS}" >> functions/.env.feefo-reviews
-          [ -n "${V_ANTHROPIC_API_KEY}" ] && echo "ANTHROPIC_API_KEY=${V_ANTHROPIC_API_KEY}" >> functions/.env.feefo-reviews
-          [ -n "${V_ALGOLIA_APP_ID}" ] && echo "ALGOLIA_APP_ID=${V_ALGOLIA_APP_ID}" >> functions/.env.feefo-reviews
-          [ -n "${V_ALGOLIA_ADMIN_KEY}" ] && echo "ALGOLIA_ADMIN_KEY=${V_ALGOLIA_ADMIN_KEY}" >> functions/.env.feefo-reviews
-          [ -n "${V_REQUIRE_ADMIN_CLAIM}" ] && echo "REQUIRE_ADMIN_CLAIM=${V_REQUIRE_ADMIN_CLAIM}" >> functions/.env.feefo-reviews
-          [ -n "${V_SYNC_API_TOKEN}" ] && echo "SYNC_API_TOKEN=${V_SYNC_API_TOKEN}" >> functions/.env.feefo-reviews
-          [ -n "${V_CORS_ALLOWED_ORIGINS}" ] && echo "CORS_ALLOWED_ORIGINS=${V_CORS_ALLOWED_ORIGINS}" >> functions/.env.feefo-reviews
+          [ -n "${V_ADMIN_EMAILS}" ] && echo "ADMIN_EMAILS=${V_ADMIN_EMAILS}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_ANTHROPIC_API_KEY}" ] && echo "ANTHROPIC_API_KEY=${V_ANTHROPIC_API_KEY}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_ALGOLIA_APP_ID}" ] && echo "ALGOLIA_APP_ID=${V_ALGOLIA_APP_ID}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_ALGOLIA_ADMIN_KEY}" ] && echo "ALGOLIA_ADMIN_KEY=${V_ALGOLIA_ADMIN_KEY}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_REQUIRE_ADMIN_CLAIM}" ] && echo "REQUIRE_ADMIN_CLAIM=${V_REQUIRE_ADMIN_CLAIM}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_SYNC_API_TOKEN}" ] && echo "SYNC_API_TOKEN=${V_SYNC_API_TOKEN}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_CORS_ALLOWED_ORIGINS}" ] && echo "CORS_ALLOWED_ORIGINS=${V_CORS_ALLOWED_ORIGINS}" >> functions/.env.feefo-reviews || true
 
       - name: Build frontend
         run: npm --prefix app run build
