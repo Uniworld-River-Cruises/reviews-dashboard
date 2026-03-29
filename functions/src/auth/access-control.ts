@@ -20,6 +20,16 @@ export interface AdminUserRecord {
 }
 
 const ADMIN_USERS_COLLECTION = "admin_users";
+const KNOWN_USERS_COLLECTION = "known_users";
+
+export interface KnownUserRecord {
+  email: string;
+  uid?: string;
+  displayName?: string | null;
+  photoURL?: string | null;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+}
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -169,4 +179,88 @@ export async function deleteAdminUser(email: string): Promise<void> {
 export async function getOwnerCount(): Promise<number> {
   const users = await listAdminUsers();
   return users.filter((user) => user.active !== false && user.role === "owner").length;
+}
+
+export async function upsertKnownUser(input: {
+  email: string;
+  uid?: string;
+  displayName?: string | null;
+  photoURL?: string | null;
+}): Promise<KnownUserRecord> {
+  const email = normalizeEmail(input.email);
+  const db = getFirestore();
+  const docRef = db.collection(KNOWN_USERS_COLLECTION).doc(email);
+  const snapshot = await docRef.get();
+  const existing = snapshot.data() ?? {};
+  const now = new Date().toISOString();
+
+  const record: KnownUserRecord = {
+    email,
+    uid:
+      typeof input.uid === "string" && input.uid
+        ? input.uid
+        : typeof existing.uid === "string"
+          ? existing.uid
+          : undefined,
+    displayName:
+      typeof input.displayName === "string"
+        ? input.displayName
+        : input.displayName === null
+          ? null
+          : typeof existing.displayName === "string"
+            ? existing.displayName
+            : existing.displayName === null
+              ? null
+              : undefined,
+    photoURL:
+      typeof input.photoURL === "string"
+        ? input.photoURL
+        : input.photoURL === null
+          ? null
+          : typeof existing.photoURL === "string"
+            ? existing.photoURL
+            : existing.photoURL === null
+              ? null
+              : undefined,
+    firstSeenAt:
+      typeof existing.firstSeenAt === "string" ? existing.firstSeenAt : now,
+    lastSeenAt: now,
+  };
+
+  await docRef.set(record, { merge: true });
+  return record;
+}
+
+export async function listKnownUsers(): Promise<KnownUserRecord[]> {
+  const db = getFirestore();
+  const snapshot = await db.collection(KNOWN_USERS_COLLECTION).get();
+
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data() ?? {};
+      return {
+        email:
+          typeof data.email === "string"
+            ? normalizeEmail(data.email)
+            : normalizeEmail(doc.id),
+        uid: typeof data.uid === "string" ? data.uid : undefined,
+        displayName:
+          typeof data.displayName === "string" || data.displayName === null
+            ? data.displayName
+            : undefined,
+        photoURL:
+          typeof data.photoURL === "string" || data.photoURL === null
+            ? data.photoURL
+            : undefined,
+        firstSeenAt:
+          typeof data.firstSeenAt === "string" ? data.firstSeenAt : undefined,
+        lastSeenAt:
+          typeof data.lastSeenAt === "string" ? data.lastSeenAt : undefined,
+      } satisfies KnownUserRecord;
+    })
+    .sort((a, b) => {
+      const left = a.lastSeenAt ?? "";
+      const right = b.lastSeenAt ?? "";
+      return right.localeCompare(left);
+    });
 }

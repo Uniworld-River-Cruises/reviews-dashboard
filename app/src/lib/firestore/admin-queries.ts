@@ -40,6 +40,17 @@ export interface CurrentAdminAccess {
   permissions: Record<AdminAccessPermission, boolean>;
 }
 
+export interface KnownUser {
+  email: string;
+  uid?: string;
+  displayName?: string | null;
+  photoURL?: string | null;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  role: AdminRole | null;
+  active: boolean | null;
+}
+
 export async function getItineraryMappings(brand: string): Promise<ItineraryMapping[]> {
   const db = getClientDb();
   const ref = collection(db, "itinerary_mappings");
@@ -92,6 +103,13 @@ export async function getCurrentAdminAccess(): Promise<CurrentAdminAccess> {
     action: "current",
   });
   return response.access;
+}
+
+export async function listKnownUsers(): Promise<KnownUser[]> {
+  const response = await postFunction<{ knownUsers?: KnownUser[] }>("adminUsers", {
+    action: "known",
+  });
+  return response.knownUsers ?? [];
 }
 
 export async function upsertAdminUser(
