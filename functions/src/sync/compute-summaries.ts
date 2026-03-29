@@ -1,7 +1,7 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { ReviewDocument, Brand, normalizeItineraryName } from "@feefo/shared";
 import { getMappingLookup } from "./itinerary-mappings";
-import { writeOperationLog } from "../ops/operation-logs";
+import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
 
 interface Summary {
   id: string;
@@ -29,7 +29,16 @@ interface MonthlySummary {
   starDistribution: Record<string, number>;
 }
 
-export async function computeSummaries(brand: Brand): Promise<void> {
+interface SummaryLogContext {
+  source?: OperationLogSource;
+  actorEmail?: string | null;
+  actorUid?: string | null;
+}
+
+export async function computeSummaries(
+  brand: Brand,
+  logContext: SummaryLogContext = {}
+): Promise<void> {
   try {
     const db = getFirestore();
     const snapshot = await db
@@ -88,9 +97,11 @@ export async function computeSummaries(brand: Brand): Promise<void> {
       type: "summary",
       level: "success",
       action: "recompute",
-      message: `Recomputed summaries for ${brand}`,
+      message: `Rebuilt ${brand} summaries from ${reviews.length} review(s)`,
       brand,
-      source: "system",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         reviewCount: reviews.length,
         shipCount: Object.keys(byShip).length,
@@ -102,9 +113,11 @@ export async function computeSummaries(brand: Brand): Promise<void> {
       type: "summary",
       level: "error",
       action: "recompute",
-      message: `Failed to recompute summaries for ${brand}`,
+      message: `Summary recompute failed for ${brand}`,
       brand,
-      source: "system",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         error: String(error),
       },

@@ -1,6 +1,6 @@
 import { getFirestore } from "firebase-admin/firestore";
 import { POSITIVE_THEMES, NEGATIVE_THEMES, VALID_POSITIVE_NAMES, VALID_NEGATIVE_NAMES } from "@feefo/shared";
-import { writeOperationLog } from "../ops/operation-logs";
+import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
 
 const BATCH_SIZE = 10000; // Max requests per Anthropic batch
 const ACTIVE_BATCH_STATUSES = new Set(["processing", "in_progress", "canceling", "submitting"]);
@@ -13,6 +13,12 @@ interface BatchClassifyResult {
   status: string;
 }
 
+interface ClassificationLogContext {
+  source?: OperationLogSource;
+  actorEmail?: string | null;
+  actorUid?: string | null;
+}
+
 /**
  * Find all unclassified reviews in Firestore and submit them
  * to the Anthropic Batch API for classification.
@@ -20,7 +26,9 @@ interface BatchClassifyResult {
  * The Batch API processes asynchronously (usually within minutes to hours)
  * at 50% the cost of real-time calls, with no rate limiting.
  */
-export async function submitClassificationBatch(): Promise<BatchClassifyResult> {
+export async function submitClassificationBatch(
+  logContext: ClassificationLogContext = {}
+): Promise<BatchClassifyResult> {
   const db = getFirestore();
   const batchMetaRef = db.collection("sync_meta").doc("batch_classify");
   const lockToken = `lock-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -66,8 +74,10 @@ export async function submitClassificationBatch(): Promise<BatchClassifyResult> 
       type: "classification",
       level: "info",
       action: "batch_submit_skipped",
-      message: "Skipped classification batch submission because another batch is already active",
-      source: "system",
+      message: "Skipped theme classification because another batch is already active",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         batchId: reservation.batchId ?? null,
         status: reservation.status,
@@ -105,8 +115,10 @@ export async function submitClassificationBatch(): Promise<BatchClassifyResult> 
       type: "classification",
       level: "info",
       action: "batch_submit_skipped",
-      message: "No unclassified reviews were found for classification",
-      source: "system",
+      message: "No reviews needed theme classification",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
     });
     return { totalUnclassified: 0, batchId: null, error: null, status: "idle" };
   }
@@ -186,9 +198,12 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
       type: "classification",
       level: "success",
       action: "batch_submitted",
-      message: `Submitted classification batch ${batch.id}`,
-      source: "system",
+      message: `Submitted ${requests.length} review(s) for theme classification`,
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
+        batchId: batch.id,
         totalRequests: requests.length,
         status: batch.processing_status,
       },
@@ -217,8 +232,10 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
       type: "classification",
       level: "error",
       action: "batch_submit_failed",
-      message: "Failed to submit classification batch",
-      source: "system",
+      message: "Could not submit theme classification batch",
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         error: errorMsg,
         attemptedCount: snapshot.size,
@@ -231,7 +248,10 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
 /**
  * Check if a batch is complete and write results back to Firestore.
  */
-export async function processBatchResults(batchId?: string): Promise<{ processed: number; status: string }> {
+export async function processBatchResults(
+  batchId?: string,
+  logContext: ClassificationLogContext = {}
+): Promise<{ processed: number; status: string }> {
   const db = getFirestore();
 
   // Get batch ID from Firestore if not provided
@@ -276,8 +296,10 @@ export async function processBatchResults(batchId?: string): Promise<{ processed
       type: "classification",
       level: "info",
       action: "batch_poll_in_progress",
-      message: `Classification batch ${batchId} is still ${batchStatus.processing_status}`,
-      source: "system",
+      message: `Theme classification batch is still ${batchStatus.processing_status}`,
+      source: logContext.source ?? "system",
+      actorEmail: logContext.actorEmail ?? null,
+      actorUid: logContext.actorUid ?? null,
       details: {
         batchId,
         requestCounts: batchStatus.request_counts as unknown as Record<string, unknown>,
@@ -358,8 +380,10 @@ export async function processBatchResults(batchId?: string): Promise<{ processed
     type: "classification",
     level: "success",
     action: "batch_complete",
-    message: `Completed classification batch ${batchId}`,
-    source: "system",
+    message: `Applied theme classification to ${processed} review(s)`,
+    source: logContext.source ?? "system",
+    actorEmail: logContext.actorEmail ?? null,
+    actorUid: logContext.actorUid ?? null,
     details: {
       batchId,
       processed,

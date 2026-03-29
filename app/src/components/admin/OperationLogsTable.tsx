@@ -20,20 +20,279 @@ function LevelBadge({ level }: { level: OperationLogLevel }) {
   );
 }
 
-function renderDetails(details: Record<string, unknown> | null | undefined): string {
-  if (!details) return "";
+type DetailRow = {
+  label: string;
+  value: string;
+};
 
-  const parts = Object.entries(details)
-    .filter(([, value]) => value !== null && value !== undefined && value !== "")
-    .slice(0, 3)
-    .map(([key, value]) => {
-      if (typeof value === "object") {
-        return `${key}: ${JSON.stringify(value)}`;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatDateTime(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return format(parsed, "M/d/yyyy h:mm:ss a");
+}
+
+function formatCount(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toLocaleString();
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+  return null;
+}
+
+function formatText(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toLocaleString();
+  }
+  if (typeof value === "boolean") {
+    return value ? "Yes" : "No";
+  }
+  return null;
+}
+
+function brandLabel(value: unknown): string | null {
+  if (value === "uniworld") return "Uniworld";
+  if (value === "luxury-gold") return "Luxury Gold";
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+  return null;
+}
+
+function formatRequestCounts(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+
+  const parts = [
+    typeof value.succeeded === "number" ? `${value.succeeded} succeeded` : null,
+    typeof value.processing === "number" ? `${value.processing} processing` : null,
+    typeof value.errored === "number" ? `${value.errored} errored` : null,
+    typeof value.expired === "number" ? `${value.expired} expired` : null,
+    typeof value.canceled === "number" ? `${value.canceled} canceled` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(", ") : null;
+}
+
+function getCycleClassificationSummary(value: unknown): DetailRow[] {
+  if (!isRecord(value)) return [];
+
+  const rows: DetailRow[] = [];
+  const batchId = formatText(value.submittedBatchId ?? value.batchId);
+  const batchStatus = formatText(value.batchStatus ?? value.polledStatus ?? value.status);
+  const submittedReviews = formatCount(value.submittedReviews ?? value.submittedCount);
+  const processedReviews = formatCount(value.processedReviews ?? value.processed);
+  const skippedReason = formatText(value.skippedReason);
+  const error = formatText(value.error);
+  const themesUpdated = formatText(value.themesUpdated);
+
+  if (submittedReviews) {
+    rows.push({ label: "Classification submitted", value: `${submittedReviews} review(s)` });
+  }
+  if (processedReviews) {
+    rows.push({ label: "Themes applied", value: `${processedReviews} review(s)` });
+  }
+  if (batchStatus) {
+    rows.push({ label: "Classification status", value: batchStatus });
+  }
+  if (batchId) {
+    rows.push({ label: "Classification batch", value: batchId });
+  }
+  if (themesUpdated) {
+    rows.push({ label: "Themes updated", value: themesUpdated });
+  }
+  if (skippedReason) {
+    rows.push({ label: "Classification skipped", value: skippedReason });
+  }
+  if (error) {
+    rows.push({ label: "Classification error", value: error });
+  }
+
+  return rows;
+}
+
+function getDetailRows(log: OperationLogEntry): DetailRow[] {
+  const rows: DetailRow[] = [];
+  const details = isRecord(log.details) ? log.details : null;
+
+  if (log.brand) {
+    rows.push({ label: "Brand", value: brandLabel(log.brand) ?? log.brand });
+  }
+  if (log.source) {
+    rows.push({ label: "Triggered by", value: log.source });
+  }
+  if (log.actorEmail) {
+    rows.push({ label: "Actor", value: log.actorEmail });
+  }
+
+  if (!details) {
+    return rows;
+  }
+
+  if (log.action === "brand_sync_complete" || log.action === "brand_sync_failed") {
+    const totalProcessed = formatCount(details.totalProcessed);
+    const newReviews = formatCount(details.newReviews);
+    const updatedReviews = formatCount(details.updatedReviews);
+    const unchangedReviews = formatCount(details.unchangedReviews);
+    const writtenReviews = formatCount(details.writtenReviews);
+    const errorCount = formatCount(details.errorCount);
+    const maxSourceUpdatedAt = formatDateTime(
+      typeof details.maxSourceUpdatedAt === "string" ? details.maxSourceUpdatedAt : null
+    );
+    const error = formatText(details.error);
+
+    if (totalProcessed) rows.push({ label: "Feefo reviews checked", value: totalProcessed });
+    if (newReviews) rows.push({ label: "New reviews found", value: newReviews });
+    if (updatedReviews) rows.push({ label: "Existing reviews updated", value: updatedReviews });
+    if (unchangedReviews) rows.push({ label: "Already up to date", value: unchangedReviews });
+    if (writtenReviews) rows.push({ label: "Written to Firestore", value: writtenReviews });
+    if (errorCount) rows.push({ label: "Errors", value: errorCount });
+    if (maxSourceUpdatedAt) rows.push({ label: "Newest Feefo update", value: maxSourceUpdatedAt });
+    if (error) rows.push({ label: "Error", value: error });
+    return rows;
+  }
+
+  if (log.action === "cycle_complete" || log.action === "cycle_failed") {
+    const fullSync = formatText(details.fullSync);
+    const error = formatText(details.error);
+    if (fullSync) {
+      rows.push({ label: "Full historical sync", value: fullSync });
+    }
+    if (Array.isArray(details.brands)) {
+      for (const item of details.brands) {
+        if (!isRecord(item)) continue;
+        const name = brandLabel(item.brand) ?? "Brand";
+        const checked = formatCount(item.totalProcessed) ?? "0";
+        const newReviews = formatCount(item.newReviews) ?? "0";
+        const updatedReviews = formatCount(item.updatedReviews) ?? "0";
+        const unchangedReviews = formatCount(item.unchangedReviews) ?? "0";
+        const errors = formatCount(item.errorCount) ?? "0";
+        rows.push({
+          label: `${name} sync`,
+          value: `${checked} checked, ${newReviews} new, ${updatedReviews} updated, ${unchangedReviews} unchanged, ${errors} errors`,
+        });
       }
-      return `${key}: ${String(value)}`;
-    });
+    }
+    rows.push(...getCycleClassificationSummary(details.classification));
+    if (error) rows.push({ label: "Error", value: error });
+    return rows;
+  }
 
-  return parts.join(" | ");
+  if (log.action === "batch_submitted") {
+    const totalRequests = formatCount(details.totalRequests);
+    const status = formatText(details.status);
+    const batchId = formatText(details.batchId);
+    if (totalRequests) rows.push({ label: "Reviews submitted", value: totalRequests });
+    if (status) rows.push({ label: "Batch status", value: status });
+    if (batchId) rows.push({ label: "Batch ID", value: batchId });
+    return rows;
+  }
+
+  if (log.action === "batch_poll_in_progress") {
+    const batchId = formatText(details.batchId);
+    const requestCounts = formatRequestCounts(details.requestCounts);
+    if (batchId) rows.push({ label: "Batch ID", value: batchId });
+    if (requestCounts) rows.push({ label: "Requests", value: requestCounts });
+    return rows;
+  }
+
+  if (log.action === "batch_complete") {
+    const batchId = formatText(details.batchId);
+    const processed = formatCount(details.processed);
+    const total = formatCount(details.total);
+    if (batchId) rows.push({ label: "Batch ID", value: batchId });
+    if (processed) rows.push({ label: "Reviews classified", value: processed });
+    if (total) rows.push({ label: "Results received", value: total });
+    return rows;
+  }
+
+  if (log.action === "batch_submit_failed" || log.action === "automation_failed") {
+    const error = formatText(details.error);
+    const attemptedCount = formatCount(details.attemptedCount);
+    if (attemptedCount) rows.push({ label: "Reviews attempted", value: attemptedCount });
+    if (error) rows.push({ label: "Error", value: error });
+    return rows;
+  }
+
+  if (log.action === "batch_submit_skipped" || log.action === "automation_skipped_unconfigured") {
+    const batchId = formatText(details.batchId);
+    const status = formatText(details.status);
+    const missingSetting = formatText(details.missingSetting);
+    if (batchId) rows.push({ label: "Batch ID", value: batchId });
+    if (status) rows.push({ label: "Current status", value: status });
+    if (missingSetting) rows.push({ label: "Missing setting", value: missingSetting });
+    return rows;
+  }
+
+  if (log.action === "recompute") {
+    const reviewCount = formatCount(details.reviewCount);
+    const shipCount = formatCount(details.shipCount);
+    const itineraryCount = formatCount(details.itineraryCount);
+    const error = formatText(details.error);
+    if (reviewCount) rows.push({ label: "Reviews included", value: reviewCount });
+    if (shipCount) rows.push({ label: "Ships summarized", value: shipCount });
+    if (itineraryCount) rows.push({ label: "Itineraries summarized", value: itineraryCount });
+    if (error) rows.push({ label: "Error", value: error });
+    return rows;
+  }
+
+  const fallbackRows = Object.entries(details)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .slice(0, 5)
+    .map(([key, value]) => ({
+      label: key,
+      value:
+        typeof value === "object" ? JSON.stringify(value) : typeof value === "boolean"
+          ? value ? "Yes" : "No"
+          : String(value),
+    }));
+
+  return rows.concat(fallbackRows);
+}
+
+function actionLabel(action: string): string {
+  switch (action) {
+    case "cycle_started":
+      return "Sync run started";
+    case "cycle_complete":
+      return "Sync run finished";
+    case "cycle_failed":
+      return "Sync run failed";
+    case "brand_sync_complete":
+      return "Brand sync finished";
+    case "brand_sync_failed":
+      return "Brand sync failed";
+    case "brand_skipped_locked":
+      return "Skipped because another sync is active";
+    case "batch_submit_skipped":
+      return "Classification skipped";
+    case "batch_submitted":
+      return "Classification submitted";
+    case "batch_submit_failed":
+      return "Classification submit failed";
+    case "batch_poll_in_progress":
+      return "Classification still running";
+    case "batch_complete":
+      return "Classification finished";
+    case "automation_skipped_unconfigured":
+      return "Classification not configured";
+    case "automation_failed":
+      return "Classification automation failed";
+    case "recompute":
+      return "Summary refresh";
+    case "manual_recompute_requested":
+      return "Manual summary refresh";
+    default:
+      return action.replace(/_/g, " ");
+  }
 }
 
 export default function OperationLogsTable({
@@ -59,7 +318,7 @@ export default function OperationLogsTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-      <table className="w-full min-w-[860px] text-sm">
+      <table className="w-full min-w-[980px] text-sm">
         <thead>
           <tr className="bg-gray-50 text-left text-gray-500">
             <th className="px-4 py-3 font-medium">Time</th>
@@ -71,14 +330,7 @@ export default function OperationLogsTable({
         </thead>
         <tbody>
           {logs.map((log) => {
-            const context = [
-              log.brand ? `brand: ${log.brand}` : null,
-              log.source ? `source: ${log.source}` : null,
-              log.actorEmail ? `actor: ${log.actorEmail}` : null,
-              renderDetails(log.details),
-            ]
-              .filter(Boolean)
-              .join(" | ");
+            const detailRows = getDetailRows(log);
 
             return (
               <tr key={log.id} className="border-t border-gray-100 align-top">
@@ -95,10 +347,21 @@ export default function OperationLogsTable({
                 </td>
                 <td className="px-4 py-3 text-gray-900">
                   <div className="font-medium">{log.message}</div>
-                  <div className="mt-1 text-xs text-gray-500">{log.action}</div>
+                  <div className="mt-1 text-xs text-gray-500">{actionLabel(log.action)}</div>
                 </td>
-                <td className="px-4 py-3 text-xs leading-5 text-gray-500">
-                  {context || "-"}
+                <td className="px-4 py-3 text-xs leading-5 text-gray-600">
+                  {detailRows.length > 0 ? (
+                    <dl className="space-y-1.5">
+                      {detailRows.map((row) => (
+                        <div key={`${log.id}-${row.label}`} className="grid grid-cols-[132px_minmax(0,1fr)] gap-2">
+                          <dt className="font-medium text-gray-500">{row.label}</dt>
+                          <dd className="break-words text-gray-700">{row.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : (
+                    "-"
+                  )}
                 </td>
               </tr>
             );
