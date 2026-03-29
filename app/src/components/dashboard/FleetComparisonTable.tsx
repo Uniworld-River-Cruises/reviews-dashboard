@@ -60,7 +60,7 @@ export default function FleetComparisonTable({ data }: FleetComparisonTableProps
   return (
     <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <h3 className="text-lg font-semibold text-[#1B3A5C]">Fleet Comparison</h3>
+        <h3 className="text-lg font-semibold text-[#1B3A5C]">Itinerary Comparison</h3>
         <input
           type="text"
           placeholder="Search itineraries..."
