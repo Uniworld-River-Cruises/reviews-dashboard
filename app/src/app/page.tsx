@@ -11,22 +11,24 @@ import FleetComparisonTable from "@/components/dashboard/FleetComparisonTable";
 import {
   getFleetSummary,
   getFleetSummaryByDateRange,
-  getMonthlySummaries,
+  getTrendSeries,
   getEntitySummaries,
   getEntitySummariesByDateRange,
   getReviewsForOverviewSelection,
   type OverviewSelectionFilter,
   type FleetSummary,
-  type MonthlySummary,
   type EntitySummary,
   type ThemeReview,
+  type TrendPoint,
+  type TrendGranularity,
 } from "@/lib/firestore/queries";
 
 export default function OverviewPage() {
   const { brand, dateRange, dataVersion } = useDashboard();
 
   const [fleet, setFleet] = useState<FleetSummary | null>(null);
-  const [monthly, setMonthly] = useState<MonthlySummary[]>([]);
+  const [trendPoints, setTrendPoints] = useState<TrendPoint[]>([]);
+  const [trendGranularity, setTrendGranularity] = useState<TrendGranularity>("month");
   const [entities, setEntities] = useState<EntitySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,18 +58,14 @@ export default function OverviewPage() {
 
     Promise.all([
       fleetPromise,
-      getMonthlySummaries(brand),
+      getTrendSeries(brand, dateRange.start, dateRange.end),
       entityPromise,
-    ]).then(([f, m, e]) => {
+    ]).then(([f, trend, e]) => {
       if (cancelled) return;
 
-      // Filter monthly summaries by date range
-      const startMonth = `${dateRange.start.getFullYear()}-${String(dateRange.start.getMonth() + 1).padStart(2, "0")}`;
-      const endMonth = `${dateRange.end.getFullYear()}-${String(dateRange.end.getMonth() + 1).padStart(2, "0")}`;
-      const filteredMonthly = m.filter((ms) => ms.month >= startMonth && ms.month <= endMonth);
-
       setFleet(f);
-      setMonthly(filteredMonthly);
+      setTrendPoints(trend.points);
+      setTrendGranularity(trend.granularity);
       setEntities(e);
       setLoading(false);
     }).catch((err) => {
@@ -217,13 +215,19 @@ export default function OverviewPage() {
 
       {/* Trend Charts (rating + volume side by side) */}
       <TrendChart
-        data={monthly}
-        onSelectMonth={(month) =>
+        data={trendPoints}
+        granularity={trendGranularity}
+        onSelectPeriod={(period) =>
           openPanel({
-            title: `Reviews from ${month}`,
-            subtitle: "Reviews included in the selected month",
+            title: `Reviews from ${period.fullLabel}`,
+            subtitle: `Reviews included in the selected ${trendGranularity} range`,
             accent: "neutral",
-            filter: { kind: "month", month },
+            filter: {
+              kind: "period",
+              start: period.periodStart,
+              end: period.periodEnd,
+              label: period.fullLabel,
+            },
           })
         }
       />
