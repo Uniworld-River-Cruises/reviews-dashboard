@@ -105,9 +105,9 @@ export default function Navigation() {
   return (
     <nav className="border-b border-gray-200 bg-white shadow-sm dark:bg-[#111927] dark:border-[#1e2d44]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 py-2.5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center justify-between gap-2 py-1.5 sm:py-2.5">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-1">
+            <div className="flex items-center gap-0.5 sm:gap-1">
               {tabs.map(({ href, label }) => {
                 const isActive =
                   href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -116,7 +116,7 @@ export default function Navigation() {
                   <Link
                     key={href}
                     href={href}
-                    className={`relative whitespace-nowrap rounded-md px-4 py-2.5 text-sm font-medium transition-colors sm:px-5 ${
+                    className={`relative whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-4 sm:py-2.5 sm:text-sm ${
                       isActive
                         ? "font-semibold text-[#1B3A5C] dark:text-white"
                         : "text-gray-500 hover:text-[#1B3A5C] dark:text-white/60 dark:hover:text-white"
@@ -132,7 +132,7 @@ export default function Navigation() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {showAuthControls ? <RefreshButton tone="neutral" showSyncLabel /> : null}
             {showAuthControls ? (
               <AuthButton tone="neutral" showEmail={false} showStatus={false} />
