@@ -728,7 +728,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={() => setLogsExpanded((value) => !value)}
                 aria-expanded={logsExpanded}
-                className="flex min-w-0 flex-1 items-start justify-between gap-4 text-left"
+                className="min-w-0 flex-1 text-left"
               >
                 <div>
                   <h2 className="text-xl font-semibold text-[#1B3A5C]">Operational Logs</h2>
@@ -737,9 +737,44 @@ export default function AdminPage() {
                     summary activity.
                   </p>
                 </div>
-                <span
-                  aria-hidden="true"
-                  className={`mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-transform ${
+              </button>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
+                  <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                    Range
+                  </span>
+                  <select
+                    value={logsRangeHours}
+                    onChange={(event) =>
+                      setLogsRangeHours(Number(event.target.value) as LogsRangeHours)
+                    }
+                    className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
+                  >
+                    {LOG_RANGE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  onClick={() => loadOperationLogs()}
+                  className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                >
+                  Refresh Logs
+                </button>
+                <Link
+                  href="/admin/logs"
+                  className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                >
+                  View All Logs
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setLogsExpanded((value) => !value)}
+                  aria-expanded={logsExpanded}
+                  aria-label={logsExpanded ? "Collapse operational logs" : "Expand operational logs"}
+                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 shadow-sm transition-transform hover:bg-gray-50 ${
                     logsExpanded ? "rotate-180" : ""
                   }`}
                 >
@@ -750,40 +785,8 @@ export default function AdminPage() {
                       clipRule="evenodd"
                     />
                   </svg>
-                </span>
-              </button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
-                <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                  Range
-                </span>
-                <select
-                  value={logsRangeHours}
-                  onChange={(event) =>
-                    setLogsRangeHours(Number(event.target.value) as LogsRangeHours)
-                  }
-                  className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
-                >
-                  {LOG_RANGE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                onClick={() => loadOperationLogs()}
-                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-              >
-                Refresh Logs
-              </button>
-              <Link
-                href="/admin/logs"
-                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-              >
-                View All Logs
-              </Link>
+                </button>
+              </div>
             </div>
           </div>
           {logsExpanded ? (
