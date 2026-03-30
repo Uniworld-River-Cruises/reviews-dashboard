@@ -30,6 +30,22 @@ import OperationLogsTable from "@/components/admin/OperationLogsTable";
 type StatusFilter = "all" | "auto" | "manual" | "unchanged";
 type SortKey = "rawName" | "effectiveParentName" | "reviewCount" | "status";
 type SortDir = "asc" | "desc";
+type LogsRangeHours = 1 | 6 | 12 | 24;
+
+const LOG_RANGE_OPTIONS: Array<{ value: LogsRangeHours; label: string }> = [
+  { value: 1, label: "Last hour" },
+  { value: 6, label: "Last 6 hours" },
+  { value: 12, label: "Last 12 hours" },
+  { value: 24, label: "Last 24 hours" },
+];
+
+function getLogsRangeLabel(hours: LogsRangeHours) {
+  if (hours === 1) {
+    return "Last hour";
+  }
+
+  return `Last ${hours} hours`;
+}
 
 function StatusBadge({ mapping }: { mapping: ItineraryMapping }) {
   if (mapping.manualParentName) {
@@ -82,7 +98,8 @@ export default function AdminPage() {
   const [savingAccess, setSavingAccess] = useState(false);
   const [operationLogs, setOperationLogs] = useState<OperationLogEntry[]>([]);
   const [logsLoading, setLogsLoading] = useState(true);
-  const [logsExpanded, setLogsExpanded] = useState(true);
+  const [logsExpanded, setLogsExpanded] = useState(false);
+  const [logsRangeHours, setLogsRangeHours] = useState<LogsRangeHours>(24);
   const [mappings, setMappings] = useState<ItineraryMapping[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -129,13 +146,13 @@ export default function AdminPage() {
   const loadOperationLogs = useCallback(async () => {
     setLogsLoading(true);
     try {
-      const logs = await listOperationalLogs(24, 100);
+      const logs = await listOperationalLogs(logsRangeHours, 100);
       setOperationLogs(logs);
     } catch (err) {
       setToast(err instanceof Error ? err.message : "Failed to load operational logs");
     }
     setLogsLoading(false);
-  }, []);
+  }, [logsRangeHours]);
 
   const loadMappings = useCallback(async () => {
     setLoading(true);
@@ -705,14 +722,56 @@ export default function AdminPage() {
 
       {canViewLogs ? (
         <div className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-6 py-5">
-            <div>
-              <h2 className="text-xl font-semibold text-[#1B3A5C]">Operational Logs</h2>
-              <p className="mt-1 text-sm text-gray-500">
-                Last 24 hours of sync, classification, and summary activity.
-              </p>
+          <div className="border-b border-gray-200 px-6 py-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <button
+                type="button"
+                onClick={() => setLogsExpanded((value) => !value)}
+                aria-expanded={logsExpanded}
+                className="flex min-w-0 flex-1 items-start justify-between gap-4 text-left"
+              >
+                <div>
+                  <h2 className="text-xl font-semibold text-[#1B3A5C]">Operational Logs</h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {getLogsRangeLabel(logsRangeHours)} of sync, classification, and
+                    summary activity.
+                  </p>
+                </div>
+                <span
+                  aria-hidden="true"
+                  className={`mt-1 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition-transform ${
+                    logsExpanded ? "rotate-180" : ""
+                  }`}
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+              </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
+                <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                  Range
+                </span>
+                <select
+                  value={logsRangeHours}
+                  onChange={(event) =>
+                    setLogsRangeHours(Number(event.target.value) as LogsRangeHours)
+                  }
+                  className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
+                >
+                  {LOG_RANGE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 onClick={() => loadOperationLogs()}
                 className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
@@ -725,12 +784,6 @@ export default function AdminPage() {
               >
                 View All Logs
               </Link>
-              <button
-                onClick={() => setLogsExpanded((value) => !value)}
-                className="inline-flex items-center rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90"
-              >
-                {logsExpanded ? "Hide Logs" : "Show Logs"}
-              </button>
             </div>
           </div>
           {logsExpanded ? (
@@ -738,7 +791,7 @@ export default function AdminPage() {
               <OperationLogsTable
                 logs={operationLogs}
                 loading={logsLoading}
-                emptyMessage="No operational logs were recorded in the last 24 hours."
+                emptyMessage={`No operational logs were recorded in the ${getLogsRangeLabel(logsRangeHours).toLowerCase()}.`}
               />
             </div>
           ) : null}
