@@ -12,7 +12,7 @@ export default function BrandSwitcher() {
   const { brand, setBrand } = useDashboard();
 
   return (
-    <div className="flex items-center rounded-full bg-white/10 p-0.5">
+    <div className="inline-flex items-center rounded-full bg-white/10 p-0.5">
       {brands.map(({ value, label }) => (
         <button
           key={value}
