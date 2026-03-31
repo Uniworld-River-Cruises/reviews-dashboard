@@ -12,6 +12,7 @@ export interface Filters {
   bookingType: string[];
   region: string[];
   loyalty: string[];
+  hasMedia: boolean;
 }
 
 export const emptyFilters: Filters = {
@@ -24,6 +25,7 @@ export const emptyFilters: Filters = {
   bookingType: [],
   region: [],
   loyalty: [],
+  hasMedia: false,
 };
 
 interface FilterSidebarProps {
@@ -111,12 +113,14 @@ function formatBrandName(slug: string): string {
 }
 
 export default function FilterSidebar({ filters, onChange, options }: FilterSidebarProps) {
-  const activeFilterCount = Object.values(filters).reduce(
-    (sum, arr) => sum + arr.length,
+  const activeFilterCount = Object.entries(filters).reduce(
+    (sum, [key, val]) => sum + (key === "hasMedia" ? (val ? 1 : 0) : (val as unknown[]).length),
     0
   );
 
-  function toggleArrayFilter<K extends keyof Filters>(
+  type ArrayFilterKey = Exclude<keyof Filters, "hasMedia">;
+
+  function toggleArrayFilter<K extends ArrayFilterKey>(
     key: K,
     value: Filters[K][number]
   ) {
@@ -127,9 +131,13 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
     onChange({ ...filters, [key]: next });
   }
 
-  function removeChip(key: keyof Filters, value: string | number) {
-    const current = filters[key] as Array<string | number>;
-    onChange({ ...filters, [key]: current.filter((v) => v !== value) });
+  function removeChip(key: keyof Filters, value: string | number | boolean) {
+    if (key === "hasMedia") {
+      onChange({ ...filters, hasMedia: false });
+    } else {
+      const current = filters[key] as Array<string | number>;
+      onChange({ ...filters, [key]: current.filter((v) => v !== value) });
+    }
   }
 
   function clearAll() {
@@ -143,10 +151,14 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
   };
 
   // Collect all active chips
-  const chips: { key: keyof Filters; value: string | number; label: string }[] = [];
+  const chips: { key: keyof Filters; value: string | number | boolean; label: string }[] = [];
   for (const [key, values] of Object.entries(filters)) {
-    for (const value of values) {
-      chips.push({ key: key as keyof Filters, value, label: chipLabel(key as keyof Filters, value) });
+    if (key === "hasMedia") {
+      if (values) chips.push({ key: "hasMedia", value: true, label: "Has media" });
+    } else {
+      for (const value of values as Array<string | number>) {
+        chips.push({ key: key as keyof Filters, value, label: chipLabel(key as keyof Filters, value) });
+      }
     }
   }
 
@@ -185,6 +197,19 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
           </div>
         </div>
       )}
+
+      {/* Media toggle */}
+      <div className="border-b border-gray-100 py-3">
+        <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-[#1B3A5C]">
+          <input
+            type="checkbox"
+            checked={filters.hasMedia}
+            onChange={(e) => onChange({ ...filters, hasMedia: e.target.checked })}
+            className="h-3.5 w-3.5 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]/30"
+          />
+          Only reviews with photos or videos
+        </label>
+      </div>
 
       {/* Brand */}
       <FilterSection title="Brand" defaultOpen>

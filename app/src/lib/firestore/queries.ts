@@ -422,7 +422,7 @@ export async function getFleetSummaryByDateRange(
  * Build a rawName → effectiveParentName lookup from the itinerary_mappings collection.
  * Used to resolve raw tour names to their grouped parent names on the client side.
  */
-async function getParentNameLookup(brand: string): Promise<Map<string, string>> {
+export async function getParentNameLookup(brand: string): Promise<Map<string, string>> {
   const db = getClientDb();
   const ref = collection(db, "itinerary_mappings");
   const constraints = brand === "combined"

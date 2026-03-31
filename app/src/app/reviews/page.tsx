@@ -16,7 +16,7 @@ import {
   DocumentData,
   QueryConstraint,
 } from "firebase/firestore";
-import { getFilterOptions, type FilterOptions } from "@/lib/firestore/queries";
+import { getFilterOptions, getParentNameLookup, type FilterOptions } from "@/lib/firestore/queries";
 import FilterSidebar, {
   type Filters,
   emptyFilters,
@@ -28,14 +28,19 @@ import ExportButton from "@/components/reviews/ExportButton";
 // Firestore → ReviewData mapper
 // ---------------------------------------------------------------------------
 
-function mapReviewDoc(doc: QueryDocumentSnapshot<DocumentData>): ReviewData {
+function mapReviewDoc(
+  doc: QueryDocumentSnapshot<DocumentData>,
+  parentLookup?: Map<string, string>
+): ReviewData {
   const d = doc.data();
+  const rawItinerary = d.tags?.tour || d.product?.title || "";
   return {
     id: doc.id,
     customerName: d.customer?.displayName || "Trusted Customer",
     rating: d.ratings?.product ?? d.ratings?.service ?? 0,
     ship: d.tags?.ship || "",
-    itinerary: d.tags?.tour || d.product?.title || "",
+    itinerary: rawItinerary,
+    parentItinerary: parentLookup?.get(rawItinerary) ?? rawItinerary,
     brand: d.brand || "",
     serviceReview: d.reviews?.serviceText || "",
     productReview: d.reviews?.productText || "",
@@ -88,7 +93,9 @@ function filtersToParams(filters: Filters, search: string, sort: SortOption): st
   if (search) params.set("q", search);
   if (sort !== "newest") params.set("sort", sort);
   for (const [key, values] of Object.entries(filters)) {
-    if ((values as Array<string | number>).length > 0) {
+    if (key === "hasMedia") {
+      if (values) params.set("hasMedia", "true");
+    } else if ((values as Array<string | number>).length > 0) {
       params.set(key, (values as Array<string | number>).join(","));
     }
   }
@@ -118,6 +125,7 @@ function paramsToFilters(searchParams: URLSearchParams): {
     bookingType: parseArray("bookingType"),
     region: parseArray("region"),
     loyalty: parseArray("loyalty"),
+    hasMedia: searchParams.get("hasMedia") === "true",
   };
 
   return { filters, search, sort };
@@ -217,6 +225,9 @@ function applyClientFilters(reviews: ReviewData[], filters: Filters, search: str
     if (filters.loyalty.length > 30 && !filters.loyalty.includes(r.loyalty)) return false;
     if (filters.itinerary.length > 30 && !filters.itinerary.includes(r.itinerary)) return false;
 
+    // Media filter
+    if (filters.hasMedia && r.media.length === 0) return false;
+
     return true;
   });
 }
@@ -288,9 +299,9 @@ function ReviewsContent() {
     constraints.push(limit(PAGE_SIZE));
     const q = query(ref, ...constraints);
 
-    getDocs(q).then((snap) => {
+    Promise.all([getDocs(q), getParentNameLookup(brand)]).then(([snap, parentLookup]) => {
       if (cancelled) return;
-      const reviews = snap.docs.map(mapReviewDoc);
+      const reviews = snap.docs.map((d) => mapReviewDoc(d, parentLookup));
       setAllReviews(reviews);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
@@ -323,7 +334,8 @@ function ReviewsContent() {
     try {
       const snap = await getDocs(q);
 
-      const newReviews = snap.docs.map(mapReviewDoc);
+      const parentLookup = await getParentNameLookup(brand);
+      const newReviews = snap.docs.map((d) => mapReviewDoc(d, parentLookup));
       setAllReviews((prev) => [...prev, ...newReviews]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);

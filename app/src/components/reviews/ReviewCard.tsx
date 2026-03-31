@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import MediaThumbnails from "./MediaThumbnails";
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 100);
+}
 
 export interface ReviewData {
   id: string;
@@ -19,6 +28,7 @@ export interface ReviewData {
   loyalty: string;
   date: string;
   media: { type: string; url: string }[];
+  parentItinerary: string;
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -71,16 +81,34 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
         <StarRating rating={review.rating} />
       </div>
 
-      {/* Meta */}
-      <p className="text-xs text-gray-500 mb-3">
-        {review.itinerary}
-        {review.ship && <> &middot; {review.ship}</>}
-        {review.brand && (
-          <span className="ml-2 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
-            {review.brand}
-          </span>
+      {/* Meta — clickable itinerary and ship links */}
+      <div className="text-xs text-gray-500 mb-3 space-y-0.5">
+        {review.parentItinerary && (
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={`/itineraries?slug=${encodeURIComponent(slugify(review.parentItinerary))}`}
+              className="text-[#1B3A5C]/70 hover:text-[#1B3A5C] hover:underline"
+            >
+              {review.parentItinerary}
+            </Link>
+            {review.brand && (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
+                {review.brand}
+              </span>
+            )}
+          </div>
         )}
-      </p>
+        {review.ship && (
+          <div>
+            <Link
+              href={`/ships?slug=${encodeURIComponent(slugify(review.ship))}`}
+              className="text-[#1B3A5C]/70 hover:text-[#1B3A5C] hover:underline"
+            >
+              {review.ship}
+            </Link>
+          </div>
+        )}
+      </div>
 
       {/* Review text */}
       <div

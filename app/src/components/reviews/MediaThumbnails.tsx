@@ -18,22 +18,32 @@ const SIZE_CLASSES = {
 };
 
 export default function MediaThumbnails({ media, size = "md" }: MediaThumbnailsProps) {
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === "Escape") setLightboxUrl(null);
-  }, []);
-
-  useEffect(() => {
-    if (!lightboxUrl) return;
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [lightboxUrl, handleKeyDown]);
-
-  if (!media || media.length === 0) return null;
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const photos = media.filter((m) => m.type === "PHOTO");
   const videos = media.filter((m) => m.type === "VIDEO");
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLightboxIndex(null);
+      } else if (e.key === "ArrowRight" && lightboxIndex !== null && lightboxIndex < photos.length - 1) {
+        setLightboxIndex(lightboxIndex + 1);
+      } else if (e.key === "ArrowLeft" && lightboxIndex !== null && lightboxIndex > 0) {
+        setLightboxIndex(lightboxIndex - 1);
+      }
+    },
+    [lightboxIndex, photos.length]
+  );
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxIndex, handleKeyDown]);
+
+  if (!media || media.length === 0) return null;
+
   const sizeClass = SIZE_CLASSES[size];
 
   return (
@@ -45,7 +55,7 @@ export default function MediaThumbnails({ media, size = "md" }: MediaThumbnailsP
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setLightboxUrl(photo.url);
+              setLightboxIndex(i);
             }}
             className={`${sizeClass} rounded-lg overflow-hidden border border-gray-200 hover:border-[#1B3A5C] hover:shadow-sm transition-all flex-shrink-0`}
           >
@@ -78,30 +88,72 @@ export default function MediaThumbnails({ media, size = "md" }: MediaThumbnailsP
         ))}
       </div>
 
-      {/* Lightbox */}
-      {lightboxUrl && (
+      {/* Lightbox with cycling */}
+      {lightboxIndex !== null && photos[lightboxIndex] && (
         <div
           className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => setLightboxIndex(null)}
         >
+          {/* Close button */}
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setLightboxUrl(null);
+              setLightboxIndex(null);
             }}
-            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors"
+            className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors z-10"
             aria-label="Close lightbox"
           >
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+
+          {/* Previous button */}
+          {lightboxIndex > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex(lightboxIndex - 1);
+              }}
+              className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 transition-colors z-10"
+              aria-label="Previous photo"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
+
+          {/* Next button */}
+          {lightboxIndex < photos.length - 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxIndex(lightboxIndex + 1);
+              }}
+              className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white rounded-full p-3 transition-colors z-10"
+              aria-label="Next photo"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
+
+          {/* Image */}
           <img
-            src={lightboxUrl}
-            alt="Review photo full size"
+            src={photos[lightboxIndex].url}
+            alt={`Review photo ${lightboxIndex + 1} of ${photos.length}`}
             className="max-h-[90vh] max-w-[90vw] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />
+
+          {/* Counter */}
+          {photos.length > 1 && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full">
+              {lightboxIndex + 1} / {photos.length}
+            </div>
+          )}
         </div>
       )}
     </>
