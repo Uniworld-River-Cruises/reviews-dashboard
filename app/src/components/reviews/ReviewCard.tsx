@@ -56,7 +56,7 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
           <span className="font-medium text-[#1B3A5C]">
-            {review.customerName || "Anonymous"}
+            {review.customerName || "Trusted Customer"}
           </span>
           <span className="ml-2 text-xs text-gray-400">
             {new Date(review.date).toLocaleDateString("en-GB", {

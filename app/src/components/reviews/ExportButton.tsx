@@ -27,7 +27,7 @@ export default function ExportButton({ reviews }: ExportButtonProps) {
     ];
 
     const rows = reviews.map((r) => [
-      escapeCsv(r.customerName || "Anonymous"),
+      escapeCsv(r.customerName || "Trusted Customer"),
       String(r.rating),
       escapeCsv(r.ship),
       escapeCsv(r.itinerary),

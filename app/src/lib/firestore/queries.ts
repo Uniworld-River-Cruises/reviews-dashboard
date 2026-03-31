@@ -634,7 +634,7 @@ function mapReviewDoc(
   const data = review.data;
   return {
     id: review.id,
-    guestName: data.customer?.displayName || data.customer?.name || "Guest",
+    guestName: data.customer?.displayName || data.customer?.name || "Trusted Customer",
     rating: data.ratings?.product ?? data.ratings?.service ?? 0,
     itinerary: data.tags?.tour || data.product?.title || "",
     ship: data.tags?.ship || "",
