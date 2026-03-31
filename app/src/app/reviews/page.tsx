@@ -32,7 +32,7 @@ function mapReviewDoc(doc: QueryDocumentSnapshot<DocumentData>): ReviewData {
   const d = doc.data();
   return {
     id: doc.id,
-    customerName: d.customer?.displayName || d.customer?.name || "",
+    customerName: d.customer?.displayName || "Trusted Customer",
     rating: d.ratings?.product ?? d.ratings?.service ?? 0,
     ship: d.tags?.ship || "",
     itinerary: d.tags?.tour || d.product?.title || "",
