@@ -45,6 +45,7 @@ function mapReviewDoc(doc: QueryDocumentSnapshot<DocumentData>): ReviewData {
     region: d.tags?.region || "",
     loyalty: d.tags?.loyalty || "",
     date: d.dates?.created || "",
+    media: Array.isArray(d.media) ? d.media : [],
   };
 }
 

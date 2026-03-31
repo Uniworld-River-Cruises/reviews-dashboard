@@ -68,6 +68,7 @@ export interface ThemeReview {
   ship: string;
   text: string;
   date: string;
+  media: { type: string; url: string }[];
 }
 
 export type OverviewSelectionFilter =
@@ -640,6 +641,7 @@ function mapReviewDoc(
     ship: data.tags?.ship || "",
     text: data.reviews?.productText || data.reviews?.serviceText || "",
     date: data.dates?.created || "",
+    media: Array.isArray(data.media) ? data.media : [],
   };
 }
 

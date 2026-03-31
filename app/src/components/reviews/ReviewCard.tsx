@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import MediaThumbnails from "./MediaThumbnails";
 
 export interface ReviewData {
   id: string;
@@ -17,6 +18,7 @@ export interface ReviewData {
   region: string;
   loyalty: string;
   date: string;
+  media: { type: string; url: string }[];
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -96,6 +98,13 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
         >
           {expanded ? "Show less" : "Read more"}
         </button>
+      )}
+
+      {/* Media */}
+      {review.media.length > 0 && (
+        <div className="mt-3">
+          <MediaThumbnails media={review.media} size="md" />
+        </div>
       )}
 
       {/* Theme tags */}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { ThemeReview } from "@/lib/firestore/queries";
+import MediaThumbnails from "@/components/reviews/MediaThumbnails";
 
 interface ReviewPanelProps {
   title: string;
@@ -58,6 +59,11 @@ function QuoteCard({
         >
           {expanded ? "Show less" : "Read more"}
         </button>
+      )}
+      {review.media.length > 0 && (
+        <div className="mt-2">
+          <MediaThumbnails media={review.media} size="sm" />
+        </div>
       )}
     </div>
   );
