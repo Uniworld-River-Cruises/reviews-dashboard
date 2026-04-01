@@ -54,6 +54,9 @@ export default function AuthButton({
     try {
       const auth = getClientAuth();
       const provider = new OAuthProvider("microsoft.com");
+      provider.setCustomParameters({
+        tenant: "c8e16ff7-b48e-48dc-8e88-56ca27c5c21c",
+      });
       await signInWithPopup(auth, provider);
     } catch (err) {
       setError(
