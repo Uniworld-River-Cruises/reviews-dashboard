@@ -135,7 +135,7 @@ export default function Navigation() {
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {showAuthControls ? <RefreshButton tone="neutral" showSyncLabel /> : null}
             {showAuthControls ? (
-              <AuthButton tone="neutral" showEmail={false} showStatus={false} />
+              <AuthButton tone="neutral" showEmail showStatus={false} />
             ) : null}
           </div>
         </div>
