@@ -63,7 +63,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const theme = useSyncExternalStore(
     subscribeToTheme,
     readThemeSnapshot,
-    () => "light"
+    (): Theme => "light"
   );
 
   // Apply class to document
