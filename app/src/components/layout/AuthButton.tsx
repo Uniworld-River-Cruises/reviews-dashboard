@@ -103,7 +103,7 @@ export default function AuthButton({
     <div className="flex items-center gap-2">
       {user?.email && showEmail ? (
         <div
-          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
+          className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex ${
             isNeutral
               ? "border border-[#1B3A5C]/10 bg-[#1B3A5C]/[0.06] text-[#1B3A5C] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
               : "border border-white/15 bg-white/10 text-white/80"
@@ -111,10 +111,9 @@ export default function AuthButton({
           title={user.email}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span className="hidden max-w-[180px] truncate sm:inline">
+          <span className="max-w-[180px] truncate">
             {user.email}
           </span>
-          <span className="sm:hidden">Signed in</span>
         </div>
       ) : null}
       {user && !showEmail && showStatus ? (
