@@ -122,7 +122,6 @@ export async function getFleetSummary(brand: string): Promise<FleetSummary> {
     if (snap.empty) return EMPTY_FLEET;
 
     let totalReviews = 0;
-    let reviewsWithComments = 0;
     let ratingSum = 0;
     const starDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
     const positiveCounts: Record<string, number> = {};
@@ -133,7 +132,6 @@ export async function getFleetSummary(brand: string): Promise<FleetSummary> {
     for (const d of snap.docs) {
       const data = d.data();
       totalReviews += data.totalReviews || 0;
-      reviewsWithComments += data.reviewsWithComments || 0;
       ratingSum += (data.avgRating || 0) * (data.totalReviews || 0);
       const sd = data.starDistribution || {};
       for (const star of Object.keys(sd)) {

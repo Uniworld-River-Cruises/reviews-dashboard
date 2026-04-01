@@ -105,6 +105,7 @@ export default function RefreshButton({
       setIsSyncInProgress(false);
       setLastSynced(null);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSyncState is stable, only brand should trigger reload
   }, [brand, setLastSynced]);
 
   const syncLabel =
@@ -164,7 +165,7 @@ export default function RefreshButton({
       <button
         onClick={handleSync}
         disabled={syncing || !isSignedIn}
-        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+        className={`cursor-pointer flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
           isNeutral
             ? "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
             : "border border-white/20 bg-white/10 text-white hover:bg-white/20"

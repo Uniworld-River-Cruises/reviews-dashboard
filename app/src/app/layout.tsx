@@ -4,6 +4,7 @@ import Script from "next/script";
 import "./globals.css";
 import { DashboardProvider } from "@/contexts/DashboardContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import AuthGate from "@/components/layout/AuthGate";
 import Header from "@/components/layout/Header";
 import Navigation from "@/components/layout/Navigation";
 
@@ -30,13 +31,15 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans" style={{ backgroundColor: 'var(--background)' }}>
         <ThemeProvider>
           <DashboardProvider>
-            <div className="sticky top-0 z-40">
-              <Header />
-              <Navigation />
-            </div>
-            <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
-              {children}
-            </main>
+            <AuthGate>
+              <div className="sticky top-0 z-40">
+                <Header />
+                <Navigation />
+              </div>
+              <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 lg:px-8">
+                {children}
+              </main>
+            </AuthGate>
           </DashboardProvider>
         </ThemeProvider>
       </body>

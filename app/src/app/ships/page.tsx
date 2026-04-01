@@ -48,16 +48,23 @@ function ShipList() {
   const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:listViewMode", "cards");
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+    });
     getShips(brand, dateRange).then((data) => {
+      if (cancelled) return;
       setShips(data);
       setLoading(false);
     }).catch((err) => {
+      if (cancelled) return;
       console.error("Failed to load ships", err);
       setError(err instanceof Error ? err.message : "Unable to load ships right now.");
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [brand, dateRange, dataVersion]);
 
   const filtered = useMemo(() => {

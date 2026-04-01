@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
@@ -53,7 +53,10 @@ export default function AuthButton({
     setError(null);
     try {
       const auth = getClientAuth();
-      const provider = new GoogleAuthProvider();
+      const provider = new OAuthProvider("microsoft.com");
+      provider.setCustomParameters({
+        tenant: "c8e16ff7-b48e-48dc-8e88-56ca27c5c21c",
+      });
       await signInWithPopup(auth, provider);
     } catch (err) {
       setError(
@@ -100,7 +103,7 @@ export default function AuthButton({
     <div className="flex items-center gap-2">
       {user?.email && showEmail ? (
         <div
-          className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
+          className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex ${
             isNeutral
               ? "border border-[#1B3A5C]/10 bg-[#1B3A5C]/[0.06] text-[#1B3A5C] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
               : "border border-white/15 bg-white/10 text-white/80"
@@ -108,10 +111,9 @@ export default function AuthButton({
           title={user.email}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          <span className="hidden max-w-[180px] truncate sm:inline">
+          <span className="max-w-[180px] truncate">
             {user.email}
           </span>
-          <span className="sm:hidden">Signed in</span>
         </div>
       ) : null}
       {user && !showEmail && showStatus ? (
@@ -130,7 +132,7 @@ export default function AuthButton({
       <button
         onClick={user ? handleSignOut : handleSignIn}
         disabled={busy}
-        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+        className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
           isNeutral
             ? "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
             : "border border-white/20 bg-white/10 text-white hover:bg-white/20"

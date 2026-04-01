@@ -84,7 +84,7 @@ export default function DateRangePicker({
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
-        className={`flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-2 text-sm font-medium shadow-sm transition-colors sm:min-w-[11.5rem] sm:w-auto ${
+        className={`cursor-pointer flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-2 text-sm font-medium shadow-sm transition-colors sm:min-w-[11.5rem] sm:w-auto ${
           isNeutral
             ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
             : "border border-white/20 bg-white/10 text-white hover:bg-white/20"
@@ -129,7 +129,7 @@ export default function DateRangePicker({
             <button
               key={preset}
               onClick={() => handlePresetClick(preset)}
-              className={`w-full px-4 py-2 text-left text-sm transition-colors ${
+              className={`cursor-pointer w-full px-4 py-2 text-left text-sm transition-colors ${
                 dateRange.preset === preset
                   ? "bg-[#1B3A5C] text-white"
                   : "text-slate-700 hover:bg-slate-50 dark:text-white/80 dark:hover:bg-white/5"
@@ -165,7 +165,7 @@ export default function DateRangePicker({
               </div>
               <button
                 onClick={handleCustomApply}
-                className="w-full rounded bg-[#C5A258] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b3913e] transition-colors"
+                className="cursor-pointer w-full rounded bg-[#C5A258] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b3913e] transition-colors"
               >
                 Apply
               </button>
