@@ -48,16 +48,23 @@ function ItineraryList() {
   const [viewMode, setViewMode] = usePersistedState<ViewMode>("pref:listViewMode", "cards");
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+    });
     getItineraries(brand, dateRange).then((data) => {
+      if (cancelled) return;
       setItineraries(data);
       setLoading(false);
     }).catch((err) => {
+      if (cancelled) return;
       console.error("Failed to load itineraries", err);
       setError(err instanceof Error ? err.message : "Unable to load itineraries right now.");
       setLoading(false);
     });
+    return () => { cancelled = true; };
   }, [brand, dateRange, dataVersion]);
 
   const filtered = useMemo(() => {

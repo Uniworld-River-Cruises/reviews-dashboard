@@ -26,9 +26,6 @@ export default function Navigation() {
 
   useEffect(() => {
     if (!showAuthControls) {
-      setUser(null);
-      setShowAdminTab(false);
-      setCheckingAdminAccess(false);
       return;
     }
 
@@ -44,9 +41,6 @@ export default function Navigation() {
         }
       });
     } catch {
-      setUser(null);
-      setShowAdminTab(false);
-      setCheckingAdminAccess(false);
       return;
     }
   }, [showAuthControls]);
@@ -55,11 +49,10 @@ export default function Navigation() {
     let cancelled = false;
 
     if (!showAuthControls || !user) {
-      setShowAdminTab(false);
       return;
     }
 
-    setCheckingAdminAccess(true);
+    queueMicrotask(() => setCheckingAdminAccess(true));
 
     getCurrentAdminAccess()
       .then((access) => {

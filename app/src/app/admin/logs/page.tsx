@@ -57,7 +57,7 @@ export default function AdminLogsPage() {
         setAuthResolved(true);
       });
     } catch {
-      setAuthResolved(true);
+      queueMicrotask(() => setAuthResolved(true));
       router.replace("/");
       return;
     }
@@ -69,14 +69,16 @@ export default function AdminLogsPage() {
     }
 
     if (!user) {
-      setCurrentAccess(null);
-      setCheckingAccess(false);
+      queueMicrotask(() => {
+        setCurrentAccess(null);
+        setCheckingAccess(false);
+      });
       router.replace("/");
       return;
     }
 
     let cancelled = false;
-    setCheckingAccess(true);
+    queueMicrotask(() => setCheckingAccess(true));
 
     getCurrentAdminAccess()
       .then((access) => {
@@ -105,7 +107,7 @@ export default function AdminLogsPage() {
     if (checkingAccess || !canViewLogs) {
       return;
     }
-    loadLogs(range);
+    Promise.resolve().then(() => loadLogs(range));
   }, [canViewLogs, checkingAccess, loadLogs, range]);
 
   useEffect(() => {

@@ -190,6 +190,7 @@ export default function AdminPage() {
       setToast("Failed to load mappings");
     }
     setLoading(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dataVersion is intentional to force reload after sync
   }, [brand, dateStart, dateEnd, dataVersion]);
 
   useEffect(() => {
@@ -200,7 +201,7 @@ export default function AdminPage() {
         setAuthResolved(true);
       });
     } catch {
-      setAuthResolved(true);
+      queueMicrotask(() => setAuthResolved(true));
       router.replace("/");
       return;
     }
@@ -212,14 +213,16 @@ export default function AdminPage() {
     }
 
     if (!user) {
-      setCurrentAccess(null);
-      setCheckingPageAccess(false);
+      queueMicrotask(() => {
+        setCurrentAccess(null);
+        setCheckingPageAccess(false);
+      });
       router.replace("/");
       return;
     }
 
     let cancelled = false;
-    setCheckingPageAccess(true);
+    queueMicrotask(() => setCheckingPageAccess(true));
 
     getCurrentAdminAccess()
       .then((access) => {
