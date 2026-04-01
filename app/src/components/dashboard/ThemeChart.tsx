@@ -46,11 +46,10 @@ const NEGATIVE_COLORS = [
 ];
 
 function useIsMobile(breakpoint = 640) {
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== "undefined" && window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches
-  );
+  const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    queueMicrotask(() => setIsMobile(mql.matches));
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
