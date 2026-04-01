@@ -27,6 +27,7 @@ This project uses static export (`next.config.ts` has `output: "export"`), gener
 ## Auth + Protected Actions
 
 - Header includes sign-in/sign-out control.
+- Sign-in uses Microsoft 365 accounts via Firebase OAuth provider (`microsoft.com`).
 - Refresh/admin actions call Cloud Functions with Firebase ID token in `Authorization` header.
 - If user is not signed in (or not allowlisted server-side), protected actions fail with 401/403.
 

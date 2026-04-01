@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
@@ -53,7 +53,7 @@ export default function AuthButton({
     setError(null);
     try {
       const auth = getClientAuth();
-      const provider = new GoogleAuthProvider();
+      const provider = new OAuthProvider("microsoft.com");
       await signInWithPopup(auth, provider);
     } catch (err) {
       setError(
