@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import {
   BarChart,
   Bar,
@@ -46,16 +46,22 @@ const NEGATIVE_COLORS = [
 ];
 
 function useIsMobile(breakpoint = 640) {
-  const [isMobile, setIsMobile] = useState(
-    () => typeof window !== "undefined" && window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches
+  return useSyncExternalStore(
+    (callback) => {
+      if (typeof window === "undefined") {
+        return () => {};
+      }
+
+      const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+      const handler = () => callback();
+      mql.addEventListener("change", handler);
+      return () => mql.removeEventListener("change", handler);
+    },
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches,
+    () => false
   );
-  useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, [breakpoint]);
-  return isMobile;
 }
 
 export default function ThemeChart({ title, data, type, onBarClick }: ThemeChartProps) {
