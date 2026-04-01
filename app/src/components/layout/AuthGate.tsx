@@ -6,7 +6,11 @@ import {
   onAuthStateChanged,
   signInWithPopup,
 } from "firebase/auth";
-import { getClientAuth, hasFirebaseWebConfig } from "@/lib/firebase";
+import {
+  getClientAuth,
+  hasFirebaseWebConfig,
+  getFirebaseWebConfigError,
+} from "@/lib/firebase";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false);
@@ -14,11 +18,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const showGate = hasFirebaseWebConfig();
+  const hasConfig = hasFirebaseWebConfig();
+  const configError = getFirebaseWebConfigError();
 
   useEffect(() => {
-    if (!showGate) {
-      setAuthenticated(true);
+    if (!hasConfig) {
       setLoading(false);
       return;
     }
@@ -33,7 +37,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       setAuthenticated(false);
       setLoading(false);
     }
-  }, [showGate]);
+  }, [hasConfig]);
 
   async function handleSignIn() {
     setBusy(true);
@@ -56,7 +60,18 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }
 
-  if (loading && showGate) {
+  if (configError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#1B3A5C] px-6">
+        <h1 className="text-xl font-semibold text-white">Configuration Error</h1>
+        <p className="mt-3 max-w-md text-center text-sm text-white/60">
+          {configError}
+        </p>
+      </div>
+    );
+  }
+
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#1B3A5C]">
         <div className="text-sm text-white/50">Loading...</div>
@@ -64,7 +79,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!authenticated && showGate) {
+  if (!authenticated) {
     return (
       <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#1B3A5C] px-6">
         <div
