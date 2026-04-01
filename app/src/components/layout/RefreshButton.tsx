@@ -105,6 +105,7 @@ export default function RefreshButton({
       setIsSyncInProgress(false);
       setLastSynced(null);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSyncState is stable, only brand should trigger reload
   }, [brand, setLastSynced]);
 
   const syncLabel =

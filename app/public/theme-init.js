@@ -8,7 +8,7 @@
 
     document.documentElement.classList.toggle("dark", shouldUseDark);
     document.documentElement.style.colorScheme = shouldUseDark ? "dark" : "light";
-  } catch (error) {
+  } catch {
     // Ignore client-side storage/theme bootstrap failures.
   }
 })();
