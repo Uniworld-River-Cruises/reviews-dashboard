@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand } from "@/contexts/BrandContext";
 import { usePersistedState } from "@/hooks/usePersistedState";
 import SearchFilter from "@/components/dashboard/SearchFilter";
 import HealthBadge from "@/components/dashboard/HealthBadge";
@@ -18,7 +19,7 @@ export default function ShipsPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center py-24">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
         </div>
       }
     >
@@ -39,7 +40,8 @@ function ShipsContent() {
 }
 
 function ShipList() {
-  const { brand, dateRange, dataVersion } = useDashboard();
+  const { merchantQueryId: brand } = useBrand();
+  const { dateRange, dataVersion } = useDashboard();
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +90,7 @@ function ShipList() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
@@ -103,7 +105,7 @@ function ShipList() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-[#1B3A5C]">Ships</h1>
+      <h1 className="text-2xl font-semibold text-text-primary">Ships</h1>
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="flex-1 max-w-md">
@@ -111,22 +113,22 @@ function ShipList() {
         </div>
         <div className="flex items-center gap-3 sm:ml-auto">
           <div className="flex items-center gap-2">
-            <label htmlFor="sort" className="text-sm text-gray-500">Sort by:</label>
+            <label htmlFor="sort" className="text-sm text-text-secondary">Sort by:</label>
             <select
               id="sort"
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+              className="border border-input-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
             >
               <option value="rating">Rating</option>
               <option value="reviewCount">Review Count</option>
               <option value="name">Name</option>
             </select>
           </div>
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+          <div className="flex rounded-lg border border-input-border overflow-hidden">
             <button
               onClick={() => setViewMode("cards")}
-              className={`p-2 transition-colors ${viewMode === "cards" ? "bg-[#1B3A5C] text-white" : "bg-white text-gray-400 hover:text-gray-600"}`}
+              className={`p-2 transition-colors ${viewMode === "cards" ? "bg-header-bg text-header-text" : "bg-surface text-text-tertiary hover:text-text-secondary"}`}
               title="Card view"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -135,7 +137,7 @@ function ShipList() {
             </button>
             <button
               onClick={() => setViewMode("table")}
-              className={`p-2 transition-colors ${viewMode === "table" ? "bg-[#1B3A5C] text-white" : "bg-white text-gray-400 hover:text-gray-600"}`}
+              className={`p-2 transition-colors ${viewMode === "table" ? "bg-header-bg text-header-text" : "bg-surface text-text-tertiary hover:text-text-secondary"}`}
               title="Table view"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -153,24 +155,24 @@ function ShipList() {
               <Link
                 key={ship.slug}
                 href={`/ships?slug=${encodeURIComponent(ship.slug)}`}
-                className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
+                className="bg-surface rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow"
               >
-                <h3 className="text-base font-semibold text-[#1B3A5C] mb-2">{ship.name}</h3>
-                <p className="text-xs text-gray-500 mb-4">
+                <h3 className="text-base font-semibold text-text-primary mb-2">{ship.name}</h3>
+                <p className="text-xs text-text-secondary mb-4">
                   {ship.itineraryCount} itinerar{ship.itineraryCount === 1 ? "y" : "ies"}
                 </p>
                 <div className="grid grid-cols-3 gap-3 mb-4">
                   <div>
-                    <p className="text-xs text-gray-400">Avg Rating</p>
-                    <p className="text-lg font-semibold text-[#1B3A5C]">{ship.averageRating.toFixed(2)}</p>
+                    <p className="text-xs text-text-tertiary">Avg Rating</p>
+                    <p className="text-lg font-semibold text-text-primary">{ship.averageRating.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400">Reviews</p>
-                    <p className="text-lg font-semibold text-[#1B3A5C]">{ship.reviewCount}</p>
+                    <p className="text-xs text-text-tertiary">Reviews</p>
+                    <p className="text-lg font-semibold text-text-primary">{ship.reviewCount}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400">5-Star %</p>
-                    <p className="text-lg font-semibold text-[#1B3A5C]">{ship.fiveStarPercent.toFixed(1)}%</p>
+                    <p className="text-xs text-text-tertiary">5-Star %</p>
+                    <p className="text-lg font-semibold text-text-primary">{ship.fiveStarPercent.toFixed(1)}%</p>
                   </div>
                 </div>
                 <HealthBadge rating={ship.averageRating} />
@@ -178,28 +180,28 @@ function ShipList() {
             ))}
           </div>
           {filtered.length === 0 && (
-            <p className="text-center text-gray-400 py-12">No ships match your search.</p>
+            <p className="text-center text-text-tertiary py-12">No ships match your search.</p>
           )}
         </>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
+        <div className="bg-surface rounded-lg shadow-sm p-4 sm:p-6">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[800px]">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="pb-3 pt-1 pr-6 font-medium text-gray-500 text-left whitespace-nowrap">Name</th>
-                  <th className="pb-3 pt-1 px-4 font-medium text-gray-500 text-right whitespace-nowrap">Avg Rating</th>
-                  <th className="pb-3 pt-1 px-4 font-medium text-gray-500 text-right whitespace-nowrap">Reviews</th>
-                  <th className="pb-3 pt-1 px-4 font-medium text-gray-500 text-right whitespace-nowrap">5-Star %</th>
-                  <th className="pb-3 pt-1 pl-6 font-medium text-gray-500 text-right whitespace-nowrap">Itineraries</th>
-                  <th className="pb-3 pt-1 pl-6 font-medium text-gray-500 text-right whitespace-nowrap">Health</th>
+                <tr className="border-b border-border">
+                  <th className="pb-3 pt-1 pr-6 font-medium text-text-secondary text-left whitespace-nowrap">Name</th>
+                  <th className="pb-3 pt-1 px-4 font-medium text-text-secondary text-right whitespace-nowrap">Avg Rating</th>
+                  <th className="pb-3 pt-1 px-4 font-medium text-text-secondary text-right whitespace-nowrap">Reviews</th>
+                  <th className="pb-3 pt-1 px-4 font-medium text-text-secondary text-right whitespace-nowrap">5-Star %</th>
+                  <th className="pb-3 pt-1 pl-6 font-medium text-text-secondary text-right whitespace-nowrap">Itineraries</th>
+                  <th className="pb-3 pt-1 pl-6 font-medium text-text-secondary text-right whitespace-nowrap">Health</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((ship) => (
-                  <tr key={ship.slug} className="border-b border-gray-100 hover:bg-[#1B3A5C]/5 transition-colors group">
+                  <tr key={ship.slug} className="border-b border-border-light hover:bg-brand-primary-hover transition-colors group">
                     <td className="py-3 pr-6 w-[40%]">
-                      <Link href={`/ships?slug=${encodeURIComponent(ship.slug)}`} className="font-medium text-[#1B3A5C] group-hover:underline">
+                      <Link href={`/ships?slug=${encodeURIComponent(ship.slug)}`} className="font-medium text-text-primary group-hover:underline">
                         {ship.name}
                       </Link>
                     </td>
@@ -214,7 +216,7 @@ function ShipList() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-gray-400">
+                    <td colSpan={6} className="py-8 text-center text-text-tertiary">
                       No ships match your search.
                     </td>
                   </tr>

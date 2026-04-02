@@ -56,16 +56,16 @@ export default class ErrorBoundary extends React.Component<
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">
+          <h2 className="text-xl font-semibold text-text-primary mb-2">
             Something went wrong
           </h2>
-          <p className="text-sm text-gray-500 mb-6 max-w-md">
+          <p className="text-sm text-text-secondary mb-6 max-w-md">
             An unexpected error occurred. Please try again or contact support if
             the problem persists.
           </p>
           <button
             onClick={this.handleRetry}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg bg-header-bg px-5 py-2.5 text-sm font-medium text-header-text shadow-sm hover:opacity-90 transition-colors"
           >
             <svg
               className="h-4 w-4"

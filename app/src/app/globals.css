@@ -1,80 +1,137 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/**
+ * :root — fallback token values (used server-side before theme-init.js fires,
+ * and as the default when no brand config has injected its own values yet).
+ *
+ * These match the vanilla defaultTheme defined in src/lib/theme/tokens.ts.
+ * BrandProvider calls injectThemeTokens() on mount, which overwrites these
+ * with the active brand's computed values.
+ *
+ * ⚠️  Do NOT hard-code brand-specific colours here.  Brand customisation lives
+ *    in src/config/brands/<brand>.ts (Phase 1) or Firestore (Phase 2).
+ */
 :root {
-  --background: #f8f9fa;
-  --foreground: #1a1a2e;
-  --surface: #ffffff;
-  --surface-hover: #f9fafb;
-  --surface-alt: #f3f4f6;
-  --border: #e5e7eb;
-  --border-light: #f3f4f6;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
-  --brand-primary: #1B3A5C;
-  --brand-primary-hover: rgba(27, 58, 92, 0.05);
-  --brand-primary-light: rgba(27, 58, 92, 0.1);
-  --brand-gold: #C5A258;
-  --spinner-track: #d9e0e8;
-  --spinner-accent: #1B3A5C;
-  --nav-bg: #ffffff;
-  --nav-border: #e5e7eb;
-  --input-bg: #ffffff;
-  --input-border: #d1d5db;
-  --badge-gray-bg: #f3f4f6;
-  --badge-gray-text: #6b7280;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  /* Structural */
+  --background:           #f8fafc;
+  --foreground:           #1e293b;
+  --surface:              #ffffff;
+  --surface-hover:        #f8fafc;
+  --surface-alt:          #f1f5f9;
+
+  /* Borders */
+  --border:               rgba(100, 116, 139, 0.2);
+  --border-light:         rgba(100, 116, 139, 0.1);
+
+  /* Text */
+  --text-primary:         #0f172a;
+  --text-secondary:       #64748b;
+  --text-tertiary:        #94a3b8;
+
+  /* Header / Nav */
+  --header-bg:            #1e293b;
+  --header-text:          #ffffff;
+  --nav-active-text:      #1e293b;
+  --nav-active-indicator: #3b82f6;
+  --nav-inactive-text:    #64748b;
+
+  /* Brand accent */
+  --brand-accent:         #3b82f6;
+  --brand-accent-light:   #60a5fa;
+  --brand-accent-hover:   rgba(59, 130, 246, 0.1);
+  --brand-primary-hover:  rgba(30, 41, 59, 0.05);
+  --brand-primary-light:  rgba(30, 41, 59, 0.1);
+
+  /* Inputs */
+  --input-bg:             #ffffff;
+  --input-border:         #cbd5e1;
+
+  /* Badges */
+  --badge-gray-bg:        #f1f5f9;
+  --badge-gray-text:      #64748b;
+
+  /* Spinner */
+  --spinner-track:        #e2e8f0;
+  --spinner-accent:       #3b82f6;
+
+  /* Nav (sub-nav surfaces) */
+  --nav-bg:               #ffffff;
+  --nav-border:           rgba(100, 116, 139, 0.2);
+
+  /* Shadows */
+  --shadow-sm:            0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow:               0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 
-.dark {
-  --background: #0c1220;
-  --foreground: #e2e8f0;
-  --surface: #141e30;
-  --surface-hover: #1a2740;
-  --surface-alt: #111927;
-  --border: #1e2d44;
-  --border-light: #182438;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-tertiary: #64748b;
-  --brand-primary: #1B3A5C;
-  --brand-primary-hover: rgba(126, 184, 224, 0.08);
-  --brand-primary-light: rgba(126, 184, 224, 0.15);
-  --brand-gold: #d4b06a;
-  --spinner-track: #24354e;
-  --spinner-accent: #7EB8E0;
-  --nav-bg: #111927;
-  --nav-border: #1e2d44;
-  --input-bg: #141e30;
-  --input-border: #2a3a52;
-  --badge-gray-bg: #1e2d44;
-  --badge-gray-text: #94a3b8;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.4), 0 1px 2px -1px rgb(0 0 0 / 0.3);
-}
-
+/**
+ * @theme inline — maps CSS custom properties to Tailwind utility names.
+ *
+ * This lets components write e.g. `bg-surface`, `text-text-primary`,
+ * `border-border` etc. and have them resolve to the brand-injected values.
+ *
+ * Add new entries here whenever derive.ts gains a new CSS variable.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-surface-hover: var(--surface-hover);
-  --color-surface-alt: var(--surface-alt);
-  --color-dm-border: var(--border);
-  --color-dm-border-light: var(--border-light);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
-  --color-brand-primary: var(--brand-primary);
-  --color-brand-gold: var(--brand-gold);
-  --color-nav-bg: var(--nav-bg);
-  --color-nav-border: var(--nav-border);
-  --color-input-bg: var(--input-bg);
-  --color-input-border: var(--input-border);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Structural */
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-surface:              var(--surface);
+  --color-surface-hover:        var(--surface-hover);
+  --color-surface-alt:          var(--surface-alt);
+
+  /* Borders */
+  --color-border:               var(--border);
+  --color-border-light:         var(--border-light);
+  /* Legacy aliases kept for components not yet migrated */
+  --color-dm-border:            var(--border);
+  --color-dm-border-light:      var(--border-light);
+
+  /* Text */
+  --color-text-primary:         var(--text-primary);
+  --color-text-secondary:       var(--text-secondary);
+  --color-text-tertiary:        var(--text-tertiary);
+
+  /* Header / Nav */
+  --color-header-bg:            var(--header-bg);
+  --color-header-text:          var(--header-text);
+  --color-nav-active-text:      var(--nav-active-text);
+  --color-nav-active-indicator: var(--nav-active-indicator);
+  --color-nav-inactive-text:    var(--nav-inactive-text);
+
+  /* Brand accent */
+  --color-brand-accent:         var(--brand-accent);
+  --color-brand-accent-light:   var(--brand-accent-light);
+
+  /* Nav */
+  --color-nav-bg:               var(--nav-bg);
+  --color-nav-border:           var(--nav-border);
+
+  /* Badges */
+  --color-badge-gray-bg:        var(--badge-gray-bg);
+  --color-badge-gray-text:      var(--badge-gray-text);
+
+  /* Spinner */
+  --color-spinner-track:        var(--spinner-track);
+  --color-spinner-accent:       var(--spinner-accent);
+
+  /* Inputs */
+  --color-input-bg:             var(--input-bg);
+  --color-input-border:         var(--input-border);
+
+  /* Brand hover / light utilities */
+  --color-brand-primary-hover:  var(--brand-primary-hover);
+  --color-brand-primary-light:  var(--brand-primary-light);
+  --color-brand-accent-hover:   var(--brand-accent-hover);
+
+  /* Fonts */
+  --font-sans:                  var(--font-geist-sans);
+  --font-mono:                  var(--font-geist-mono);
 }
+
+/* ---------------------------------------------------------------------------
+ * Base styles
+ * --------------------------------------------------------------------------- */
 
 html,
 body {
@@ -83,136 +140,25 @@ body {
 
 body {
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-/* Dark mode overrides for common Tailwind utilities */
-.dark .bg-white {
-  background-color: var(--surface) !important;
-}
-
-.dark .bg-gray-50 {
-  background-color: var(--surface-alt) !important;
-}
-
-/* Keep the shell transition smooth without animating every card on route changes. */
-body {
+  font-family: var(--font-geist-sans, Arial, Helvetica, sans-serif);
+  /* Smooth background/color transitions on theme toggle only.
+     CSS transitions are not applied during route changes because only the
+     shell (html/body) bears these properties. */
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
-.dark .border-gray-100 {
-  border-color: var(--border-light) !important;
-}
+/* ---------------------------------------------------------------------------
+ * Recharts — respect theme tokens, no !important hacks needed because we
+ * control the prop values via useThemeColors().
+ * --------------------------------------------------------------------------- */
 
-.dark .border-gray-200 {
-  border-color: var(--border) !important;
-}
-
-.dark .border-gray-300 {
-  border-color: var(--input-border) !important;
-}
-
-.dark .text-gray-900,
-.dark .text-gray-800 {
-  color: var(--text-primary) !important;
-}
-
-.dark .text-gray-700,
-.dark .text-gray-600 {
-  color: var(--text-secondary) !important;
-}
-
-.dark .text-gray-500 {
-  color: var(--text-tertiary) !important;
-}
-
-.dark .text-gray-400 {
-  color: #4b5e78 !important;
-}
-
-.dark .text-\[\#1B3A5C\] {
-  color: #7EB8E0 !important;
-}
-
-.dark .bg-\[\#1B3A5C\]\/5 {
-  background-color: rgba(126, 184, 224, 0.08) !important;
-}
-
-.dark .bg-\[\#1B3A5C\]\/10 {
-  background-color: rgba(126, 184, 224, 0.12) !important;
-}
-
-.dark .border-t-\[\#1B3A5C\] {
-  border-top-color: var(--spinner-accent) !important;
-}
-
-.dark .border-t-gray-600 {
-  border-top-color: var(--spinner-accent) !important;
-}
-
-.dark .text-\[\#C5A258\] {
-  color: #d4b06a !important;
-}
-
-.dark .hover\:bg-gray-50:hover {
-  background-color: var(--surface-hover) !important;
-}
-
-.dark .shadow-sm {
-  box-shadow: var(--shadow-sm) !important;
-}
-
-.dark .shadow-lg {
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3) !important;
-}
-
-/* Dark mode inputs */
-.dark input,
-.dark select,
-.dark textarea {
-  background-color: var(--input-bg) !important;
-  border-color: var(--input-border) !important;
-  color: var(--text-primary) !important;
-}
-
-.dark input::placeholder {
-  color: var(--text-tertiary) !important;
-}
-
-/* Dark mode for Recharts */
-.dark .recharts-cartesian-axis-tick-value {
-  fill: var(--text-tertiary) !important;
-}
-
-.dark .recharts-cartesian-grid line {
-  stroke: var(--border) !important;
-}
-
-/* Dark mode health badges */
-.dark .bg-green-100 { background-color: rgba(34, 197, 94, 0.15) !important; }
-.dark .bg-blue-100 { background-color: rgba(59, 130, 246, 0.15) !important; }
-.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, 0.15) !important; }
-.dark .bg-red-100 { background-color: rgba(239, 68, 68, 0.15) !important; }
-.dark .bg-gray-100 { background-color: var(--badge-gray-bg) !important; }
-
-.dark .bg-green-50 { background-color: rgba(34, 197, 94, 0.1) !important; }
-.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.1) !important; }
-.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.1) !important; }
-.dark .bg-yellow-50 { background-color: rgba(234, 179, 8, 0.1) !important; }
-
-/* Recharts tooltip dark mode */
-.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
-  background-color: var(--surface) !important;
-  border-color: var(--border) !important;
-}
-
-/* Remove browser focus rings from clickable chart surfaces for mouse focus only.
-   Keyboard focus keeps its normal visible indicator. */
+/* Remove noisy browser focus outlines from clickable chart surfaces.
+   Keyboard navigation keeps its normal visible indicator via :focus-visible. */
 .recharts-wrapper:focus:not(:focus-visible),
 .recharts-wrapper svg:focus:not(:focus-visible),
 .recharts-wrapper [tabindex]:focus:not(:focus-visible) {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .recharts-wrapper,
@@ -220,13 +166,13 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ---------------------------------------------------------------------------
+ * Animations
+ * --------------------------------------------------------------------------- */
+
 @keyframes slide-in-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0);    }
 }
 
 .animate-slide-in-right {
@@ -234,12 +180,8 @@ body {
 }
 
 @keyframes app-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+  from { transform: rotate(0deg);   }
+  to   { transform: rotate(360deg); }
 }
 
 .animate-spin {

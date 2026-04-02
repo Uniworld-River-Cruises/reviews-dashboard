@@ -5,6 +5,7 @@ import Link from "next/link";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand } from "@/contexts/BrandContext";
 import { getClientAuth, getClientDb } from "@/lib/firebase";
 import { collection, query, where, getDocs, orderBy, QueryConstraint } from "firebase/firestore";
 import {
@@ -63,7 +64,7 @@ function StatusBadge({ mapping }: { mapping: ItineraryMapping }) {
     );
   }
   return (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">
+    <span className="inline-flex items-center rounded-full bg-surface-alt px-2 py-0.5 text-xs font-medium text-text-secondary">
       Unchanged
     </span>
   );
@@ -78,13 +79,14 @@ function getStatus(m: ItineraryMapping): "auto" | "manual" | "unchanged" {
 const STATUS_ORDER = { manual: 0, auto: 1, unchanged: 2 };
 
 function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
-  if (!active) return <span className="ml-1 text-gray-300">{"\u2195"}</span>;
+  if (!active) return <span className="ml-1 text-text-tertiary">{"\u2195"}</span>;
   return <span className="ml-1">{dir === "asc" ? "\u2191" : "\u2193"}</span>;
 }
 
 export default function AdminPage() {
   const router = useRouter();
-  const { brand, dateRange, dataVersion } = useDashboard();
+  const { merchantQueryId: brand } = useBrand();
+  const { dateRange, dataVersion } = useDashboard();
   const [user, setUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [currentAccess, setCurrentAccess] = useState<CurrentAdminAccess | null>(null);
@@ -515,7 +517,7 @@ export default function AdminPage() {
   if (!authResolved || checkingPageAccess) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
@@ -523,33 +525,33 @@ export default function AdminPage() {
   return (
     <div>
       {canManageUsers ? (
-      <div className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-6 py-5">
-          <h2 className="text-xl font-semibold text-[#1B3A5C]">Access Control</h2>
-          <p className="mt-1 text-sm text-gray-500">
+      <div className="mb-8 rounded-xl border border-border bg-surface shadow-sm">
+        <div className="border-b border-border px-6 py-5">
+          <h2 className="text-xl font-semibold text-text-primary">Access Control</h2>
+          <p className="mt-1 text-sm text-text-secondary">
             Owners can promote people who have signed in and manage who is allowed to sync
             data and use protected admin actions.
           </p>
         </div>
         <div className="grid gap-6 px-6 py-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Current Access
             </h3>
-            <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+            <div className="mt-4 overflow-x-auto rounded-lg border border-border">
               {adminUsersLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
                 </div>
               ) : adminUsers.length === 0 ? (
-                <div className="px-4 py-6 text-sm text-gray-500">
+                <div className="px-4 py-6 text-sm text-text-secondary">
                   No admin users are configured yet. Add your first owner in Firestore or
                   after bootstrap use the form on the right.
                 </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-left text-gray-500">
+                    <tr className="bg-surface-alt text-left text-text-secondary">
                       <th className="px-4 py-3 font-medium">Email</th>
                       <th className="px-4 py-3 font-medium">Role</th>
                       <th className="px-4 py-3 font-medium">Status</th>
@@ -559,10 +561,10 @@ export default function AdminPage() {
                   </thead>
                   <tbody>
                     {adminUsers.map((user) => (
-                      <tr key={user.email} className="border-t border-gray-100">
-                        <td className="px-4 py-3 text-gray-900">{user.email}</td>
+                      <tr key={user.email} className="border-t border-border">
+                        <td className="px-4 py-3 text-text-primary">{user.email}</td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex rounded-full bg-[#1B3A5C]/10 px-2 py-0.5 text-xs font-medium capitalize text-[#1B3A5C]">
+                          <span className="inline-flex rounded-full bg-brand-primary-light px-2 py-0.5 text-xs font-medium capitalize text-text-primary">
                             {user.role}
                           </span>
                         </td>
@@ -571,13 +573,13 @@ export default function AdminPage() {
                             className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                               user.active
                                 ? "bg-emerald-100 text-emerald-700"
-                                : "bg-gray-100 text-gray-500"
+                                : "bg-surface-alt text-text-secondary"
                             }`}
                           >
                             {user.active ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-gray-500">
+                        <td className="px-4 py-3 text-text-secondary">
                           {user.updatedAt
                             ? new Date(user.updatedAt).toLocaleString()
                             : "—"}
@@ -600,13 +602,13 @@ export default function AdminPage() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary">
               Grant Or Update Access
             </h3>
-            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <div className="mt-4 rounded-lg border border-border bg-surface-alt p-4">
               <div className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                  <label className="mb-1 block text-sm font-medium text-text-primary">
                     Signed-in users
                   </label>
                   <select
@@ -619,7 +621,7 @@ export default function AdminPage() {
                       setAccessRole(selected?.role ?? "sync");
                       e.target.value = "";
                     }}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                    className="w-full rounded-lg border border-input-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
                   >
                     <option value="">Choose a user who has already signed in</option>
                     {knownUsers.map((knownUser) => {
@@ -633,7 +635,7 @@ export default function AdminPage() {
                       );
                     })}
                   </select>
-                  <p className="mt-2 text-xs text-gray-500">
+                  <p className="mt-2 text-xs text-text-secondary">
                     {knownUsersLoading
                       ? "Loading signed-in users..."
                       : knownUsers.length > 0
@@ -642,7 +644,7 @@ export default function AdminPage() {
                   </p>
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                  <label className="mb-1 block text-sm font-medium text-text-primary">
                     Email
                   </label>
                   <input
@@ -650,12 +652,12 @@ export default function AdminPage() {
                     value={accessEmail}
                     onChange={(e) => setAccessEmail(e.target.value)}
                     placeholder="name@company.com"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                    className="w-full rounded-lg border border-input-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
                   />
                 </div>
                 {knownUsers.length > 0 ? (
-                  <div className="rounded-lg bg-white p-3">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <div className="rounded-lg bg-surface p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                       Recent Sign-Ins
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -667,7 +669,7 @@ export default function AdminPage() {
                             setAccessEmail(knownUser.email);
                             setAccessRole(knownUser.role ?? "sync");
                           }}
-                          className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-100"
+                          className="rounded-full border border-border bg-surface-alt px-3 py-1.5 text-xs text-text-primary hover:bg-surface-alt"
                           title={
                             knownUser.lastSeenAt
                               ? `Last seen ${new Date(knownUser.lastSeenAt).toLocaleString()}`
@@ -682,37 +684,37 @@ export default function AdminPage() {
                   </div>
                 ) : null}
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                  <label className="mb-1 block text-sm font-medium text-text-primary">
                     Role
                   </label>
                   <select
                     value={accessRole}
                     onChange={(e) => setAccessRole(e.target.value as AdminRole)}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                    className="w-full rounded-lg border border-input-border bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
                   >
                     <option value="sync">Sync Operator</option>
                     <option value="admin">Admin</option>
                     <option value="owner">Owner</option>
                   </select>
                 </div>
-                <div className="rounded-lg bg-white p-3 text-xs leading-5 text-gray-500">
+                <div className="rounded-lg bg-surface p-3 text-xs leading-5 text-text-secondary">
                   <p>
-                    <strong className="text-gray-700">Sync Operator</strong>: can run
+                    <strong className="text-text-primary">Sync Operator</strong>: can run
                     data syncs and classification.
                   </p>
                   <p className="mt-2">
-                    <strong className="text-gray-700">Admin</strong>: can sync data and
+                    <strong className="text-text-primary">Admin</strong>: can sync data and
                     manage itinerary grouping tools.
                   </p>
                   <p className="mt-2">
-                    <strong className="text-gray-700">Owner</strong>: full access,
+                    <strong className="text-text-primary">Owner</strong>: full access,
                     including managing who else gets access.
                   </p>
                 </div>
                 <button
                   onClick={handleGrantAccess}
                   disabled={savingAccess}
-                  className="inline-flex items-center rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 disabled:opacity-50"
+                  className="inline-flex items-center rounded-lg bg-header-bg px-4 py-2 text-sm font-medium text-header-text shadow-sm hover:opacity-90 disabled:opacity-50"
                 >
                   {savingAccess ? "Saving..." : "Save Access"}
                 </button>
@@ -724,8 +726,8 @@ export default function AdminPage() {
       ) : null}
 
       {canViewLogs ? (
-        <div className="mb-8 rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-200 px-6 py-5">
+        <div className="mb-8 rounded-xl border border-border bg-surface shadow-sm">
+          <div className="border-b border-border px-6 py-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <button
                 type="button"
@@ -734,16 +736,16 @@ export default function AdminPage() {
                 className="min-w-0 flex-1 text-left"
               >
                 <div>
-                  <h2 className="text-xl font-semibold text-[#1B3A5C]">Operational Logs</h2>
-                  <p className="mt-1 text-sm text-gray-500">
+                  <h2 className="text-xl font-semibold text-text-primary">Operational Logs</h2>
+                  <p className="mt-1 text-sm text-text-secondary">
                     {getLogsRangeLabel(logsRangeHours)} of sync, classification, and
                     summary activity.
                   </p>
                 </div>
               </button>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <label className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm">
-                  <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+                <label className="inline-flex items-center gap-2 rounded-lg border border-input-border bg-surface px-3 py-2 text-sm text-text-primary shadow-sm">
+                  <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
                     Range
                   </span>
                   <select
@@ -751,7 +753,7 @@ export default function AdminPage() {
                     onChange={(event) =>
                       setLogsRangeHours(Number(event.target.value) as LogsRangeHours)
                     }
-                    className="bg-transparent text-sm font-medium text-gray-700 focus:outline-none"
+                    className="bg-transparent text-sm font-medium text-text-primary focus:outline-none"
                   >
                     {LOG_RANGE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -762,13 +764,13 @@ export default function AdminPage() {
                 </label>
                 <button
                   onClick={() => loadOperationLogs()}
-                  className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                  className="inline-flex items-center rounded-lg border border-input-border bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm hover:bg-surface-hover"
                 >
                   Refresh Logs
                 </button>
                 <Link
                   href="/admin/logs"
-                  className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                  className="inline-flex items-center rounded-lg border border-input-border bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm hover:bg-surface-hover"
                 >
                   View All Logs
                 </Link>
@@ -777,7 +779,7 @@ export default function AdminPage() {
                   onClick={() => setLogsExpanded((value) => !value)}
                   aria-expanded={logsExpanded}
                   aria-label={logsExpanded ? "Collapse operational logs" : "Expand operational logs"}
-                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 shadow-sm transition-transform hover:bg-gray-50 ${
+                  className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-input-border bg-surface text-text-secondary shadow-sm transition-transform hover:bg-surface-hover ${
                     logsExpanded ? "rotate-180" : ""
                   }`}
                 >
@@ -808,29 +810,29 @@ export default function AdminPage() {
       <>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[#1B3A5C]">Itinerary Grouping</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-text-primary">Itinerary Grouping</h1>
+        <p className="mt-1 text-sm text-text-secondary">
           Manage how itinerary variants are grouped into parent itineraries
         </p>
       </div>
 
       {/* Stats */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-2xl font-bold text-[#1B3A5C]">{stats.total}</div>
-          <div className="text-xs text-gray-500">Raw Itineraries</div>
+        <div className="rounded-lg border border-border bg-surface p-3">
+          <div className="text-2xl font-bold text-text-primary">{stats.total}</div>
+          <div className="text-xs text-text-secondary">Raw Itineraries</div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
-          <div className="text-2xl font-bold text-[#1B3A5C]">{stats.grouped}</div>
-          <div className="text-xs text-gray-500">Parent Groups</div>
+        <div className="rounded-lg border border-border bg-surface p-3">
+          <div className="text-2xl font-bold text-text-primary">{stats.grouped}</div>
+          <div className="text-xs text-text-secondary">Parent Groups</div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        <div className="rounded-lg border border-border bg-surface p-3">
           <div className="text-2xl font-bold text-green-600">{stats.auto}</div>
-          <div className="text-xs text-gray-500">Auto-Grouped</div>
+          <div className="text-xs text-text-secondary">Auto-Grouped</div>
         </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-3">
+        <div className="rounded-lg border border-border bg-surface p-3">
           <div className="text-2xl font-bold text-blue-600">{stats.manual}</div>
-          <div className="text-xs text-gray-500">Manual Overrides</div>
+          <div className="text-xs text-text-secondary">Manual Overrides</div>
         </div>
       </div>
 
@@ -839,10 +841,10 @@ export default function AdminPage() {
         <button
           onClick={handleRebuild}
           disabled={rebuilding}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-input-border bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm hover:bg-surface-hover disabled:opacity-50"
         >
           {rebuilding ? (
-            <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-input-border border-t-text-secondary" />
           ) : (
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -853,7 +855,7 @@ export default function AdminPage() {
         <button
           onClick={handleRecompute}
           disabled={recomputing}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-header-bg px-4 py-2 text-sm font-medium text-header-text shadow-sm hover:opacity-90 disabled:opacity-50"
         >
           {recomputing ? (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -873,53 +875,53 @@ export default function AdminPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search itineraries..."
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+          className="flex-1 rounded-lg border border-input-border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
         />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+          className="rounded-lg border border-input-border bg-surface px-3 py-2 text-sm"
         >
           <option value="all">All statuses</option>
           <option value="auto">Auto-grouped</option>
           <option value="manual">Manual overrides</option>
           <option value="unchanged">Unchanged</option>
         </select>
-        <span className="text-sm text-gray-500 whitespace-nowrap">
+        <span className="text-sm text-text-secondary whitespace-nowrap">
           {filtered.length} of {mappings.length}
         </span>
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-x-auto">
+      <div className="rounded-lg border border-border bg-surface shadow-sm overflow-x-auto">
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
           </div>
         ) : mappings.length === 0 ? (
           <div className="py-16 text-center">
-            <p className="text-gray-500">No mappings found. Click &ldquo;Rebuild Mappings&rdquo; to scan reviews.</p>
+            <p className="text-text-secondary">No mappings found. Click &ldquo;Rebuild Mappings&rdquo; to scan reviews.</p>
           </div>
         ) : (
           <table className="w-full text-sm min-w-[800px]">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
+              <tr className="border-b border-border bg-surface-alt">
                 {columns.map((col) => (
                   <th
                     key={col.key}
-                    className={`px-4 py-3 font-medium text-gray-500 cursor-pointer select-none whitespace-nowrap ${col.align}`}
+                    className={`px-4 py-3 font-medium text-text-secondary cursor-pointer select-none whitespace-nowrap ${col.align}`}
                     onClick={() => handleSort(col.key)}
                   >
                     {col.label}
                     <SortIndicator active={sortKey === col.key} dir={sortDir} />
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
+                <th className="px-4 py-3 text-right font-medium text-text-secondary">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((m) => (
-                <tr key={`${m.brand}-${m.rawName}`} className="border-b border-gray-100 hover:bg-gray-50">
+                <tr key={`${m.brand}-${m.rawName}`} className="border-b border-border hover:bg-surface-hover">
                   <td className="px-4 py-3">
                     {renamingRaw === m.rawName ? (
                       <div className="flex items-center gap-2">
@@ -944,16 +946,16 @@ export default function AdminPage() {
                         </button>
                         <button
                           onClick={() => setRenamingRaw(null)}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                          className="rounded border border-input-border px-2 py-1 text-xs text-text-secondary hover:bg-surface-hover"
                         >
                           Cancel
                         </button>
                       </div>
                     ) : (
                       <>
-                        <div className="font-medium text-gray-900">{m.rawName}</div>
+                        <div className="font-medium text-text-primary">{m.rawName}</div>
                         {m.autoParentName !== m.rawName && !m.manualParentName && (
-                          <div className="text-xs text-gray-400 mt-0.5">auto: {m.autoParentName}</div>
+                          <div className="text-xs text-text-tertiary mt-0.5">auto: {m.autoParentName}</div>
                         )}
                       </>
                     )}
@@ -971,18 +973,18 @@ export default function AdminPage() {
                           }}
                           list="parent-names"
                           autoFocus
-                          className="flex-1 rounded border border-[#1B3A5C] px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+                          className="flex-1 rounded border border-brand-accent px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
                         />
                         <button
                           onClick={() => saveEdit(m.rawName)}
                           disabled={saving}
-                          className="rounded bg-[#1B3A5C] px-2 py-1 text-xs text-white hover:bg-[#1B3A5C]/90 disabled:opacity-50"
+                          className="rounded bg-header-bg px-2 py-1 text-xs text-header-text hover:opacity-90 disabled:opacity-50"
                         >
                           Save
                         </button>
                         <button
                           onClick={() => setEditingRaw(null)}
-                          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                          className="rounded border border-input-border px-2 py-1 text-xs text-text-secondary hover:bg-surface-hover"
                         >
                           Cancel
                         </button>
@@ -990,7 +992,7 @@ export default function AdminPage() {
                     ) : (
                       <button
                         onClick={() => startEdit(m)}
-                        className="text-left text-[#1B3A5C] hover:underline cursor-pointer"
+                        className="text-left text-text-primary hover:underline cursor-pointer"
                         title="Click to edit"
                       >
                         {m.effectiveParentName}

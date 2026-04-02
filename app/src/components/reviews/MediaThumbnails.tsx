@@ -57,7 +57,7 @@ export default function MediaThumbnails({ media, size = "md" }: MediaThumbnailsP
               e.stopPropagation();
               setLightboxIndex(i);
             }}
-            className={`${sizeClass} rounded-lg overflow-hidden border border-gray-200 hover:border-[#1B3A5C] hover:shadow-sm transition-all flex-shrink-0`}
+            className={`${sizeClass} rounded-lg overflow-hidden border border-border hover:border-brand-accent hover:shadow-sm transition-all flex-shrink-0`}
           >
             <img
               src={photo.url}
@@ -75,10 +75,10 @@ export default function MediaThumbnails({ media, size = "md" }: MediaThumbnailsP
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className={`${sizeClass} rounded-lg overflow-hidden border border-gray-200 hover:border-[#1B3A5C] hover:shadow-sm transition-all flex-shrink-0 relative bg-[#1B3A5C]/10 flex items-center justify-center`}
+            className={`${sizeClass} rounded-lg overflow-hidden border border-border hover:border-brand-accent hover:shadow-sm transition-all flex-shrink-0 relative bg-brand-primary-light flex items-center justify-center`}
           >
             <svg
-              className="w-6 h-6 text-[#1B3A5C]/70"
+              className="w-6 h-6 text-text-secondary"
               fill="currentColor"
               viewBox="0 0 24 24"
             >

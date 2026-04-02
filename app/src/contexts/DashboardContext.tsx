@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * DashboardContext — date range and data-version state.
+ *
+ * Brand / merchant selection has moved to BrandContext.
+ * All page components that previously read `brand` from here should
+ * now read `merchantQueryId` from `useBrand()` instead.
+ */
+
 import {
   createContext,
   useContext,
@@ -8,13 +16,6 @@ import {
   type ReactNode,
 } from "react";
 import { subMonths, subYears, startOfMonth, startOfYear, startOfWeek } from "date-fns";
-import { usePersistedState } from "@/hooks/usePersistedState";
-
-export type Brand = "uniworld" | "luxury-gold" | "combined";
-
-export function brandHasShips(brand: Brand): boolean {
-  return brand !== "luxury-gold";
-}
 
 export type DatePreset =
   | "This Week"
@@ -36,8 +37,6 @@ export interface DateRange {
 }
 
 interface DashboardContextValue {
-  brand: Brand;
-  setBrand: (brand: Brand) => void;
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
   lastSynced: string | null;
@@ -111,7 +110,6 @@ function getInitialDateRange(): DateRange {
 }
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [brand, setBrand] = usePersistedState<Brand>("pref:brand", "uniworld");
   const [dateRange, setDateRangeState] = useState<DateRange>(getInitialDateRange);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
@@ -120,13 +118,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setDateRangeState(range);
     try {
       if (range.preset === "Custom Range") {
-        // Can't reconstruct custom dates on hydration, so clear the key
         localStorage.removeItem("pref:datePreset");
       } else {
         localStorage.setItem("pref:datePreset", JSON.stringify(range.preset));
       }
     } catch {
-      // Ignore
+      // Ignore storage errors
     }
   }, []);
 
@@ -135,14 +132,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const bumpDataVersion = useCallback(() => {
-    setDataVersion((value) => value + 1);
+    setDataVersion((v) => v + 1);
   }, []);
 
   return (
     <DashboardContext.Provider
       value={{
-        brand,
-        setBrand,
         dateRange,
         setDateRange: handleSetDateRange,
         lastSynced,

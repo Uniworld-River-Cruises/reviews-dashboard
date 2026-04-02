@@ -9,59 +9,78 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { useThemeColors } from "@/hooks/useThemeColors";
 
 interface RatingDistributionChartProps {
   data: { star: number; count: number }[];
   onBarClick?: (star: number) => void;
 }
 
-const STAR_COLORS: Record<number, string> = {
-  5: "#1B3A5C",
-  4: "#2d5a8c",
-  3: "#C5A258",
-  2: "#e8913a",
-  1: "#ef4444",
-};
-
-const TOOLTIP_STYLE = {
-  backgroundColor: "#172338",
-  border: "1px solid #2d3b58",
-  borderRadius: "12px",
-  color: "#f8fafc",
-  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.28)",
-};
-
-const TOOLTIP_LABEL_STYLE = {
-  color: "#f8fafc",
-  fontWeight: 600,
-};
-
-const TOOLTIP_ITEM_STYLE = {
-  color: "#cbd5e1",
-};
+/**
+ * Star rating colours are intentionally semantic (not brand-specific):
+ *   5★ → brand primary  (top score = brand colour)
+ *   4★ → brand accent   (good score = warm accent)
+ *   3★ → amber          (mid score = neutral warning)
+ *   2★ → orange         (below-par = warm warning)
+ *   1★ → red            (poor = danger)
+ *
+ * Only the 5-star bar uses the brand token; the rest are semantic.
+ */
+function buildStarColors(primary: string, accent: string): Record<number, string> {
+  return {
+    5: primary,
+    4: accent,
+    3: "#eab308",  // amber-500
+    2: "#e8913a",  // orange
+    1: "#ef4444",  // red-500
+  };
+}
 
 export default function RatingDistributionChart({
   data,
   onBarClick,
 }: RatingDistributionChartProps) {
-  const chartData = [...data].sort((a, b) => b.star - a.star).map((d) => ({
-    label: `${d.star} Star`,
-    count: d.count,
-    star: d.star,
-  }));
+  const {
+    primary,
+    accent,
+    tooltipStyle,
+    tooltipLabelStyle,
+    tooltipItemStyle,
+    axisTickFill,
+  } = useThemeColors();
+
+  const starColors = buildStarColors(primary, accent);
+
+  const chartData = [...data]
+    .sort((a, b) => b.star - a.star)
+    .map((d) => ({ label: `${d.star} Star`, count: d.count, star: d.star }));
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6">
-      <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Rating Distribution</h3>
+    <div className="rounded-lg bg-surface p-4 shadow-sm sm:p-6">
+      <h3 className="mb-4 text-lg font-semibold text-text-primary">
+        Rating Distribution
+      </h3>
       <ResponsiveContainer width="100%" height={240}>
-        <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20, top: 0, bottom: 0 }}>
-          <XAxis type="number" tick={{ fontSize: 12 }} />
-          <YAxis type="category" dataKey="label" width={60} tick={{ fontSize: 12 }} />
+        <BarChart
+          data={chartData}
+          layout="vertical"
+          margin={{ left: 10, right: 20, top: 0, bottom: 0 }}
+        >
+          <XAxis
+            type="number"
+            tick={{ fontSize: 12, fill: axisTickFill }}
+          />
+          <YAxis
+            type="category"
+            dataKey="label"
+            width={60}
+            tick={{ fontSize: 12, fill: axisTickFill }}
+          />
           <Tooltip
             cursor={false}
-            contentStyle={TOOLTIP_STYLE}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-            itemStyle={TOOLTIP_ITEM_STYLE}
+            contentStyle={tooltipStyle}
+            labelStyle={tooltipLabelStyle}
+            itemStyle={tooltipItemStyle}
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             formatter={(value: any) => [Number(value).toLocaleString(), "Reviews"]}
           />
@@ -77,7 +96,10 @@ export default function RatingDistributionChart({
             }}
           >
             {chartData.map((entry) => (
-              <Cell key={`cell-${entry.star}`} fill={STAR_COLORS[entry.star]} />
+              <Cell
+                key={`cell-${entry.star}`}
+                fill={starColors[entry.star]}
+              />
             ))}
           </Bar>
         </BarChart>

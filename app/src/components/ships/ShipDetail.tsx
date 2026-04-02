@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand } from "@/contexts/BrandContext";
 import KpiCard from "@/components/dashboard/KpiCard";
 import HealthBadge from "@/components/dashboard/HealthBadge";
 import RatingDistributionChart from "@/components/dashboard/RatingDistributionChart";
@@ -19,7 +20,8 @@ import {
 } from "@/lib/firestore/ship-queries";
 
 export default function ShipDetail({ slug }: { slug: string }) {
-  const { brand, dateRange, dataVersion } = useDashboard();
+  const { merchantQueryId: brand } = useBrand();
+  const { dateRange, dataVersion } = useDashboard();
   const [ship, setShip] = useState<ShipSummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
@@ -78,7 +80,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
@@ -94,8 +96,8 @@ export default function ShipDetail({ slug }: { slug: string }) {
   if (!ship) {
     return (
       <div className="text-center py-24">
-        <h1 className="text-2xl font-semibold text-[#1B3A5C] mb-4">Ship Not Found</h1>
-        <Link href="/ships" className="text-[#C5A258] hover:underline">Back to Ships</Link>
+        <h1 className="text-2xl font-semibold text-text-primary mb-4">Ship Not Found</h1>
+        <Link href="/ships" className="text-brand-accent hover:underline">Back to Ships</Link>
       </div>
     );
   }
@@ -105,12 +107,12 @@ export default function ShipDetail({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/ships" className="hover:text-[#1B3A5C]">Ships</Link>
+      <div className="flex items-center gap-2 text-sm text-text-secondary">
+        <Link href="/ships" className="hover:text-text-primary">Ships</Link>
         <span>/</span>
-        <span className="text-[#1B3A5C]">{ship.name}</span>
+        <span className="text-text-primary">{ship.name}</span>
       </div>
-      <h1 className="text-2xl font-semibold text-[#1B3A5C]">{ship.name}</h1>
+      <h1 className="text-2xl font-semibold text-text-primary">{ship.name}</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard title="Avg Rating" value={ship.averageRating.toFixed(2)} trendUp={ratingDelta >= 0} delta={`${ratingDelta >= 0 ? "+" : ""}${ratingDelta.toFixed(2)} vs fleet avg`} />
         <KpiCard title="Total Reviews" value={ship.reviewCount.toLocaleString()} />
@@ -122,16 +124,16 @@ export default function ShipDetail({ slug }: { slug: string }) {
         <ThemeChart title="Positive Themes" data={ship.positiveThemes} type="positive" onBarClick={(theme) => openPanel(theme, "positive")} />
         <ThemeChart title="Negative Themes" data={ship.negativeThemes} type="negative" onBarClick={(theme) => openPanel(theme, "negative")} />
       </div>
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Itineraries on This Ship</h3>
+      <div className="bg-surface rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-text-primary mb-4">Itineraries on This Ship</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ship.itineraries.map((it) => (
-            <Link key={it.slug} href={`/itineraries?slug=${encodeURIComponent(it.slug)}`} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-              <h4 className="text-sm font-semibold text-[#1B3A5C] mb-3">{it.name}</h4>
+            <Link key={it.slug} href={`/itineraries?slug=${encodeURIComponent(it.slug)}`} className="bg-surface-alt rounded-lg p-4 hover:bg-surface-hover transition-colors">
+              <h4 className="text-sm font-semibold text-text-primary mb-3">{it.name}</h4>
               <div className="grid grid-cols-3 gap-2 mb-3">
-                <div><p className="text-xs text-gray-400">Rating</p><p className="text-sm font-semibold text-[#1B3A5C]">{it.averageRating.toFixed(2)}</p></div>
-                <div><p className="text-xs text-gray-400">Reviews</p><p className="text-sm font-semibold text-[#1B3A5C]">{it.reviewCount}</p></div>
-                <div><p className="text-xs text-gray-400">5-Star</p><p className="text-sm font-semibold text-[#1B3A5C]">{it.fiveStarPercent.toFixed(1)}%</p></div>
+                <div><p className="text-xs text-text-tertiary">Rating</p><p className="text-sm font-semibold text-text-primary">{it.averageRating.toFixed(2)}</p></div>
+                <div><p className="text-xs text-text-tertiary">Reviews</p><p className="text-sm font-semibold text-text-primary">{it.reviewCount}</p></div>
+                <div><p className="text-xs text-text-tertiary">5-Star</p><p className="text-sm font-semibold text-text-primary">{it.fiveStarPercent.toFixed(1)}%</p></div>
               </div>
               <HealthBadge rating={it.averageRating} />
             </Link>

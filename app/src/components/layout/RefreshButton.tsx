@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { onAuthStateChanged } from "firebase/auth";
-import { useDashboard, type Brand } from "@/contexts/DashboardContext";
+import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand, type ActiveMerchant } from "@/contexts/BrandContext";
 import { getClientAuth, getClientDb } from "@/lib/firebase";
 import { postFunction } from "@/lib/functions-client";
 import { doc, getDoc } from "firebase/firestore";
@@ -19,10 +20,8 @@ type SyncMetaState = {
   startedAt: string | null;
 };
 
-const SYNC_BRANDS: Exclude<Brand, "combined">[] = ["uniworld", "luxury-gold"];
-
-function getBrandsToLoad(brand: Brand): Exclude<Brand, "combined">[] {
-  return brand === "combined" ? SYNC_BRANDS : [brand];
+function getBrandsToLoad(activeMerchant: ActiveMerchant, allMerchantIds: string[]): string[] {
+  return activeMerchant === "all" ? allMerchantIds : [activeMerchant];
 }
 
 function getMostStaleTimestamp(syncStates: SyncMetaState[]): string | null {
@@ -40,10 +39,11 @@ function getMostStaleTimestamp(syncStates: SyncMetaState[]): string | null {
 }
 
 function buildSyncTitle(
-  brand: Brand,
+  activeMerchant: ActiveMerchant,
+  allMerchantIds: string[],
   syncStates: Record<string, SyncMetaState>
 ): string {
-  const labels = getBrandsToLoad(brand).map((currentBrand) => {
+  const labels = getBrandsToLoad(activeMerchant, allMerchantIds).map((currentBrand) => {
     const state = syncStates[currentBrand];
 
     if (!state?.lastSyncAt) {
@@ -60,7 +60,9 @@ export default function RefreshButton({
   tone = "neutral",
   showSyncLabel = true,
 }: RefreshButtonProps) {
-  const { brand, lastSynced, setLastSynced, bumpDataVersion } = useDashboard();
+  const { activeMerchant, brand: brandConfig } = useBrand();
+  const allMerchantIds = brandConfig.merchants.map((m) => m.id);
+  const { lastSynced, setLastSynced, bumpDataVersion } = useDashboard();
   const [syncing, setSyncing] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -68,9 +70,9 @@ export default function RefreshButton({
   const [isSyncInProgress, setIsSyncInProgress] = useState(false);
   const isNeutral = tone === "neutral";
 
-  async function loadSyncState(selectedBrand: Brand): Promise<string | null> {
+  async function loadSyncState(selectedMerchant: ActiveMerchant): Promise<string | null> {
     const db = getClientDb();
-    const brands = getBrandsToLoad(selectedBrand);
+    const brands = getBrandsToLoad(selectedMerchant, allMerchantIds);
     const entries = await Promise.all(
       brands.map(async (currentBrand) => {
         const snapshot = await getDoc(doc(db, "sync_meta", currentBrand));
@@ -93,20 +95,20 @@ export default function RefreshButton({
     const displayTimestamp = getMostStaleTimestamp(Object.values(syncStates));
 
     setIsSyncInProgress(anySyncing);
-    setSyncTitle(buildSyncTitle(selectedBrand, syncStates));
+    setSyncTitle(buildSyncTitle(selectedMerchant, allMerchantIds, syncStates));
     setLastSynced(displayTimestamp);
 
     return displayTimestamp;
   }
 
   useEffect(() => {
-    loadSyncState(brand).catch(() => {
+    loadSyncState(activeMerchant).catch(() => {
       setSyncTitle("Sync status unavailable");
       setIsSyncInProgress(false);
       setLastSynced(null);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSyncState is stable, only brand should trigger reload
-  }, [brand, setLastSynced]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSyncState is stable, only activeMerchant should trigger reload
+  }, [activeMerchant, setLastSynced]);
 
   const syncLabel =
     syncing || isSyncInProgress
@@ -140,7 +142,7 @@ export default function RefreshButton({
     setMessage(null);
     try {
       await postFunction("manualSync", { fullSync: false });
-      await loadSyncState(brand);
+      await loadSyncState(activeMerchant);
       bumpDataVersion();
       setMessage("Sync complete.");
     } catch (err) {
@@ -156,7 +158,7 @@ export default function RefreshButton({
         <span
           title={syncTitle}
           className={`hidden text-xs md:inline ${
-            isNeutral ? "text-slate-500 dark:text-white/60" : "text-white/70"
+            isNeutral ? "text-text-secondary" : "text-white/70"
           }`}
         >
           {syncLabel}
@@ -167,7 +169,7 @@ export default function RefreshButton({
         disabled={syncing || !isSignedIn}
         className={`cursor-pointer flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
           isNeutral
-            ? "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+            ? "border border-border bg-surface text-text-primary shadow-sm hover:bg-surface-hover"
             : "border border-white/20 bg-white/10 text-white hover:bg-white/20"
         }`}
       >
@@ -189,7 +191,7 @@ export default function RefreshButton({
       {message ? (
         <span
           className={`hidden max-w-[220px] truncate text-xs xl:inline ${
-            isNeutral ? "text-slate-500 dark:text-white/60" : "text-white/70"
+            isNeutral ? "text-text-secondary" : "text-white/70"
           }`}
         >
           {message}
