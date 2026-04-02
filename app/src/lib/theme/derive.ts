@@ -147,11 +147,15 @@ export function deriveTokens(tokens: BrandTokens, isDark: boolean): CssVarMap {
     "--text-tertiary": mix(neutral, 60, surfaceWarm),
 
     // --- Header / Nav ---
+    // The header background is always the dark primary colour, even in light
+    // mode. nav-inactive-text must therefore be a light tone — using neutral
+    // (Taupe) here gives ~1.9:1 contrast against Charcoal, which fails WCAG AA.
+    // mix(surfaceWarm, 60%, primary) ≈ #a7a4a2 → ~5.1:1 on the Charcoal header.
     "--header-bg": primary,
     "--header-text": "#ffffff",
     "--nav-active-text": primary,
     "--nav-active-indicator": accent,
-    "--nav-inactive-text": neutral,
+    "--nav-inactive-text": mix(surfaceWarm, 60, primary),
 
     // --- Brand accent ---
     "--brand-accent": accent,

@@ -66,7 +66,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     (): Theme => "light"
   );
 
-  // Apply class to document
+  // Apply .dark class and color-scheme to the document.
+  // NOTE: do NOT write to localStorage here — that would corrupt the saved
+  // preference on every hydration, because the SSR server snapshot always
+  // starts as "light" and the effect fires before useSyncExternalStore can
+  // correct the value to what localStorage actually contains.
+  // Persistence is handled exclusively by toggleTheme().
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "dark") {
@@ -76,7 +81,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.classList.remove("dark");
       root.style.colorScheme = "light";
     }
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
