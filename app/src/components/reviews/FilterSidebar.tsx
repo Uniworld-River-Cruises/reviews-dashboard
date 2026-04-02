@@ -42,6 +42,8 @@ interface FilterSidebarProps {
     regions: string[];
     loyaltyLevels: string[];
   };
+  /** Map of star value → number of reviews at that rating (from all loaded reviews). */
+  ratingCounts?: Record<number, number>;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -112,7 +114,7 @@ function formatBrandName(slug: string): string {
     .join(" ");
 }
 
-export default function FilterSidebar({ filters, onChange, options }: FilterSidebarProps) {
+export default function FilterSidebar({ filters, onChange, options, ratingCounts }: FilterSidebarProps) {
   const activeFilterCount = Object.entries(filters).reduce(
     (sum, [key, val]) => sum + (key === "hasMedia" ? (val ? 1 : 0) : (val as unknown[]).length),
     0
@@ -225,14 +227,18 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
 
       {/* Star Rating */}
       <FilterSection title="Star Rating" defaultOpen>
-        {(options.ratings.length > 0 ? options.ratings : [5, 4, 3, 2, 1]).map((star) => (
-          <CheckboxItem
-            key={star}
-            label={`${"★".repeat(star)}${"☆".repeat(5 - star)} (${star})`}
-            checked={filters.rating.includes(star)}
-            onChange={() => toggleArrayFilter("rating", star)}
-          />
-        ))}
+        {(options.ratings.length > 0 ? options.ratings : [5, 4, 3, 2, 1]).map((star) => {
+          const count = ratingCounts?.[star];
+          const countLabel = count !== undefined ? ` (${count.toLocaleString()})` : "";
+          return (
+            <CheckboxItem
+              key={star}
+              label={`${star} ${"★".repeat(star)}${"☆".repeat(5 - star)}${countLabel}`}
+              checked={filters.rating.includes(star)}
+              onChange={() => toggleArrayFilter("rating", star)}
+            />
+          );
+        })}
       </FilterSection>
 
       {/* Ship */}
