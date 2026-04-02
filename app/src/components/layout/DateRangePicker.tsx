@@ -93,7 +93,7 @@ export default function DateRangePicker({
           e.stopPropagation();
           setOpen(!open);
         }}
-        className={`cursor-pointer flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-2 text-sm font-medium shadow-sm transition-colors sm:min-w-[11.5rem] sm:w-auto ${
+        className={`cursor-pointer flex w-full items-center justify-between gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium shadow-sm transition-colors sm:min-w-[11.5rem] sm:w-auto ${
           isNeutral
             ? "border border-border bg-surface text-text-primary hover:bg-surface-hover dark:border-border"
             : "border border-white/20 bg-white/10 text-white hover:bg-white/20"
