@@ -3,7 +3,7 @@
 /**
  * MobileDrawer — slide-in side panel for small screens.
  *
- * Contains everything that the consolidated header bar hides at < md:
+ * Contains everything that the consolidated header bar hides at < lg:
  *   - Primary nav links (with active state)
  *   - MerchantSwitcher (if 2+ merchants)
  *   - DateRangePicker
@@ -35,8 +35,8 @@ type MobileDrawerProps = {
 
 const NAV_LINKS = [
   { href: "/", label: "Overview" },
-  { href: "/itineraries", label: "Itineraries" },
   { href: "/reviews", label: "Reviews" },
+  { href: "/itineraries", label: "Itineraries" },
   { href: "/ships", label: "Ships" },
   { href: "/admin", label: "Admin" },
 ] as const;
