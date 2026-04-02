@@ -42,7 +42,10 @@ const NEGATIVE_COLORS = [
 function useIsMobile(breakpoint = 640) {
   return useSyncExternalStore(
     (callback) => {
-      if (typeof window === "undefined") return () => {};
+      if (typeof window === "undefined") {
+        return () => {};
+      }
+
       const mql = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
       const handler = () => callback();
       mql.addEventListener("change", handler);
@@ -51,7 +54,7 @@ function useIsMobile(breakpoint = 640) {
     () =>
       typeof window !== "undefined" &&
       window.matchMedia(`(max-width: ${breakpoint - 1}px)`).matches,
-    () => false,
+    () => false
   );
 }
 
