@@ -39,7 +39,7 @@
     "--header-text":          "#ffffff",
     "--nav-active-text":      "#373535",
     "--nav-active-indicator": "#c2ab82",
-    "--nav-inactive-text":    "#655e51",
+    "--nav-inactive-text":    "#a7a4a2",
     "--brand-accent":         "#c2ab82",
     "--brand-accent-light":   "#e7d39c",
     "--brand-accent-hover":   "rgba(194,171,130,0.1)",
