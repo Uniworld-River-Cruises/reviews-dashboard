@@ -157,7 +157,7 @@ export default function RefreshButton({
       {showSyncLabel ? (
         <span
           title={syncTitle}
-          className={`hidden text-xs md:inline ${
+          className={`hidden text-xs xl:inline ${
             isNeutral ? "text-text-secondary" : "text-white/70"
           }`}
         >
