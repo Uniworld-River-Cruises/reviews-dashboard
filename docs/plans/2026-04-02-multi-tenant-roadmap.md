@@ -83,27 +83,38 @@ brands/{brandId}/reviews/
 
 ## Phase 1: Theme Engine & UI Refresh (Current)
 
-**Status:** Planned
-**Detailed plan:** `2026-04-02-theme-engine-and-ui-refresh-phase1.md`
+**Status:** Complete — see `2026-04-02-theme-engine-and-ui-refresh-phase1.md`
 
-**Deliverables:**
-- Configurable 6-token theme system with programmatic derivation
-- Uniworld Journeys brand applied as first theme
-- Brand-aware dark mode
+**Deliverables (all shipped):**
+- Configurable 6-token theme system with programmatic derivation (`src/lib/theme/`)
+- Uniworld Journeys brand applied as first theme (`src/config/brands/uniworld-journeys.ts`)
+- Brand-aware dark mode (derived from same 6 tokens)
 - Consolidated single-bar header with inline navigation
-- Mobile hamburger drawer
-- Full CSS variable migration (no hardcoded colors)
-- Responsive improvements (auto card view on mobile, chart theming)
-- Default/vanilla fallback theme
+- Mobile hamburger drawer (with admin-access-gated admin link)
+- Full CSS variable migration (no hardcoded colors in any component)
+- Responsive improvements (mobile chart theming, `useThemeColors` hook for Recharts)
+- Default/vanilla fallback theme (`defaultTheme` in `src/lib/theme/tokens.ts`)
 
-**Brand config is hardcoded** in Phase 1 (in `tokens.ts`). No admin UI yet.
+**Key Phase 1 architecture decisions that affect Phase 2:**
+
+- Brand config lives in `src/config/brands/index.ts`. The active brand is set via
+  `ACTIVE_BRAND_ID = "uniworld-journeys"`. The **only change needed in Phase 2**
+  is replacing `getActiveBrandConfig()` with a Firestore fetch — `BrandContext`
+  and all consumers remain unchanged.
+- `BrandMerchant` has a `showShips?: boolean` flag per merchant (not a global brand
+  toggle). The Phase 2 Settings UI should expose this at the merchant level, not as
+  a single brand-wide switch.
+- The `id` field on `BrandMerchant` doubles as the Feefo merchant ID (the value
+  passed to Firestore queries). The Firestore data model below shows a separate
+  `feefoMerchantId` field — Phase 2 should reconcile these (likely rename `id` →
+  `feefoMerchantId` in the Firestore doc and map back in `BrandContext`).
 
 ---
 
 ## Phase 2: Settings UI & Brand Configuration
 
 **Status:** Not started
-**Depends on:** Phase 1 complete
+**Depends on:** Phase 1 complete ✓
 
 ### Scope
 
@@ -132,7 +143,9 @@ Build the `/settings` page where brand admins can configure their brand.
 
 **2d. General Settings**
 - Default date range (last 30 days, last 90 days, last year, all time)
-- Show/hide Ships page toggle
+- Show/hide Ships page toggle — note: in Phase 1 this is a per-merchant flag
+  (`BrandMerchant.showShips`), not a global setting. The UI should expose it
+  per merchant in section 2c, not here as a brand-wide switch.
 - Show/hide specific dashboard sections
 - Export settings (CSV format preferences, etc.)
 
@@ -140,9 +153,16 @@ Build the `/settings` page where brand admins can configure their brand.
 
 - `/settings` page gated by `role: 'admin'` permission
 - Settings nav item only visible to admins (same pattern as current Admin page)
-- BrandContext switches from hardcoded config to Firestore listener
+- **BrandContext migration:** Replace `getActiveBrandConfig()` in
+  `src/config/brands/index.ts` with a Firestore fetch for the authenticated
+  user's brand document. No other changes to BrandContext or any component.
 - Changes to theme tokens trigger real-time re-derivation and CSS injection
+  via the existing `injectThemeTokens()` pipeline — no new wiring needed.
 - Logo upload uses Firebase Storage with brand-scoped paths
+- `public/theme-init.js` (pre-hydration flash prevention) currently has
+  Uniworld tokens baked in. Phase 2 should update this to either: (a) fetch
+  brand tokens before first paint via a small inline script, or (b) accept
+  a brief flash on first load for non-Uniworld tenants until React hydrates.
 
 ### Key Files
 

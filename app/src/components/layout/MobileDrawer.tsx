@@ -35,8 +35,8 @@ type MobileDrawerProps = {
 
 const NAV_LINKS = [
   { href: "/", label: "Overview" },
-  { href: "/itineraries", label: "Itineraries" },
   { href: "/reviews", label: "Reviews" },
+  { href: "/itineraries", label: "Itineraries" },
   { href: "/ships", label: "Ships" },
   { href: "/admin", label: "Admin" },
 ] as const;

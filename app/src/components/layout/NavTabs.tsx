@@ -18,8 +18,8 @@ import { useBrand } from "@/contexts/BrandContext";
 
 const BASE_TABS = [
   { href: "/", label: "Overview" },
-  { href: "/itineraries", label: "Itineraries" },
   { href: "/reviews", label: "Reviews" },
+  { href: "/itineraries", label: "Itineraries" },
 ] as const;
 
 export default function NavTabs() {
@@ -91,7 +91,7 @@ export default function NavTabs() {
 
   // ── Build tab list ───────────────────────────────────────────────────────
   const tabs = [...BASE_TABS] as { href: string; label: string }[];
-  if (showShipsTab) tabs.splice(2, 0, { href: "/ships", label: "Ships" });
+  if (showShipsTab) tabs.push({ href: "/ships", label: "Ships" });
   if (showAdminTab || (pathname.startsWith("/admin") && checkingAdminAccess)) {
     tabs.push({ href: "/admin", label: "Admin" });
   }
