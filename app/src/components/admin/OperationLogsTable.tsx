@@ -11,7 +11,7 @@ function LevelBadge({ level }: { level: OperationLogLevel }) {
         ? "bg-amber-100 text-amber-700"
         : level === "error"
           ? "bg-red-100 text-red-700"
-          : "bg-slate-100 text-slate-600";
+          : "bg-badge-gray-bg text-badge-gray-text";
 
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
@@ -307,20 +307,20 @@ export default function OperationLogsTable({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-6 w-6 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
 
   if (logs.length === 0) {
-    return <div className="px-4 py-6 text-sm text-gray-500">{emptyMessage}</div>;
+    return <div className="px-4 py-6 text-sm text-text-secondary">{emptyMessage}</div>;
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+    <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-sm">
       <table className="w-full min-w-[980px] text-sm">
         <thead>
-          <tr className="bg-gray-50 text-left text-gray-500">
+          <tr className="bg-surface-alt text-left text-text-secondary">
             <th className="px-4 py-3 font-medium">Time</th>
             <th className="px-4 py-3 font-medium">Type</th>
             <th className="px-4 py-3 font-medium">Status</th>
@@ -333,29 +333,29 @@ export default function OperationLogsTable({
             const detailRows = getDetailRows(log);
 
             return (
-              <tr key={log.id} className="border-t border-gray-100 align-top">
-                <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+              <tr key={log.id} className="border-t border-border-light align-top">
+                <td className="px-4 py-3 whitespace-nowrap text-text-secondary">
                   {log.createdAt ? format(new Date(log.createdAt), "M/d/yyyy h:mm:ss a") : "-"}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="inline-flex rounded-full bg-[#1B3A5C]/10 px-2 py-0.5 text-xs font-medium capitalize text-[#1B3A5C]">
+                  <span className="inline-flex rounded-full bg-brand-primary-light px-2 py-0.5 text-xs font-medium capitalize text-text-primary">
                     {log.type}
                   </span>
                 </td>
                 <td className="px-4 py-3">
                   <LevelBadge level={log.level} />
                 </td>
-                <td className="px-4 py-3 text-gray-900">
+                <td className="px-4 py-3 text-text-primary">
                   <div className="font-medium">{log.message}</div>
-                  <div className="mt-1 text-xs text-gray-500">{actionLabel(log.action)}</div>
+                  <div className="mt-1 text-xs text-text-secondary">{actionLabel(log.action)}</div>
                 </td>
-                <td className="px-4 py-3 text-xs leading-5 text-gray-600">
+                <td className="px-4 py-3 text-xs leading-5 text-text-secondary">
                   {detailRows.length > 0 ? (
                     <dl className="space-y-1.5">
                       {detailRows.map((row) => (
                         <div key={`${log.id}-${row.label}`} className="grid grid-cols-[132px_minmax(0,1fr)] gap-2">
-                          <dt className="font-medium text-gray-500">{row.label}</dt>
-                          <dd className="break-words text-gray-700">{row.value}</dd>
+                          <dt className="font-medium text-text-secondary">{row.label}</dt>
+                          <dd className="break-words text-text-primary">{row.value}</dd>
                         </div>
                       ))}
                     </dl>

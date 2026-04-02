@@ -126,7 +126,7 @@ export default function AdminLogsPage() {
   if (!authResolved || checkingAccess) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
@@ -135,15 +135,15 @@ export default function AdminLogsPage() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="mb-2 text-sm font-medium text-gray-500">
-            <Link href="/admin" className="hover:text-[#1B3A5C] hover:underline">
+          <div className="mb-2 text-sm font-medium text-text-secondary">
+            <Link href="/admin" className="hover:text-text-primary hover:underline">
               Admin
             </Link>
-            <span className="mx-2 text-gray-300">/</span>
+            <span className="mx-2 text-text-tertiary">/</span>
             Logs
           </div>
-          <h1 className="text-2xl font-semibold text-[#1B3A5C]">Operational Logs</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-semibold text-text-primary">Operational Logs</h1>
+          <p className="mt-1 text-sm text-text-secondary">
             Review sync, classification, and summary activity.
           </p>
         </div>
@@ -152,7 +152,7 @@ export default function AdminLogsPage() {
           <select
             value={range}
             onChange={(event) => setRange(event.target.value as RangeFilter)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            className="rounded-lg border border-input-border bg-surface px-3 py-2 text-sm"
           >
             <option value="24h">Last 24 hours</option>
             <option value="7d">Last 7 days</option>
@@ -162,7 +162,7 @@ export default function AdminLogsPage() {
           <select
             value={typeFilter}
             onChange={(event) => setTypeFilter(event.target.value as TypeFilter)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            className="rounded-lg border border-input-border bg-surface px-3 py-2 text-sm"
           >
             <option value="all">All types</option>
             <option value="sync">Sync</option>
@@ -171,7 +171,7 @@ export default function AdminLogsPage() {
           </select>
           <button
             onClick={() => loadLogs(range)}
-            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            className="inline-flex items-center rounded-lg border border-input-border bg-surface px-4 py-2 text-sm font-medium text-text-primary shadow-sm hover:bg-surface-hover"
           >
             Refresh Logs
           </button>

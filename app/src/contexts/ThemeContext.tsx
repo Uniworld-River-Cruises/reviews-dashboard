@@ -60,10 +60,10 @@ function subscribeToTheme(callback: () => void): () => void {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const theme = useSyncExternalStore(
+  const theme = useSyncExternalStore<Theme>(
     subscribeToTheme,
     readThemeSnapshot,
-    () => "light"
+    () => "light" as Theme
   );
 
   // Apply class to document

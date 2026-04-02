@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand } from "@/contexts/BrandContext";
 import { getClientDb } from "@/lib/firebase";
 import {
   collection,
@@ -252,7 +253,8 @@ const DISPLAY_PAGE_SIZE = 10;
 
 function ReviewsContent() {
   const searchParams = useSearchParams();
-  const { brand, dateRange, dataVersion } = useDashboard();
+  const { merchantQueryId: brand } = useBrand();
+  const { dateRange, dataVersion } = useDashboard();
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
@@ -402,8 +404,7 @@ function ReviewsContent() {
     return (
       <div className="flex items-center justify-center py-24">
         <div
-          className="h-8 w-8 animate-spin rounded-full border-4"
-          style={{ borderColor: "var(--spinner-track)", borderTopColor: "var(--spinner-accent)" }}
+          className="h-8 w-8 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent"
         />
       </div>
     );
@@ -421,8 +422,8 @@ function ReviewsContent() {
     <div>
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-[#1B3A5C]">Reviews Explorer</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-text-primary">Reviews Explorer</h1>
+        <p className="mt-1 text-sm text-text-secondary">
           Search and filter guest reviews across all cruises
         </p>
       </div>
@@ -431,7 +432,7 @@ function ReviewsContent() {
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <div className="relative flex-1">
           <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-tertiary"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -448,12 +449,12 @@ function ReviewsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search reviews..."
-            className="w-full border border-gray-300 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30 focus:border-[#1B3A5C]/30"
+            className="w-full border border-input-border rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-accent/30 focus:border-brand-accent/30"
           />
         </div>
         <div className="flex items-center gap-3">
           <ExportButton reviews={sorted} />
-          <span className="text-sm text-gray-500 whitespace-nowrap">
+          <span className="text-sm text-text-secondary whitespace-nowrap">
             {sorted.length} review{sorted.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -463,27 +464,27 @@ function ReviewsContent() {
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="lg:hidden inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+          className="lg:hidden inline-flex items-center gap-2 rounded-lg border border-input-border bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-sm hover:bg-surface-hover"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
           </svg>
           Filters
           {activeFilterCount > 0 && (
-            <span className="rounded-full bg-[#1B3A5C] px-1.5 py-0.5 text-xs text-white">
+            <span className="rounded-full bg-header-bg px-1.5 py-0.5 text-xs text-header-text">
               {activeFilterCount}
             </span>
           )}
         </button>
         <div className="flex items-center gap-2 ml-auto">
-          <label htmlFor="sort-select" className="text-sm text-gray-500">
+          <label htmlFor="sort-select" className="text-sm text-text-secondary">
             Sort:
           </label>
           <select
             id="sort-select"
             value={sort}
             onChange={(e) => setSort(e.target.value as SortOption)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1B3A5C]/30"
+            className="rounded-lg border border-input-border bg-surface px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
           >
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
@@ -507,16 +508,16 @@ function ReviewsContent() {
         <div
           className={`${
             sidebarOpen
-              ? "fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto bg-white p-4 shadow-xl lg:static lg:z-auto lg:w-64 lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none"
+              ? "fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto bg-surface p-4 shadow-xl lg:static lg:z-auto lg:w-64 lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none"
               : "hidden"
           } lg:block lg:w-64 shrink-0`}
         >
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm sticky top-4">
+          <div className="rounded-lg border border-border bg-surface p-4 shadow-sm sticky top-4">
             <div className="flex items-center justify-between lg:hidden mb-3">
-              <span className="text-sm font-semibold text-[#1B3A5C]">Filters</span>
+              <span className="text-sm font-semibold text-text-primary">Filters</span>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="rounded p-1 hover:bg-gray-100 text-gray-400"
+                className="rounded p-1 hover:bg-surface-hover text-text-tertiary"
                 aria-label="Close filters"
               >
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -535,8 +536,8 @@ function ReviewsContent() {
         {/* Results */}
         <div className="flex-1 min-w-0">
           {sorted.length === 0 ? (
-            <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
-              <p className="text-gray-500">
+            <div className="rounded-lg border border-border bg-surface p-12 text-center">
+              <p className="text-text-secondary">
                 No reviews match your search and filters.
               </p>
               <button
@@ -544,7 +545,7 @@ function ReviewsContent() {
                   setSearch("");
                   setFilters(emptyFilters);
                 }}
-                className="mt-3 text-sm font-medium text-[#1B3A5C] hover:underline"
+                className="mt-3 text-sm font-medium text-text-primary hover:underline"
               >
                 Clear all filters
               </button>
@@ -567,7 +568,7 @@ function ReviewsContent() {
                   <button
                     onClick={handleLoadMore}
                     disabled={loadingMore}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#1B3A5C] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#1B3A5C]/90 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-2 rounded-lg bg-header-bg px-6 py-2.5 text-sm font-medium text-header-text shadow-sm hover:opacity-90 transition-colors disabled:opacity-50"
                   >
                     {loadingMore ? (
                       <>
@@ -605,8 +606,7 @@ export default function ReviewsPage() {
       fallback={
         <div className="flex items-center justify-center py-24">
               <div
-                className="h-8 w-8 animate-spin rounded-full border-4"
-                style={{ borderColor: "var(--spinner-track)", borderTopColor: "var(--spinner-accent)" }}
+                className="h-8 w-8 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent"
               />
         </div>
       }

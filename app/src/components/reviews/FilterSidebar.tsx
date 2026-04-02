@@ -47,7 +47,7 @@ interface FilterSidebarProps {
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
-      className={`h-4 w-4 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`}
+      className={`h-4 w-4 text-text-tertiary transition-transform ${open ? "rotate-180" : ""}`}
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -70,10 +70,10 @@ function FilterSection({
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-border-light last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between py-3 text-sm font-medium text-[#1B3A5C] hover:text-[#1B3A5C]/80"
+        className="flex w-full items-center justify-between py-3 text-sm font-medium text-text-primary hover:text-text-primary/80"
       >
         {title}
         <ChevronIcon open={open} />
@@ -93,12 +93,12 @@ function CheckboxItem({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-gray-900">
+    <label className="flex items-center gap-2 cursor-pointer text-sm text-text-secondary hover:text-text-primary">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-3.5 w-3.5 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]/30"
+        className="h-3.5 w-3.5 rounded border-input-border text-text-primary focus:ring-brand-accent/30"
       />
       {label}
     </label>
@@ -168,7 +168,7 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       {activeFilterCount > 0 && (
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            <span className="text-xs font-medium text-text-secondary uppercase tracking-wide">
               Active filters ({activeFilterCount})
             </span>
             <button
@@ -182,7 +182,7 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
             {chips.map((chip) => (
               <span
                 key={`${chip.key}-${chip.value}`}
-                className="inline-flex items-center gap-1 rounded-full bg-[#1B3A5C]/10 px-2.5 py-1 text-xs font-medium text-[#1B3A5C]"
+                className="inline-flex items-center gap-1 rounded-full bg-brand-primary-light px-2.5 py-1 text-xs font-medium text-text-primary"
               >
                 {chip.label}
                 <button
@@ -199,13 +199,13 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       )}
 
       {/* Media toggle */}
-      <div className="border-b border-gray-100 py-3">
-        <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-[#1B3A5C]">
+      <div className="border-b border-border-light py-3">
+        <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-text-primary">
           <input
             type="checkbox"
             checked={filters.hasMedia}
             onChange={(e) => onChange({ ...filters, hasMedia: e.target.checked })}
-            className="h-3.5 w-3.5 rounded border-gray-300 text-[#1B3A5C] focus:ring-[#1B3A5C]/30"
+            className="h-3.5 w-3.5 rounded border-input-border text-text-primary focus:ring-brand-accent/30"
           />
           Only reviews with photos or videos
         </label>
