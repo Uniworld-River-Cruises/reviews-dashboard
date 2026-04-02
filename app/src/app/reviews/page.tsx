@@ -60,7 +60,7 @@ function mapReviewDoc(
 // ---------------------------------------------------------------------------
 
 const EMPTY_FILTER_OPTIONS: FilterOptions = {
-  brands: [], ratings: [], ships: [], itineraries: [],
+  brands: [], ratings: [], ratingCounts: {}, ships: [], itineraries: [],
   positiveThemes: [], negativeThemes: [],
   bookingTypes: [], regions: [], loyaltyLevels: [],
 };
@@ -367,15 +367,6 @@ function ReviewsContent() {
 
   const options = filterOptions;
 
-  // Per-rating counts from all loaded reviews (independent of active filters).
-  const ratingCounts = useMemo(() => {
-    const counts: Record<number, number> = {};
-    for (const review of allReviews) {
-      counts[review.rating] = (counts[review.rating] ?? 0) + 1;
-    }
-    return counts;
-  }, [allReviews]);
-
   // Client-side filtering (text search, themes, rating, brand sub-filter)
   const filtered = useMemo(() => {
     return applyClientFilters(allReviews, filters, search);
@@ -538,7 +529,6 @@ function ReviewsContent() {
               filters={filters}
               onChange={setFilters}
               options={options}
-              ratingCounts={ratingCounts}
             />
           </div>
         </div>
