@@ -499,6 +499,8 @@ export async function getEntitySummariesByDateRange(
 export interface FilterOptions {
   brands: string[];
   ratings: number[];
+  /** Count of reviews for each star value, keyed by the star number (1–5). */
+  ratingCounts: Record<number, number>;
   ships: string[];
   itineraries: string[];
   positiveThemes: string[];
@@ -531,6 +533,7 @@ export async function getFilterOptions(
 
   const brands = new Set<string>();
   const ratings = new Set<number>();
+  const ratingCounts: Record<number, number> = {};
   const ships = new Set<string>();
   const itineraries = new Set<string>();
   const positiveThemes = new Set<string>();
@@ -543,7 +546,11 @@ export async function getFilterOptions(
     const data = d.data();
     if (data.brand) brands.add(data.brand);
     const rating = data.ratings?.product ?? data.ratings?.service;
-    if (rating != null) ratings.add(Math.round(rating));
+    if (rating != null) {
+      const star = Math.round(rating);
+      ratings.add(star);
+      ratingCounts[star] = (ratingCounts[star] ?? 0) + 1;
+    }
     if (data.tags?.ship) ships.add(data.tags.ship);
     if (data.tags?.tour) itineraries.add(data.tags.tour);
     if (data.tags?.bookingType) bookingTypes.add(data.tags.bookingType);
@@ -556,6 +563,7 @@ export async function getFilterOptions(
   return {
     brands: [...brands].sort(),
     ratings: [...ratings].sort((a, b) => b - a),
+    ratingCounts,
     ships: [...ships].sort(),
     itineraries: [...itineraries].sort(),
     positiveThemes: [...positiveThemes].sort(),

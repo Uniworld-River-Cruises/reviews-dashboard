@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 
 export interface Filters {
   brand: string[];
@@ -34,6 +34,8 @@ interface FilterSidebarProps {
   options: {
     brands: string[];
     ratings: number[];
+    /** Count of reviews per star value, keyed by the star number (1–5). */
+    ratingCounts?: Record<number, number>;
     ships: string[];
     itineraries: string[];
     positiveThemes: string[];
@@ -42,8 +44,6 @@ interface FilterSidebarProps {
     regions: string[];
     loyaltyLevels: string[];
   };
-  /** Map of star value → number of reviews at that rating (from all loaded reviews). */
-  ratingCounts?: Record<number, number>;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -90,7 +90,7 @@ function CheckboxItem({
   checked,
   onChange,
 }: {
-  label: string;
+  label: React.ReactNode;
   checked: boolean;
   onChange: (checked: boolean) => void;
 }) {
@@ -100,7 +100,7 @@ function CheckboxItem({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-3.5 w-3.5 rounded border-input-border text-text-primary focus:ring-brand-accent/30"
+        className="h-3.5 w-3.5 shrink-0 rounded border-input-border text-text-primary focus:ring-brand-accent/30"
       />
       {label}
     </label>
@@ -114,7 +114,7 @@ function formatBrandName(slug: string): string {
     .join(" ");
 }
 
-export default function FilterSidebar({ filters, onChange, options, ratingCounts }: FilterSidebarProps) {
+export default function FilterSidebar({ filters, onChange, options }: FilterSidebarProps) {
   const activeFilterCount = Object.entries(filters).reduce(
     (sum, [key, val]) => sum + (key === "hasMedia" ? (val ? 1 : 0) : (val as unknown[]).length),
     0
@@ -228,14 +228,29 @@ export default function FilterSidebar({ filters, onChange, options, ratingCounts
       {/* Star Rating */}
       <FilterSection title="Star Rating" defaultOpen>
         {(options.ratings.length > 0 ? options.ratings : [5, 4, 3, 2, 1]).map((star) => {
-          const count = ratingCounts?.[star];
-          const countLabel = count !== undefined ? ` (${count.toLocaleString()})` : "";
+          const count = options.ratingCounts?.[star];
           return (
             <CheckboxItem
               key={star}
-              label={`${star} ${"★".repeat(star)}${"☆".repeat(5 - star)}${countLabel}`}
               checked={filters.rating.includes(star)}
               onChange={() => toggleArrayFilter("rating", star)}
+              label={
+                <span className="flex items-center gap-1.5">
+                  {/* Fixed-width digit so stars always start in the same column */}
+                  <span className="w-3 shrink-0 text-right tabular-nums">{star}</span>
+                  {/* Each star occupies the same fixed width to prevent glyph-width drift */}
+                  <span className="flex">
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <span key={i} className="inline-block w-[1em] text-center leading-none">
+                        {i < star ? "★" : "☆"}
+                      </span>
+                    ))}
+                  </span>
+                  {count !== undefined && (
+                    <span className="text-text-tertiary">({count.toLocaleString()})</span>
+                  )}
+                </span>
+              }
             />
           );
         })}
