@@ -6,7 +6,7 @@
 **Status:** Planning
 **Overview:** Transform the Feefo Reviews dashboard from a single-brand tool into a multi-tenant SaaS platform where each organization has its own isolated environment with custom branding, Feefo merchant IDs, user management, and self-service onboarding.
 
-**Goal:** Enable any Feefo customer to onboard, connect their merchant IDs, customize their brand, manage their users, and access isolated analytics through path-based tenant routing (`/{orgSlug}/dashboard`).
+**Goal:** Enable any Feefo customer to onboard, connect their merchant IDs, customize their brand, manage their users, and access isolated analytics through path-based tenant routing (`/{orgSlug}/`).
 
 **Architecture:** Path-based multi-tenant Next.js app hosted on Firebase App Hosting (SSR via Cloud Run), with Firestore subcollections for tenant data isolation (`organizations/{orgId}/...`), encrypted Feefo credential storage, and tenant-aware Cloud Functions for sync and classification.
 
@@ -24,6 +24,8 @@ The v1 roadmap used "brand" as the tenant unit. This v2 renames to **"organizati
 
 The Firestore collection is renamed from `brands/` to `organizations/` to match.
 
+**Important:** Uniworld and Luxury Gold are two Feefo merchant IDs within a single organization ("Uniworld Journeys"), not two separate organizations. Any organization can have multiple merchant IDs. The merchant switcher in the UI filters which merchant's data is displayed within the org.
+
 ---
 
 ## Architecture Vision
@@ -36,9 +38,9 @@ The Firestore collection is renamed from `brands/` to `organizations/` to match.
   Browser request   │  ┌──────────────────────────────────────┐   │
   /{orgSlug}/...    │  │         Next.js Middleware             │   │
   ─────────────────►│  │  1. Extract orgSlug from URL path     │   │
-                    │  │  2. Verify auth (Firebase ID token)   │   │
-                    │  │  3. Verify user belongs to org        │   │
-                    │  │  4. Redirect if unauthorized          │   │
+                    │  │  2. Validate orgSlug format           │   │
+                    │  │  3. Skip static/auth handler paths    │   │
+                    │  │  4. Pass through (auth is client-side)│   │
                     │  └──────────────┬───────────────────────┘   │
                     │                 │                            │
                     │  ┌──────────────▼───────────────────────┐   │
@@ -72,9 +74,10 @@ The Firestore collection is renamed from `brands/` to `organizations/` to match.
                     │    ├── sync_meta/{merchantId}                │
                     │    └── itinerary_mappings/{mappingId}        │
                     │                                              │
-                    │  platform/                                   │
-                    │    ├── config (global settings)              │
-                    │    └── super_admins/{uid}                    │
+                    │  platform/config (global settings)           │
+                    │  super_admins/{uid}                          │
+                    │  org_profiles/{orgId} (public branding)      │
+                    │  user_org_map/{uid} (cross-org lookup)       │
                     └──────────────────────────────────────────────┘
 
                     ┌──────────────────────────────────────────────┐
@@ -126,7 +129,7 @@ https://feefo-reviews.web.app/acme-travel/settings
 
 ```
 organizations/
-  {orgId}/                          ← Document ID = URL slug (e.g., "uniworld-journeys")
+  {orgId}/                          ← Document ID = URL slug (IMMUTABLE — see Design Principles)
     name: string                    ← Display name (e.g., "Uniworld Journeys")
     slug: string                    ← URL slug, matches document ID
     theme: {
@@ -137,7 +140,7 @@ organizations/
       neutral: string
       surfaceWarm: string
     }
-    logo: string                    ← Firebase Storage URL
+    logoPath: string                ← Firebase Storage path (e.g., "organizations/{orgId}/assets/logo.png"), resolved via SDK
     logoAlt: string
     appTitle: string                ← e.g., "Feefo Review Intelligence Dashboard"
     merchants: [
@@ -164,11 +167,20 @@ organizations/{orgId}/users/
     role: "owner" | "admin" | "viewer"
     addedAt: timestamp
     addedBy: string                 ← UID of admin who added them
+    lastLoginAt: timestamp | null
+
+organizations/{orgId}/invites/
+  {normalizedEmail}/                ← Email-keyed (lowercase, trimmed)
+    email: string
+    role: "admin" | "viewer"
+    invitedBy: string               ← UID of admin who invited them
+    invitedAt: timestamp
+    status: "pending" | "accepted" | "expired"
 
 organizations/{orgId}/credentials/
-  feefo/                            ← Single document for Feefo OAuth credentials
-    clientId: string                ← Encrypted with Cloud KMS
-    clientSecret: string            ← Encrypted with Cloud KMS
+  feefo/                            ← Metadata document (secrets in Google Cloud Secret Manager)
+    secretRefClientId: string       ← Secret Manager resource name for client ID
+    secretRefClientSecret: string   ← Secret Manager resource name for client secret
     lastVerified: timestamp         ← Last successful API call
     status: "valid" | "invalid" | "unverified"
 
@@ -178,8 +190,11 @@ organizations/{orgId}/reviews/
     merchantId: string              ← Which merchant this review belongs to
 
 organizations/{orgId}/summaries/
-  {scope}/                          ← "fleet", ship name, itinerary name
-    ...existing summary fields...
+  {summaryId}/                      ← Compound key: "{merchantId}" or "{merchantId}_ship_{slug}" or "{merchantId}_itinerary_{slug}"
+    merchantId: string              ← Which merchant this summary covers (or "combined" for all)
+    scope: "fleet" | "ship" | "itinerary"
+    scopeValue: string | null       ← Ship name, itinerary name, or null for fleet
+    ...existing summary metric fields...
 
 organizations/{orgId}/monthly_summaries/
   {docId}/
@@ -202,15 +217,29 @@ organizations/{orgId}/operation_logs/
 
 # Platform-level collections (not per-org)
 platform/
-  config/                           ← Global platform settings
+  config/                           ← Global platform settings (single document)
     maintenanceMode: boolean
     allowSelfServiceSignup: boolean
     defaultTheme: { ...6 tokens... }
 
-platform/super_admins/
-  {uid}/                            ← Platform super-admins who can manage all orgs
+super_admins/                         ← Top-level collection (valid 2-segment doc path)
+  {uid}/
     email: string
     addedAt: timestamp
+
+org_profiles/                         ← Public org profiles for pre-auth display (login branding)
+  {orgId}/                            ← Readable by anyone, synced from org config via Cloud Functions
+    name: string
+    slug: string
+    logoPath: string                  ← Firebase Storage path (NOT a download URL)
+    theme: { ...6 tokens... }
+    appTitle: string
+
+user_org_map/                         ← Cross-org user lookup
+  {uid}/
+    orgs: [{ orgId: string, role: string }]
+    primaryOrgId: string
+    updatedAt: timestamp
 ```
 
 ---
@@ -223,13 +252,15 @@ Phase 1: Theme Engine & UI Refresh          ← COMPLETE
   ▼
 Phase 1.5: Infrastructure Migration          ← NEW (this doc)
   │ (remove static export, enable SSR,
-  │  path-based routing, middleware)
+  │  path-based routing, middleware,
+  │  minimal org-membership lookup)
   │
   ▼
 Phase 2: Firestore Data Model & Security     ← UPDATED (was "Settings UI")
   │ (tenant-scoped collections, security
   │  rules, data migration, credential
-  │  storage, tenant-aware sync)
+  │  storage, tenant-aware sync,
+  │  user_org_map + invite system)
   │
   ▼
 Phase 3: Settings UI & Brand Configuration   ← RENUMBERED (was Phase 2)
@@ -370,9 +401,11 @@ app/src/app/
 
 **Root page (`app/src/app/page.tsx`):**
 - Unauthenticated: Shows landing page with "Sign In with Microsoft" button
-- Authenticated with 1 org: Redirects to `/{orgSlug}/`
-- Authenticated with multiple orgs: Shows org picker
-- Authenticated with 0 orgs: Redirects to `/access-denied`
+- Authenticated: Queries `user_org_map/{uid}` for org membership
+  - 1 org: Redirects to `/{orgSlug}/`
+  - 2+ orgs: Shows org picker
+  - 0 orgs: Redirects to `/access-denied`
+- **Phase 1.5 simplification:** During initial migration (before Phase 4 builds full user management), the root page can hardcode a redirect to `/uniworld-journeys/` for all authenticated users. The org picker and `user_org_map` lookup are built in Phase 2/4.
 
 #### 1.5c. Add Next.js Middleware
 
@@ -381,16 +414,24 @@ app/src/app/
 ```typescript
 import { NextRequest, NextResponse } from "next/server";
 
+// Reserved root paths that are NOT org slugs
+const RESERVED_PATHS = new Set([
+  "access-denied",
+  "platform-admin",
+  "onboard",
+  "api",
+]);
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Skip middleware for static assets, API routes, auth callbacks
+  // Skip middleware for static assets, Next.js internals, and Firebase Auth handler
   if (
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/api") ||
+    pathname.startsWith("/__/auth") ||
     pathname === "/" ||
-    pathname === "/access-denied" ||
-    pathname.match(/\.(ico|png|jpg|svg|css|js|woff2?)$/)
+    pathname === "/favicon.ico" ||
+    RESERVED_PATHS.has(pathname.split("/")[1] || "")
   ) {
     return NextResponse.next();
   }
@@ -399,15 +440,13 @@ export function middleware(request: NextRequest) {
   const segments = pathname.split("/").filter(Boolean);
   const orgSlug = segments[0];
 
-  if (!orgSlug) {
+  if (!orgSlug || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(orgSlug)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // NOTE: Full auth + org membership validation happens in the [orgSlug]/layout.tsx
-  // Middleware handles basic path validation and sets headers for downstream use
-  const response = NextResponse.next();
-  response.headers.set("x-org-slug", orgSlug);
-  return response;
+  // Pass through — auth and org membership are validated client-side by AuthGate
+  // The [orgSlug] layout receives the slug via params, no header passing needed
+  return NextResponse.next();
 }
 
 export const config = {
@@ -415,7 +454,9 @@ export const config = {
 };
 ```
 
-**Note:** Firebase Auth tokens are httpOnly cookies or bearer tokens that can't be easily validated in Edge middleware without a server-side call. The middleware does path-level validation; full auth + org membership checks happen in the `[orgSlug]/layout.tsx` using Firebase Admin SDK or client-side Firebase Auth.
+**Auth model:** The app continues to use client-side Firebase Auth (`signInWithPopup`). The middleware does NOT validate auth or org membership — it only validates the path format and skips reserved routes. Auth and org membership are enforced by `AuthGate` (client-side) and Firestore security rules. This avoids the complexity of server-side session cookies while still getting the benefits of SSR for layout and theme rendering.
+
+The `[orgSlug]/layout.tsx` receives the slug directly from Next.js `params` — no custom headers needed.
 
 #### 1.5d. Create OrgContext (Replaces DashboardContext)
 
@@ -495,9 +536,11 @@ env:
 
 **File:** `app/public/theme-init.js`
 
-The current script only handles light/dark mode. For multi-tenant, the org theme tokens need to be applied before React hydrates. With SSR, the server can inject theme tokens into the HTML `<style>` tag, so `theme-init.js` only needs to handle the dark/light toggle (same as today). Theme tokens are rendered server-side in the `[orgSlug]/layout.tsx`.
+The current script only handles light/dark mode. No changes needed to `theme-init.js` itself.
 
-No changes needed to `theme-init.js` itself — but the `[orgSlug]/layout.tsx` must inject org-specific CSS variables server-side using a `<style>` tag or `generateMetadata`.
+**Theme loading strategy:** The `[orgSlug]/layout.tsx` fetches the org's public profile (`org_profiles/{orgId}`) which includes theme tokens. This fetch does NOT require auth (the `org_profiles` collection is publicly readable). The layout injects the 6 theme tokens as CSS variables via an inline `<style>` tag in the server-rendered HTML, preventing flash-of-wrong-theme.
+
+The `AuthGate` component (rendered inside the layout) handles authentication. If the user is not authenticated, they see the login page styled with the org's theme. If authenticated but not a member of this org, they are redirected to `/access-denied`.
 
 #### 1.5g. Update firebase.json
 
@@ -611,22 +654,25 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isAuthenticated() &&
-        exists(/databases/$(database)/documents/platform/super_admins/$(request.auth.uid));
+        exists(/databases/$(database)/documents/super_admins/$(request.auth.uid));
     }
 
     // ─── Organization Config ──────────────────────────────
     match /organizations/{orgId} {
-      // Members can read org config; admins can update; only super-admins create/delete
+      // Members can read org config; all writes via Cloud Functions/Admin SDK only
       allow read: if isOrgMember(orgId) || isSuperAdmin();
-      allow update: if isOrgAdmin(orgId) || isSuperAdmin();
-      allow create, delete: if isSuperAdmin();
+      allow write: if false; // Admin SDK only — prevents unvalidated field mutations
 
       // ─── Users subcollection ────────────────────────────
       match /users/{userId} {
-        // Members can read the user list; admins can manage; owners have full control
         allow read: if isOrgMember(orgId) || isSuperAdmin();
-        allow create, update: if isOrgAdmin(orgId) || isSuperAdmin();
-        allow delete: if isOrgOwner(orgId) || isSuperAdmin();
+        allow write: if false; // Admin SDK only — role changes, invites, removals go through Cloud Functions
+      }
+
+      // ─── Invites subcollection (email-keyed) ───────────
+      match /invites/{email} {
+        allow read: if isOrgAdmin(orgId) || isSuperAdmin();
+        allow write: if false; // Admin SDK only
       }
 
       // ─── Credentials subcollection ──────────────────────
@@ -679,13 +725,27 @@ service cloud.firestore {
       allow write: if false; // Admin SDK only
     }
 
-    match /platform/super_admins/{userId} {
+    match /super_admins/{userId} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow write: if false; // Admin SDK only
     }
 
+    // ─── Public org profiles (pre-auth branding) ──────────
+    match /org_profiles/{orgId} {
+      allow read: if true; // Public — name, logo, theme only
+      allow write: if false; // Admin SDK only (synced from org config)
+    }
+
+    // ─── User-to-org mapping ──────────────────────────────
+    match /user_org_map/{userId} {
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if false; // Admin SDK only (maintained by triggers)
+    }
+
     // ─── Legacy collections (read-only during migration) ──
-    // Remove these rules after data migration is complete
+    // CRITICAL: Remove or restrict to super-admin BEFORE onboarding org #2.
+    // These rules allow any authenticated user to read all legacy data,
+    // which breaks tenant isolation once a second org exists.
     match /reviews/{reviewId} {
       allow read: if isAuthenticated();
       allow write: if false;
@@ -718,7 +778,7 @@ service cloud.firestore {
 **CRITICAL NOTES:**
 - The `credentials` subcollection has `allow read, write: if false` — Feefo API secrets are ONLY accessed via Cloud Functions using the Firebase Admin SDK (which bypasses security rules)
 - Legacy top-level collection rules remain during migration but should be removed once migration is verified complete
-- `isSuperAdmin()` requires a document in `platform/super_admins/{uid}` — this must be manually created in the Firebase Console for the initial platform admin
+- `isSuperAdmin()` requires a document in `super_admins/{uid}` — this must be manually created in the Firebase Console for the initial platform admin
 
 ### 2b. Data Migration Script
 
@@ -734,7 +794,7 @@ A one-time Node.js script (run locally or as a Cloud Function) that:
 6. Copies `itinerary_mappings/` to `organizations/uniworld-journeys/itinerary_mappings/`
 7. Copies `admin_users/` to `organizations/uniworld-journeys/users/` (mapping email -> uid, role)
 8. Copies `operation_logs/` to `organizations/uniworld-journeys/operation_logs/`
-9. Creates `platform/super_admins/{uid}` for the initial super-admin
+9. Creates `super_admins/{uid}` for the initial super-admin
 10. Writes a migration log with counts and status
 
 **Migration strategy:**
@@ -745,54 +805,76 @@ A one-time Node.js script (run locally or as a Cloud Function) that:
 - After verification, update Cloud Functions and queries to read from new paths
 - After 30 days of stable operation, delete legacy collections
 
-### 2c. Encrypted Feefo Credential Storage
+**Cutover plan (prevents data divergence):**
+1. Announce a maintenance window (30-60 minutes)
+2. **Pause the sync scheduler** — disable the `dailySync` Cloud Function in Firebase Console
+3. Run migration script in dry-run mode, verify counts
+4. Run migration for real
+5. Deploy updated Cloud Functions that read/write from `organizations/{orgId}/` paths
+6. Deploy updated frontend that queries new paths
+7. **Resume the sync scheduler**
+8. Verify: trigger a manual sync, confirm reviews appear in new paths
+9. Legacy collections remain as read-only backup for 30 days
+
+### 2c. Feefo Credential Storage (Google Cloud Secret Manager)
 
 **Current state:** Feefo OAuth credentials stored as environment variables (`FEEFO_UNIWORLD_CLIENT_ID`, etc.) in Cloud Functions runtime.
 
 **Problem:** Can't add credentials for new orgs without redeploying Cloud Functions.
 
-**Solution:** Store credentials in Firestore with encryption via Google Cloud Secret Manager or Cloud KMS.
+**Solution:** Store credentials in Google Cloud Secret Manager. Firestore holds only metadata (status, last verified); actual secrets live in Secret Manager.
 
 **Architecture:**
 
-```
 1. Org admin enters Feefo credentials in Settings UI (Phase 3)
 2. Frontend sends credentials to a Cloud Function endpoint
-3. Cloud Function encrypts with Cloud KMS and writes to:
-   organizations/{orgId}/credentials/feefo
-4. Sync function reads credentials, decrypts with Cloud KMS
-5. Uses decrypted credentials to call Feefo API
-```
+3. Cloud Function stores them in Secret Manager:
+   - `projects/feefo-reviews/secrets/org-{orgId}-feefo-client-id`
+   - `projects/feefo-reviews/secrets/org-{orgId}-feefo-client-secret`
+4. Cloud Function writes metadata to `organizations/{orgId}/credentials/feefo`
+5. Sync function reads secrets from Secret Manager at runtime
+6. Uses credentials to call Feefo API
 
 **Cloud Function for credential management:**
 
 ```typescript
 // functions/src/credentials.ts
-import { kms } from "@google-cloud/kms";
+import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 
-const kmsClient = new kms.KeyManagementServiceClient();
-const KEY_NAME = `projects/feefo-reviews/locations/us-central1/keyRings/feefo-credentials/cryptoKeys/org-credentials`;
+const secretClient = new SecretManagerServiceClient();
+const PROJECT_ID = "feefo-reviews";
 
-export async function encryptCredential(plaintext: string): Promise<string> {
-  const [result] = await kmsClient.encrypt({
-    name: KEY_NAME,
-    plaintext: Buffer.from(plaintext),
+export async function storeOrgSecret(orgId: string, name: string, value: string): Promise<string> {
+  const secretId = `org-${orgId}-feefo-${name}`;
+  const parent = `projects/${PROJECT_ID}`;
+
+  // Create secret if it doesn't exist, then add a version
+  try {
+    await secretClient.createSecret({ parent, secretId, secret: { replication: { automatic: {} } } });
+  } catch (err: any) {
+    if (err.code !== 6) throw err; // 6 = ALREADY_EXISTS
+  }
+
+  const [version] = await secretClient.addSecretVersion({
+    parent: `${parent}/secrets/${secretId}`,
+    payload: { data: Buffer.from(value) },
   });
-  return Buffer.from(result.ciphertext as Uint8Array).toString("base64");
+
+  return version.name!;
 }
 
-export async function decryptCredential(ciphertext: string): Promise<string> {
-  const [result] = await kmsClient.decrypt({
-    name: KEY_NAME,
-    ciphertext: Buffer.from(ciphertext, "base64"),
+export async function getOrgSecret(orgId: string, name: string): Promise<string> {
+  const secretId = `org-${orgId}-feefo-${name}`;
+  const [version] = await secretClient.accessSecretVersion({
+    name: `projects/${PROJECT_ID}/secrets/${secretId}/versions/latest`,
   });
-  return Buffer.from(result.plaintext as Uint8Array).toString("utf8");
+  return version.payload!.data!.toString();
 }
 ```
 
-**Fallback (simpler alternative):** Use Google Cloud Secret Manager directly. Store each org's credentials as a secret: `projects/feefo-reviews/secrets/org-{orgId}-feefo-client-id`. Cloud Functions access via Secret Manager API. Slightly more overhead per read but simpler encryption management.
+**Feefo credential assumption:** The plan assumes a single Feefo credential pair (client ID + client secret) works across all merchant IDs within one org. If different merchants require different OAuth credentials, secrets should be stored at the merchant-connection level: `org-{orgId}-merchant-{merchantId}-feefo-client-id`. Validate this with Feefo documentation before implementation.
 
-**For Uniworld migration:** The migration script reads current env vars and writes encrypted versions to `organizations/uniworld-journeys/credentials/feefo`.
+**For Uniworld migration:** The migration script reads current env vars and stores them in Secret Manager, then writes metadata references to `organizations/uniworld-journeys/credentials/feefo`.
 
 ### 2d. Tenant-Aware Cloud Functions
 
@@ -836,6 +918,46 @@ async function syncAllOrganizations() {
 }
 ```
 
+**Scaling to 50+ orgs (Cloud Tasks fan-out):**
+
+The sequential loop above works for a small number of orgs but will hit Cloud Function timeout limits (540s) and Feefo API rate limits at scale. For production with 50+ orgs:
+
+1. The `syncScheduler` function enqueues one Cloud Task per organization
+2. Each task runs as a separate Cloud Function invocation with its own timeout
+3. Tasks include a configurable delay between orgs to respect Feefo rate limits
+4. Failed tasks retry independently without blocking other orgs
+
+```typescript
+// Scalable sync scheduler using Cloud Tasks
+import { CloudTasksClient } from "@google-cloud/tasks";
+
+async function enqueueSyncTasks() {
+  const tasksClient = new CloudTasksClient();
+  const queue = `projects/feefo-reviews/locations/us-central1/queues/feefo-sync`;
+
+  const orgsSnapshot = await admin.firestore()
+    .collection("organizations")
+    .where("status", "==", "active")
+    .get();
+
+  for (let i = 0; i < orgsSnapshot.docs.length; i++) {
+    const orgId = orgsSnapshot.docs[i].id;
+    await tasksClient.createTask({
+      parent: queue,
+      task: {
+        httpRequest: {
+          url: `https://us-central1-feefo-reviews.cloudfunctions.net/syncOrg`,
+          body: Buffer.from(JSON.stringify({ orgId })).toString("base64"),
+          headers: { "Content-Type": "application/json" },
+        },
+        // Stagger tasks by 30 seconds to avoid Feefo rate limits
+        scheduleTime: { seconds: Math.floor(Date.now() / 1000) + (i * 30) },
+      },
+    });
+  }
+}
+```
+
 **Manual sync endpoint:**
 - Validates the requesting user is an admin of the specified org
 - Only syncs that org's merchants
@@ -873,6 +995,8 @@ export async function getFleetSummary(brand: Brand) {
 // New
 export async function getFleetSummary(orgId: string, merchantId: string) {
   const db = getClientDb();
+  // Summary doc ID follows compound key: "{merchantId}" for fleet summaries
+  // Ship summaries: "{merchantId}_ship_{slug}", Itinerary: "{merchantId}_itinerary_{slug}"
   const docRef = doc(db, "organizations", orgId, "summaries", merchantId);
   ...
 }
@@ -1011,7 +1135,11 @@ user_org_map/
     updatedAt: timestamp
 ```
 
-This collection is maintained by Cloud Functions (triggers on `organizations/{orgId}/users/{uid}` create/delete) to keep it in sync.
+This collection is maintained by Cloud Functions with Firestore triggers on `organizations/{orgId}/users/{uid}`:
+- **onCreate:** Add the org to `user_org_map/{uid}.orgs`
+- **onUpdate:** Sync role changes to `user_org_map/{uid}.orgs`
+- **onDelete:** Remove the org from `user_org_map/{uid}.orgs`
+- **Repair function:** A manually-triggered Cloud Function that rebuilds `user_org_map` from all `organizations/*/users/*` documents in case of trigger failures or drift
 
 ### User Management UI (in Settings)
 
@@ -1131,13 +1259,14 @@ Step 5: "You're All Set!"
 ## Design Principles (All Phases)
 
 1. **Organization = tenant** — An organization is the unit of isolation for data, theme, settings, and users
-2. **Path-based routing** — `/{orgSlug}/...` for all tenant-scoped pages. Single domain, zero DNS management.
-3. **Login determines org** — No org selection within the dashboard; the authenticated user's org mapping controls everything. Multi-org users get a picker at login.
-4. **Merchant switcher for data scope** — Within an org, the merchant switcher filters which Feefo data is displayed
-5. **Semantic tokens over hardcoded values** — Every color references a semantic CSS variable derived from the org's 6 theme tokens
-6. **Derive, don't duplicate** — Dark mode and variant colors are computed from 6 tokens, not manually specified
-7. **Credentials never in client** — Feefo API secrets stored encrypted in Firestore, accessed only via Admin SDK in Cloud Functions
-8. **Security rules from day one** — Tenant isolation enforced at the Firestore level, not just the application level
-9. **Progressive enhancement** — Each phase builds on the last; the app works at every stage
-10. **WCAG AA compliance** — All text/background combinations must meet 4.5:1 contrast ratio
-11. **Mobile-first** — Responsive behavior is a first-class concern
+2. **Slugs are immutable** — The org slug is the Firestore document ID and appears in URLs. It cannot be changed after creation. If an org needs a different URL, set up a redirect rather than renaming the document (which would require copying the entire subcollection tree).
+3. **Path-based routing** — `/{orgSlug}/...` for all tenant-scoped pages. Single domain, zero DNS management.
+4. **Login determines org** — No org selection within the dashboard; the authenticated user's org mapping controls everything. Multi-org users get a picker at login.
+5. **Merchant switcher for data scope** — Within an org, the merchant switcher filters which Feefo data is displayed
+6. **Semantic tokens over hardcoded values** — Every color references a semantic CSS variable derived from the org's 6 theme tokens
+7. **Derive, don't duplicate** — Dark mode and variant colors are computed from 6 tokens, not manually specified
+8. **Credentials never in client** — Feefo API secrets stored encrypted in Firestore, accessed only via Admin SDK in Cloud Functions
+9. **Security rules from day one** — Tenant isolation enforced at the Firestore level, not just the application level
+10. **Progressive enhancement** — Each phase builds on the last; the app works at every stage
+11. **WCAG AA compliance** — All text/background combinations must meet 4.5:1 contrast ratio
+12. **Mobile-first** — Responsive behavior is a first-class concern

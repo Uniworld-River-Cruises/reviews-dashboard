@@ -1,7 +1,7 @@
 # Multi-Tenant Manual Setup Instructions
 
 **Date:** 2026-04-03
-**Related plan:** `2026-04-03-multi-tenant-roadmap-v2.md`
+**Related plan:** `2026-04-03-multi-tenant-roadmap.md`
 **Purpose:** Step-by-step instructions for manual actions required outside of code — Firebase Console, Google Cloud Console, GitHub, Microsoft Entra ID, and DNS configuration.
 
 These steps are organized by phase and must be completed **before** the corresponding code changes are deployed.
@@ -63,17 +63,44 @@ These steps are organized by phase and must be completed **before** the correspo
 4. Follow the DNS verification steps provided
 5. Firebase will provision an SSL certificate automatically
 
-### Step 6: Update Firebase Hosting (Legacy) — Redirect or Decommission
+### Step 6: Update Firebase Hosting (Legacy) — Redirect with Deep Links
 
-After Firebase App Hosting is working:
+Keep Firebase Hosting active temporarily to redirect existing bookmarks to the new App Hosting URLs. Since all routes now live under `/{orgSlug}/`, old deep links need explicit mapping.
 
-1. **Option A (Recommended for transition):** Keep the old Firebase Hosting active temporarily with a redirect:
-   - In `firebase.json`, update the hosting section to redirect all traffic to the new App Hosting URL
-   - This ensures existing bookmarks/links continue working
+1. In `firebase.json`, replace the hosting `rewrites` with redirect rules:
 
-2. **Option B (Clean break):** Remove the `hosting` section from `firebase.json` entirely
-   - Only do this once you've confirmed all users have updated their bookmarks
-   - Note: `feefo-reviews.web.app` will stop serving if you remove hosting config
+   ```json
+   "hosting": {
+     "public": "app/out",
+     "redirects": [
+       { "source": "/reviews", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/reviews", "type": 301 },
+       { "source": "/itineraries", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/itineraries", "type": 301 },
+       { "source": "/ships", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/ships", "type": 301 },
+       { "source": "/admin", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/admin", "type": 301 },
+       { "source": "/admin/logs", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/admin/logs", "type": 301 },
+       { "source": "**", "destination": "https://[APP_HOSTING_DOMAIN]/", "type": 302 }
+     ]
+   }
+   ```
+
+2. Replace `[APP_HOSTING_DOMAIN]` with your actual App Hosting URL
+3. Deploy: `firebase deploy --only hosting`
+4. Test each old URL to confirm it redirects correctly
+5. After 90 days, remove the hosting section from `firebase.json` entirely
+
+### Step 6.5: Add New Domain to Firebase Auth Authorized Domains
+
+Firebase Auth popup/redirect authentication requires the serving domain to be listed as an authorized domain. Without this, `signInWithPopup()` will fail.
+
+1. Go to **Firebase Console > Authentication > Settings**
+2. Scroll to **Authorized domains**
+3. Click **Add domain**
+4. Add your Firebase App Hosting domain: `feefo-reviews-web--[hash].us-central1.hosted.app`
+   - You can find the exact domain in **Firebase Console > App Hosting > your backend > Domain**
+5. If you've configured a custom domain, add that too (e.g., `reviews.feefo-platform.com`)
+6. Keep the existing domains (`feefo-reviews.web.app`, `feefo-reviews.firebaseapp.com`, `localhost`)
+
+**Important:** This is separate from the Microsoft Entra ID redirect URIs (Phase 4). Both are required — Firebase Auth checks authorized domains, and Entra checks redirect URIs.
 
 ### Step 7: Update GitHub Actions Workflow
 
@@ -93,12 +120,12 @@ After Firebase App Hosting is working:
    firebase deploy --project feefo-reviews --only functions,firestore
    ```
 
-5. Remove the step that builds the Next.js static export (the `npm run build` in the `app/` directory) since App Hosting handles the frontend build
+5. Keep the `npm --prefix app run build` step for CI validation (lint, type-check, build errors), but stop deploying the build output. App Hosting handles its own build on deploy.
 6. You may also want to add a step that runs `firebase apphosting:backends:get feefo-reviews-web` to verify the App Hosting backend is healthy after deploy
 
 ### Step 8: Configure App Hosting Build Settings
 
-1. Create a file `apphosting.yaml` in the **repository root** (NOT inside `app/`):
+1. Create a file `apphosting.yaml` in the **`app/` directory** (same directory as `next.config.ts` and `package.json`). If the backend root directory is set to `app` in the Firebase Console, App Hosting resolves config files from that root:
 
    ```yaml
    runConfig:
@@ -124,52 +151,46 @@ After Firebase App Hosting is working:
 
 ## Phase 2: Cloud KMS, Firestore & Storage Setup
 
-### Step 1: Enable the Cloud KMS API
+### Step 1: Enable the Secret Manager API
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Select the **feefo-reviews** project
 3. Navigate to **APIs & Services > Library**
-4. Search for **Cloud Key Management Service (Cloud KMS)**
+4. Search for **Secret Manager API**
 5. Click **Enable**
 
-### Step 2: Create a KMS Key Ring and Key
+### Step 2: Grant Cloud Functions Service Account Secret Manager Permissions
 
-1. In the Google Cloud Console, navigate to **Security > Key Management**
-2. Click **Create Key Ring**
-   - **Key ring name:** `feefo-credentials`
-   - **Location:** `us-central1` (same region as Cloud Functions)
+1. Go to **IAM & Admin > IAM**
+2. Find the Cloud Functions service account: `feefo-reviews@appspot.gserviceaccount.com`
+3. Click **Edit** (pencil icon)
+4. Add the role: **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`)
+5. Also add: **Secret Manager Secret Version Adder** (`roles/secretmanager.secretVersionAdder`) — needed for the Settings UI to store new credentials
+6. Click **Save**
+
+### Step 3: Create Initial Secrets for Uniworld Journeys
+
+For the initial migration, create secrets for the existing Feefo credentials:
+
+1. In Google Cloud Console, navigate to **Security > Secret Manager**
+2. Click **Create Secret**
+   - **Name:** `org-uniworld-journeys-feefo-client-id`
+   - **Secret value:** (paste the current `FEEFO_UNIWORLD_CLIENT_ID` value)
    - Click **Create**
-3. Inside the key ring, click **Create Key**
-   - **Key name:** `org-credentials`
-   - **Protection level:** **Software** (sufficient for this use case; HSM is more expensive)
-   - **Purpose:** **Symmetric encrypt/decrypt**
-   - **Rotation period:** 90 days (recommended)
+3. Create a second secret:
+   - **Name:** `org-uniworld-journeys-feefo-client-secret`
+   - **Secret value:** (paste the current `FEEFO_UNIWORLD_CLIENT_SECRET` value)
    - Click **Create**
+4. **For Luxury Gold** (same org, but if it has separate credentials):
+   - If Luxury Gold uses the SAME Feefo credentials as Uniworld, no additional secrets needed
+   - If it uses DIFFERENT credentials, create: `org-uniworld-journeys-merchant-luxury-gold-feefo-client-id` and `org-uniworld-journeys-merchant-luxury-gold-feefo-client-secret`
 
-### Step 3: Grant Cloud Functions Service Account KMS Permissions
+### Step 4: Verify Secret Access from Cloud Functions
 
-1. Find your Cloud Functions service account:
-   - Go to **IAM & Admin > IAM**
-   - Look for the service account with format: `feefo-reviews@appspot.gserviceaccount.com`
-   - (Also check for the App Engine default service account or Cloud Functions service account)
-2. Click **Grant Access** (or edit the existing entry)
-3. Add the role: **Cloud KMS CryptoKey Encrypter/Decrypter** (`roles/cloudkms.cryptoKeyEncrypterDecrypter`)
-4. Click **Save**
-5. **Verify:** The service account should now have these roles:
-   - `Cloud KMS CryptoKey Encrypter/Decrypter`
-   - (Plus its existing roles like `Firebase Admin`, `Cloud Functions Invoker`, etc.)
-
-### Step 4: Note the Full Key Resource Name
-
-You'll need this in the Cloud Functions code. The format is:
-
-```
-projects/feefo-reviews/locations/us-central1/keyRings/feefo-credentials/cryptoKeys/org-credentials
-```
-
-Store this as an environment variable for Cloud Functions:
-1. Go to **GitHub > Repository Settings > Secrets and variables > Actions**
-2. Add a new secret: `KMS_KEY_NAME` with value: `projects/feefo-reviews/locations/us-central1/keyRings/feefo-credentials/cryptoKeys/org-credentials`
+After deploying the updated Cloud Functions:
+1. Trigger a manual sync from the admin UI
+2. Check Cloud Function logs for any "Permission denied" errors related to Secret Manager
+3. If errors occur, verify the service account has the correct IAM roles from Step 2
 
 ### Step 5: Create the Super-Admin Document in Firestore
 
@@ -183,13 +204,15 @@ This must be done manually for the FIRST super-admin (subsequent ones can be add
      - `maintenanceMode` (boolean): `false`
      - `allowSelfServiceSignup` (boolean): `false`
      - `defaultTheme` (map): `{ primary: "#1B3A5C", primaryDark: "#0F2A45", accent: "#C5A258", accentLight: "#D4B778", neutral: "#6B7280", surfaceWarm: "#F9F7F4" }`
-5. Create a **subcollection** under `platform` called `super_admins`
+5. Create a NEW **top-level collection** called `super_admins` (NOT a subcollection under `platform`)
 6. Inside `super_admins`, create a document:
    - **Document ID:** (the Firebase Auth UID of the initial super-admin user)
      - To find this UID: go to **Firebase Console > Authentication > Users**, find the admin user's email, copy their **User UID**
    - Fields:
      - `email` (string): the admin's email
      - `addedAt` (timestamp): current time
+
+**Why top-level?** Firestore document paths must have an even number of segments (collection/document pairs). `platform/super_admins/{uid}` would be 3 segments, which is invalid as a document path. `super_admins/{uid}` is a valid 2-segment path.
 
 ### Step 6: Create Firestore Composite Indexes for New Collection Paths
 
@@ -199,24 +222,23 @@ After deploying the updated `firestore.indexes.json`, Firebase will create the i
 2. Click **Create index**
 3. You'll need indexes for common query patterns in the new subcollections, such as:
    - Collection group: `reviews` (under `organizations/{orgId}/reviews`)
-     - Fields: `merchantId` (Ascending) + `createdAt` (Descending)
-     - Fields: `merchantId` (Ascending) + `serviceRating` (Ascending) + `createdAt` (Descending)
+     - Fields: `merchantId` (Ascending) + `dates.created` (Descending)
+     - Fields: `merchantId` (Ascending) + `ratings.product` (Ascending) + `dates.created` (Descending)
+   - **Note:** Field names match the existing review schema (`dates.created`, `ratings.product`, `ratings.service`, `themes.positive`, etc.). The roadmap preserves the current schema.
    - Collection group: `summaries` (under `organizations/{orgId}/summaries`)
      - Fields: as needed by existing query patterns
 
 **Tip:** During development, Firestore will show error messages with a direct link to create the required index. Click those links for the fastest workflow.
 
-### Step 7: Update Cloud Functions Environment Variables
+### Step 7: Update Cloud Functions Dependencies
 
-Add the KMS key name to the Cloud Functions environment:
+After switching to Secret Manager, update the Cloud Functions:
 
-1. Go to **GitHub > Repository Settings > Secrets and variables > Actions**
-2. Add or update:
-   - `KMS_KEY_NAME` = `projects/feefo-reviews/locations/us-central1/keyRings/feefo-credentials/cryptoKeys/org-credentials`
-3. Update `.github/workflows/firebase-deploy.yml` to write this into `functions/.env.feefo-reviews`:
+1. Add the Secret Manager client library to `functions/package.json`:
    ```
-   KMS_KEY_NAME=${{ secrets.KMS_KEY_NAME }}
+   npm --prefix functions install @google-cloud/secret-manager
    ```
+2. No additional environment variables or GitHub Secrets are needed — the Secret Manager client uses Application Default Credentials (ADC) which are automatically available on Cloud Functions and Cloud Run
 
 ### Step 8: Run the Data Migration (After Code Is Deployed)
 
@@ -386,25 +408,30 @@ If you ever need `uniworld.reviews.feefo-platform.com`:
 - [ ] Set environment variables in App Hosting config
 - [ ] Create `apphosting.yaml` in repo root
 - [ ] Verify initial deployment succeeds
+- [ ] Add App Hosting domain to Firebase Auth Authorized Domains
 - [ ] Connect custom domain (if applicable)
 - [ ] Update GitHub Actions to remove hosting deploy target
 - [ ] Test: app loads at the new App Hosting URL
 - [ ] Test: existing Cloud Functions still work
 
 ### Phase 2 Checklist (Do Before Deploying Phase 2 Code)
-- [ ] Enable Cloud KMS API in Google Cloud Console
-- [ ] Create KMS key ring: `feefo-credentials`
-- [ ] Create KMS key: `org-credentials`
-- [ ] Grant Cloud Functions service account the CryptoKey Encrypter/Decrypter role
-- [ ] Add `KMS_KEY_NAME` to GitHub Secrets
+- [ ] Enable Secret Manager API in Google Cloud Console
+- [ ] Grant Cloud Functions service account Secret Manager Accessor + Version Adder roles
+- [ ] Create initial secrets for Uniworld Journeys Feefo credentials
+- [ ] Verify secret access from Cloud Functions
 - [ ] Create `platform/config` document in Firestore
-- [ ] Create `platform/super_admins/{uid}` document for initial super-admin
+- [ ] Create `super_admins/{uid}` document (top-level collection) for initial super-admin
 - [ ] Export Firestore data as backup before migration
 - [ ] Run migration script in dry-run mode
+- [ ] Pause sync scheduler before migration
 - [ ] Run migration script for real
+- [ ] Deploy updated Cloud Functions (new collection paths)
+- [ ] Resume sync scheduler
+- [ ] Trigger manual sync to verify new paths work
 - [ ] Verify migration: document counts, data integrity
 - [ ] Test: dashboard loads with data from new collection paths
 - [ ] Keep legacy collections for 30 days
+- [ ] CRITICAL: Restrict or remove legacy collection rules BEFORE onboarding org #2
 
 ### Phase 3 Checklist (Do Before Deploying Phase 3 Code)
 - [ ] Enable Firebase Storage (if not already)
