@@ -324,7 +324,7 @@ Multi-tenant requires **server-side rendering** to resolve which organization a 
 1. **Remove static export** from Next.js config
 2. **Migrate hosting** from Firebase Hosting (static) to Firebase App Hosting (Cloud Run SSR)
 3. **Add `[orgSlug]` route structure** with dynamic segments
-4. **Add Next.js middleware** for tenant resolution and auth validation
+4. **Add Next.js middleware** for path validation and reserved-route skipping
 5. **Update CI/CD pipeline** for new deployment target
 6. **Update `theme-init.js`** for multi-tenant theme bootstrapping
 
@@ -511,9 +511,9 @@ To (for Firebase App Hosting):
 firebase apphosting:backends:create --project feefo-reviews
 ```
 
-**Note:** Firebase App Hosting uses a `apphosting.yaml` file in the repo root for configuration. See the manual setup instructions document for Firebase Console steps.
+**Note:** Firebase App Hosting uses an `apphosting.yaml` file in the `app/` directory for configuration. See the manual setup instructions document for Firebase Console steps.
 
-**New file:** `apphosting.yaml` (repo root)
+**New file:** `app/apphosting.yaml` (same directory as next.config.ts)
 ```yaml
 runConfig:
   minInstances: 0
@@ -546,25 +546,7 @@ The `AuthGate` component (rendered inside the layout) handles authentication. If
 
 **File:** `firebase.json`
 
-Remove the `hosting` section (Firebase App Hosting manages this separately):
-
-```json
-{
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "functions": {
-    "source": "functions",
-    "codebase": "default",
-    "predeploy": [
-      "npm --prefix shared run build",
-      "node scripts/copy-shared.js",
-      "npm --prefix functions run build"
-    ]
-  }
-}
-```
+Keep the `hosting` section temporarily for legacy URL redirects (see manual setup doc for redirect rules). Remove the `rewrites` and replace with `redirects` that map old paths to `/{orgSlug}/` equivalents on the new App Hosting domain. After 90 days, remove the `hosting` section entirely.
 
 ### Key Files (Phase 1.5)
 
@@ -581,10 +563,10 @@ Remove the `hosting` section (Firebase App Hosting manages this separately):
 | `app/src/app/page.tsx` | Rewrite | Login / org picker landing page |
 | `app/src/app/access-denied/page.tsx` | Create | No-org-membership error page |
 | `app/src/app/layout.tsx` | Modify | Slim down (remove org-specific providers) |
-| `app/src/middleware.ts` | Create | Path-based tenant resolution |
+| `app/src/middleware.ts` | Create | Path validation and reserved-route skipping |
 | `app/src/contexts/OrgContext.tsx` | Create | Replace DashboardContext with org-aware context |
 | `app/src/contexts/DashboardContext.tsx` | Delete | Replaced by OrgContext |
-| `apphosting.yaml` | Create | Firebase App Hosting configuration |
+| `app/apphosting.yaml` | Create | Firebase App Hosting configuration |
 | `firebase.json` | Modify | Remove `hosting` section |
 | `.github/workflows/firebase-deploy.yml` | Modify | Update deployment commands |
 
@@ -593,7 +575,7 @@ Remove the `hosting` section (Firebase App Hosting manages this separately):
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Firebase App Hosting is newer, less mature | Medium | Test thoroughly in staging. Fallback: deploy to Vercel, keep Firestore/Functions on Firebase |
-| Breaking all existing URLs | High | Add redirect: `/{old-path}` -> `/uniworld-journeys/{old-path}` in middleware during transition |
+| Breaking all existing URLs | High | Keep legacy Firebase Hosting with redirect rules mapping old paths to `/uniworld-journeys/{old-path}` on new domain |
 | Cold start latency (Cloud Run) | Low | Set `minInstances: 1` in `apphosting.yaml` if needed (adds cost) |
 | DashboardContext -> OrgContext migration breaks components | Medium | Mechanical rename; all component interfaces stay the same. Add `useDashboard()` as deprecated alias initially |
 
@@ -971,7 +953,7 @@ async function enqueueSyncTasks() {
 | Current Path | New Path |
 |---|---|
 | `reviews/{reviewId}` | `organizations/{orgId}/reviews/{reviewId}` |
-| `summaries/{scope}` | `organizations/{orgId}/summaries/{scope}` |
+| `summaries/{scope}` | `organizations/{orgId}/summaries/{summaryId}` |
 | `monthly_summaries/{docId}` | `organizations/{orgId}/monthly_summaries/{docId}` |
 | `sync_meta/{brandId}` | `organizations/{orgId}/sync_meta/{merchantId}` |
 | `itinerary_mappings/{id}` | `organizations/{orgId}/itinerary_mappings/{id}` |
@@ -1011,7 +993,7 @@ Every query function gains an `orgId` parameter. The `OrgContext` provides the c
 | `firestore.rules` | Rewrite | Tenant-scoped security rules |
 | `firestore.indexes.json` | Update | Add indexes for new collection paths |
 | `scripts/migrate-to-multi-tenant.ts` | Create | One-time data migration |
-| `functions/src/credentials.ts` | Create | KMS encrypt/decrypt helpers |
+| `functions/src/credentials.ts` | Create | Secret Manager read/write helpers |
 | `functions/src/sync/index.ts` | Modify | Tenant-aware sync scheduler |
 | `functions/src/index.ts` | Modify | Update all endpoints for org-scoped paths |
 | `shared/src/feefo/client.ts` | Modify | Accept credentials as params (not env vars) |
@@ -1026,7 +1008,7 @@ Every query function gains an `orgId` parameter. The `OrgContext` provides the c
 |---|---|---|
 | Security rule bugs leak data across orgs | CRITICAL | Write comprehensive rule tests using Firebase Emulator. Test: member reads own org (pass), member reads other org (deny), unauthenticated reads (deny), credential reads (deny) |
 | Data migration corrupts or loses data | HIGH | Dry-run mode, preserve originals, verify counts match, keep legacy collections for 30 days |
-| Cloud KMS adds latency to sync | LOW | Cache decrypted credentials in memory for the duration of a sync run (not across invocations) |
+| Secret Manager adds latency to sync | LOW | Cache decrypted credentials in memory for the duration of a sync run (not across invocations) |
 | Firestore composite index limits | MEDIUM | Plan indexes upfront. Firestore allows 200 composite indexes per database — track usage |
 
 ---
@@ -1047,7 +1029,7 @@ Build the `/[orgSlug]/settings` page where org admins configure their organizati
 - Color picker for each of the 6 brand tokens (primary, primaryDark, accent, accentLight, neutral, surfaceWarm)
 - Live preview panel showing how the theme looks (header mock, card mock, chart mock)
 - "Reset to default" button (resets to `defaultTheme` from Phase 1)
-- Save persists to Firestore `organizations/{orgId}` (the `theme` field)
+- Save calls a Cloud Function that validates and writes to `organizations/{orgId}` (the `theme` field)
 - Validation: warn if selected colors fail WCAG AA contrast checks (4.5:1 ratio)
 - Changes trigger real-time re-derivation via existing `injectThemeTokens()` pipeline
 
@@ -1055,7 +1037,7 @@ Build the `/[orgSlug]/settings` page where org admins configure their organizati
 - Logo upload (stored in Firebase Storage at `organizations/{orgId}/assets/logo`)
 - App title text field (displayed in header)
 - Logo alt text field
-- Save updates `organizations/{orgId}` document
+- Save calls a Cloud Function that updates `organizations/{orgId}` document
 
 **3c. Merchant ID Management**
 - List current merchants with labels and Feefo merchant IDs
@@ -1075,7 +1057,7 @@ Build the `/[orgSlug]/settings` page where org admins configure their organizati
 
 - `/[orgSlug]/settings` page gated by `role: "admin"` or `role: "owner"` from `OrgContext`
 - Settings nav link only visible to admins (same visibility pattern as current Admin page)
-- `OrgContext` already holds the org config fetched from Firestore — settings page writes back to the same document
+- `OrgContext` already holds the org config fetched from Firestore — settings page reads from Firestore client-side, writes go through Cloud Functions
 - Theme token changes immediately update CSS variables in the current session via `injectThemeTokens()`
 - Logo upload uses Firebase Storage with org-scoped paths and org-scoped storage rules
 
@@ -1088,7 +1070,8 @@ Build the `/[orgSlug]/settings` page where org admins configure their organizati
 | `app/src/components/settings/BrandIdentityForm.tsx` | Create | Logo upload + app title |
 | `app/src/components/settings/MerchantManager.tsx` | Create | CRUD for merchant IDs + credentials |
 | `app/src/components/settings/GeneralSettings.tsx` | Create | Toggles and preferences |
-| `app/src/lib/firestore/org-queries.ts` | Create | Firestore read/write for org config |
+| `app/src/lib/firestore/org-queries.ts` | Create | Firestore reads for org config |
+| `functions/src/org-settings.ts` | Create | Cloud Function endpoints for org config writes |
 | `storage.rules` | Create | Firebase Storage rules for org-scoped uploads |
 
 ---
@@ -1143,8 +1126,8 @@ This collection is maintained by Cloud Functions with Firestore triggers on `org
 
 ### User Management UI (in Settings)
 
-- **Invite user:** Admin enters email, selects role (viewer/admin). Cloud Function creates the user document in `organizations/{orgId}/users/{uid}` and updates `user_org_map/{uid}`.
-- **Remove user:** Admin removes user from org. Cloud Function cleans up both collections.
+- **Invite user:** Admin enters email, selects role (admin/viewer). Cloud Function creates `invites/{normalizedEmail}` with status "pending". On the invited user's first sign-in, a trigger converts the invite to `users/{uid}` and populates `user_org_map/{uid}`.
+- **Remove user:** Admin removes user from org. Cloud Function deletes `organizations/{orgId}/users/{uid}` and updates `user_org_map/{uid}`.
 - **Change role:** Admin promotes viewer to admin, or demotes admin to viewer. Owner role can only be transferred, not granted additively.
 - **Self-service:** Users cannot change their own role.
 - **Transfer ownership:** Owner can transfer ownership to another admin (one owner per org).
@@ -1265,7 +1248,7 @@ Step 5: "You're All Set!"
 5. **Merchant switcher for data scope** — Within an org, the merchant switcher filters which Feefo data is displayed
 6. **Semantic tokens over hardcoded values** — Every color references a semantic CSS variable derived from the org's 6 theme tokens
 7. **Derive, don't duplicate** — Dark mode and variant colors are computed from 6 tokens, not manually specified
-8. **Credentials never in client** — Feefo API secrets stored encrypted in Firestore, accessed only via Admin SDK in Cloud Functions
+8. **Credentials never in client** — Feefo API secrets stored in Google Cloud Secret Manager, accessed only via Admin SDK in Cloud Functions
 9. **Security rules from day one** — Tenant isolation enforced at the Firestore level, not just the application level
 10. **Progressive enhancement** — Each phase builds on the last; the app works at every stage
 11. **WCAG AA compliance** — All text/background combinations must meet 4.5:1 contrast ratio

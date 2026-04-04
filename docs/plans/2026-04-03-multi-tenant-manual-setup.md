@@ -11,7 +11,7 @@ These steps are organized by phase and must be completed **before** the correspo
 ## Table of Contents
 
 1. [Phase 1.5: Firebase App Hosting Setup](#phase-15-firebase-app-hosting-setup)
-2. [Phase 2: Cloud KMS, Firestore & Storage Setup](#phase-2-cloud-kms-firestore--storage-setup)
+2. [Phase 2: Secret Manager, Firestore & Storage Setup](#phase-2-secret-manager-firestore--storage-setup)
 3. [Phase 3: Firebase Storage Rules](#phase-3-firebase-storage-rules)
 4. [Phase 4: Microsoft Entra ID & Auth Updates](#phase-4-microsoft-entra-id--auth-updates)
 5. [Phase 5: Domain & DNS (Optional)](#phase-5-domain--dns-optional)
@@ -71,7 +71,7 @@ Keep Firebase Hosting active temporarily to redirect existing bookmarks to the n
 
    ```json
    "hosting": {
-     "public": "app/out",
+     "public": "app/public",
      "redirects": [
        { "source": "/reviews", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/reviews", "type": 301 },
        { "source": "/itineraries", "destination": "https://[APP_HOSTING_DOMAIN]/uniworld-journeys/itineraries", "type": 301 },
@@ -149,7 +149,7 @@ Firebase Auth popup/redirect authentication requires the serving domain to be li
 
 ---
 
-## Phase 2: Cloud KMS, Firestore & Storage Setup
+## Phase 2: Secret Manager, Firestore & Storage Setup
 
 ### Step 1: Enable the Secret Manager API
 
@@ -162,10 +162,10 @@ Firebase Auth popup/redirect authentication requires the serving domain to be li
 ### Step 2: Grant Cloud Functions Service Account Secret Manager Permissions
 
 1. Go to **IAM & Admin > IAM**
-2. Find the Cloud Functions service account: `feefo-reviews@appspot.gserviceaccount.com`
+2. Find the Cloud Functions service account. For Functions v2 (which this project uses), the default is the **Compute Engine default service account**: `[PROJECT_NUMBER]-compute@developer.gserviceaccount.com`. You can verify this in **Cloud Functions > your function > Details > Service account**. (The App Engine service account `feefo-reviews@appspot.gserviceaccount.com` is used by Functions v1.)
 3. Click **Edit** (pencil icon)
 4. Add the role: **Secret Manager Secret Accessor** (`roles/secretmanager.secretAccessor`)
-5. Also add: **Secret Manager Secret Version Adder** (`roles/secretmanager.secretVersionAdder`) — needed for the Settings UI to store new credentials
+5. Also add: **Secret Manager Admin** (`roles/secretmanager.admin`) — needed for Cloud Functions to create new secrets and add versions when orgs connect their Feefo credentials
 6. Click **Save**
 
 ### Step 3: Create Initial Secrets for Uniworld Journeys
@@ -406,7 +406,7 @@ If you ever need `uniworld.reviews.feefo-platform.com`:
 - [ ] Enable Firebase App Hosting in Firebase Console
 - [ ] Connect GitHub repository to App Hosting backend
 - [ ] Set environment variables in App Hosting config
-- [ ] Create `apphosting.yaml` in repo root
+- [ ] Create `apphosting.yaml` in `app/` directory
 - [ ] Verify initial deployment succeeds
 - [ ] Add App Hosting domain to Firebase Auth Authorized Domains
 - [ ] Connect custom domain (if applicable)
@@ -416,7 +416,7 @@ If you ever need `uniworld.reviews.feefo-platform.com`:
 
 ### Phase 2 Checklist (Do Before Deploying Phase 2 Code)
 - [ ] Enable Secret Manager API in Google Cloud Console
-- [ ] Grant Cloud Functions service account Secret Manager Accessor + Version Adder roles
+- [ ] Grant Cloud Functions service account Secret Manager Accessor + Admin roles
 - [ ] Create initial secrets for Uniworld Journeys Feefo credentials
 - [ ] Verify secret access from Cloud Functions
 - [ ] Create `platform/config` document in Firestore
@@ -466,10 +466,10 @@ If you ever need `uniworld.reviews.feefo-platform.com`:
   - Missing environment variables (check `apphosting.yaml`)
   - Node.js version mismatch (ensure `package.json` has an `engines.node` field matching the Cloud Run runtime)
 
-### Cloud KMS Permission Denied
-- Verify the service account has `roles/cloudkms.cryptoKeyEncrypterDecrypter`
-- Verify the key ring location matches the Cloud Functions region
-- Check the full key resource name is correct (no typos in project ID, location, key ring name, or key name)
+### Secret Manager Permission Denied
+- Verify the service account has `roles/secretmanager.secretAccessor` and `roles/secretmanager.admin`
+- Check the full secret resource name is correct (no typos in project ID or secret name)
+- Verify the secret exists in Secret Manager and has at least one active version
 
 ### Firestore Security Rules Blocking Reads
 - Use the **Firebase Console > Firestore > Rules playground** to test specific read/write scenarios
