@@ -103,6 +103,7 @@ export function deriveTokens(tokens: BrandTokens, isDark: boolean): CssVarMap {
       "--brand-accent": accentLight, // lighter on dark backgrounds
       "--brand-accent-light": accentLight,
       "--brand-accent-hover": alpha(accentLight, 0.1),
+      "--accent-foreground": primaryDark, // dark text on accent backgrounds
       "--brand-primary-hover": alpha(accentLight, 0.08),
       "--brand-primary-light": alpha(accentLight, 0.15),
 
@@ -161,6 +162,7 @@ export function deriveTokens(tokens: BrandTokens, isDark: boolean): CssVarMap {
     "--brand-accent": accent,
     "--brand-accent-light": accentLight,
     "--brand-accent-hover": alpha(accent, 0.1),
+    "--accent-foreground": primaryDark, // dark text on accent backgrounds
     "--brand-primary-hover": alpha(primary, 0.05),
     "--brand-primary-light": alpha(primary, 0.1),
 

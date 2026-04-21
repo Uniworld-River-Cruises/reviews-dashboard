@@ -55,7 +55,7 @@ export default function MerchantSwitcher({
             className={`cursor-pointer rounded-full px-2.5 py-1 text-xs font-medium transition-colors whitespace-nowrap sm:px-4 sm:py-1.5 sm:text-sm ${
               isActive
                 ? isInverse
-                  ? "bg-brand-accent text-foreground shadow-sm"
+                  ? "bg-brand-accent text-accent-foreground shadow-sm font-semibold"
                   : "bg-surface text-text-primary shadow-sm border border-border"
                 : isInverse
                   ? "text-white/70 hover:text-white"

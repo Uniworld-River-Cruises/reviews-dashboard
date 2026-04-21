@@ -40,6 +40,7 @@
   --brand-accent:         #3b82f6;
   --brand-accent-light:   #60a5fa;
   --brand-accent-hover:   rgba(59, 130, 246, 0.1);
+  --accent-foreground:    #1e293b;
   --brand-primary-hover:  rgba(30, 41, 59, 0.05);
   --brand-primary-light:  rgba(30, 41, 59, 0.1);
 
@@ -102,6 +103,7 @@
   /* Brand accent */
   --color-brand-accent:         var(--brand-accent);
   --color-brand-accent-light:   var(--brand-accent-light);
+  --color-accent-foreground:    var(--accent-foreground);
 
   /* Nav */
   --color-nav-bg:               var(--nav-bg);
