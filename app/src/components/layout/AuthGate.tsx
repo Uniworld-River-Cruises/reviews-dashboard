@@ -62,7 +62,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (configError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#1B3A5C] px-6">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-header-bg px-6">
         <h1 className="text-xl font-semibold text-white">Configuration Error</h1>
         <p className="mt-3 max-w-md text-center text-sm text-white/60">
           {configError}
@@ -73,7 +73,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#1B3A5C]">
+      <div className="flex min-h-screen items-center justify-center bg-header-bg">
         <div className="text-sm text-white/50">Loading...</div>
       </div>
     );
@@ -81,7 +81,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (!authenticated) {
     return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#1B3A5C] px-6">
+      <div className="relative flex min-h-screen flex-col items-center justify-center bg-header-bg px-6">
         <div
           className="pointer-events-none absolute inset-0"
           style={{
@@ -100,7 +100,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           <button
             onClick={handleSignIn}
             disabled={busy}
-            className="mt-8 cursor-pointer rounded-full bg-[#C5A258] px-8 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-[#b3913e] disabled:opacity-50 sm:mt-10 sm:px-10 sm:py-3.5 sm:text-base"
+            className="mt-8 cursor-pointer rounded-full bg-brand-accent px-8 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:opacity-90 disabled:opacity-50 sm:mt-10 sm:px-10 sm:py-3.5 sm:text-base"
           >
             {busy ? "Signing in..." : "Sign In with Microsoft"}
           </button>

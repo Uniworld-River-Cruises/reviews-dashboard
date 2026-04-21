@@ -90,7 +90,7 @@ export default function AuthButton({
       <div
         className={`rounded-full px-3 py-1.5 text-xs ${
           isNeutral
-            ? "border border-slate-200 bg-white text-slate-500 shadow-sm dark:border-white/15 dark:bg-white/5 dark:text-white/70"
+            ? "border border-border bg-surface text-text-secondary shadow-sm"
             : "border border-white/20 bg-white/10 text-white/70"
         }`}
       >
@@ -105,7 +105,7 @@ export default function AuthButton({
         <div
           className={`hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex ${
             isNeutral
-              ? "border border-[#1B3A5C]/10 bg-[#1B3A5C]/[0.06] text-[#1B3A5C] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
+              ? "border border-brand-primary-light bg-brand-primary-light text-text-primary"
               : "border border-white/15 bg-white/10 text-white/80"
           }`}
           title={user.email}
@@ -120,7 +120,7 @@ export default function AuthButton({
         <div
           className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-xs ${
             isNeutral
-              ? "border border-[#1B3A5C]/10 bg-[#1B3A5C]/[0.06] text-[#1B3A5C] dark:border-white/10 dark:bg-white/5 dark:text-white/80"
+              ? "border border-brand-primary-light bg-brand-primary-light text-text-primary"
               : "border border-white/15 bg-white/10 text-white/80"
           }`}
           title={user.email ?? "Signed in"}
@@ -134,7 +134,7 @@ export default function AuthButton({
         disabled={busy}
         className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
           isNeutral
-            ? "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
+            ? "border border-border bg-surface text-text-primary shadow-sm hover:bg-surface-hover"
             : "border border-white/20 bg-white/10 text-white hover:bg-white/20"
         }`}
       >
@@ -159,7 +159,7 @@ export default function AuthButton({
       {error ? (
         <span
           className={`hidden max-w-[220px] truncate text-xs xl:inline ${
-            isNeutral ? "text-rose-600 dark:text-rose-300" : "text-red-200"
+            isNeutral ? "text-rose-600" : "text-red-200"
           }`}
         >
           {error}

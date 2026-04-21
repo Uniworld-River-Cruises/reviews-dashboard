@@ -33,7 +33,7 @@ export interface ReviewData {
 
 function StarRating({ rating }: { rating: number }) {
   return (
-    <span className="text-[#C5A258]" aria-label={`${rating} out of 5 stars`}>
+    <span className="text-brand-accent" aria-label={`${rating} out of 5 stars`}>
       {Array.from({ length: 5 }, (_, i) => (
         <span key={i}>{i < rating ? "\u2605" : "\u2606"}</span>
       ))}
@@ -63,14 +63,14 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
   }, [fullText]);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-2">
         <div>
-          <span className="font-medium text-[#1B3A5C]">
+          <span className="font-medium text-text-primary">
             {review.customerName || "Trusted Customer"}
           </span>
-          <span className="ml-2 text-xs text-gray-400">
+          <span className="ml-2 text-xs text-text-tertiary">
             {new Date(review.date).toLocaleDateString("en-GB", {
               day: "numeric",
               month: "short",
@@ -82,17 +82,17 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
       </div>
 
       {/* Meta — clickable itinerary and ship links */}
-      <div className="text-xs text-gray-500 mb-3 space-y-0.5">
+      <div className="text-xs text-text-secondary mb-3 space-y-0.5">
         {review.parentItinerary && (
           <div className="flex items-center gap-1.5">
             <Link
               href={`/itineraries?slug=${encodeURIComponent(slugify(review.parentItinerary))}`}
-              className="text-[#1B3A5C]/70 hover:text-[#1B3A5C] hover:underline"
+              className="text-text-primary/70 hover:text-text-primary hover:underline"
             >
               {review.parentItinerary}
             </Link>
             {review.brand && (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
+              <span className="rounded bg-surface-alt px-1.5 py-0.5 text-[10px] font-medium text-text-secondary uppercase">
                 {review.brand}
               </span>
             )}
@@ -102,7 +102,7 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
           <div>
             <Link
               href={`/ships?slug=${encodeURIComponent(slugify(review.ship))}`}
-              className="text-[#1B3A5C]/70 hover:text-[#1B3A5C] hover:underline"
+              className="text-text-primary/70 hover:text-text-primary hover:underline"
             >
               {review.ship}
             </Link>
@@ -113,7 +113,7 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
       {/* Review text */}
       <div
         ref={textRef}
-        className={`text-sm text-gray-700 leading-relaxed ${
+        className={`text-sm text-text-primary leading-relaxed ${
           expanded ? "" : "line-clamp-4"
         }`}
       >
@@ -122,7 +122,7 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
       {clamped && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-xs font-medium text-[#1B3A5C] hover:underline"
+          className="mt-1 text-xs font-medium text-text-primary hover:underline"
         >
           {expanded ? "Show less" : "Read more"}
         </button>
@@ -142,7 +142,7 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
             <button
               key={`pos-${theme}`}
               onClick={() => onThemeClick?.(theme, "positive")}
-              className="rounded-full bg-[#1B3A5C]/10 px-2.5 py-0.5 text-xs font-medium text-[#1B3A5C] hover:bg-[#1B3A5C]/20 transition-colors"
+              className="rounded-full bg-brand-primary-light px-2.5 py-0.5 text-xs font-medium text-text-primary hover:bg-brand-primary-light/50 transition-colors"
             >
               {theme}
             </button>

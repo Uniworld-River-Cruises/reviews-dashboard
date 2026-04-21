@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand } from "@/contexts/BrandContext";
 import KpiCard from "@/components/dashboard/KpiCard";
 import RatingDistributionChart from "@/components/dashboard/RatingDistributionChart";
 import TrendChart from "@/components/dashboard/TrendChart";
@@ -24,7 +25,8 @@ import {
 } from "@/lib/firestore/queries";
 
 export default function OverviewPage() {
-  const { brand, dateRange, dataVersion } = useDashboard();
+  const { merchantQueryId: brand } = useBrand();
+  const { dateRange, dataVersion } = useDashboard();
 
   const [fleet, setFleet] = useState<FleetSummary | null>(null);
   const [trendPoints, setTrendPoints] = useState<TrendPoint[]>([]);
@@ -124,7 +126,7 @@ export default function OverviewPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
@@ -139,7 +141,7 @@ export default function OverviewPage() {
 
   if (!fleet) {
     return (
-      <div className="rounded-2xl border border-gray-200 bg-white px-6 py-5 text-sm text-gray-600">
+      <div className="rounded-2xl border border-border bg-surface px-6 py-5 text-sm text-text-secondary">
         No overview data is available yet.
       </div>
     );
@@ -159,7 +161,7 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-[#1B3A5C]">Overview</h1>
+      <h1 className="text-2xl font-bold text-text-primary">Overview</h1>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">

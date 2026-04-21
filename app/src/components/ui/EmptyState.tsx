@@ -12,9 +12,9 @@ export default function EmptyState({ title, description, icon }: EmptyStateProps
           {icon}
         </span>
       )}
-      <h3 className="text-lg font-semibold text-gray-700 mb-1">{title}</h3>
+      <h3 className="text-lg font-semibold text-text-primary mb-1">{title}</h3>
       {description && (
-        <p className="text-sm text-gray-500 max-w-sm">{description}</p>
+        <p className="text-sm text-text-secondary max-w-sm">{description}</p>
       )}
     </div>
   );

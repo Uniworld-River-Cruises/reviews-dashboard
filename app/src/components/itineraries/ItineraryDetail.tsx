@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useDashboard } from "@/contexts/DashboardContext";
+import { useBrand } from "@/contexts/BrandContext";
 import KpiCard from "@/components/dashboard/KpiCard";
 import RatingDistributionChart from "@/components/dashboard/RatingDistributionChart";
 import ThemeChart from "@/components/dashboard/ThemeChart";
@@ -18,7 +19,8 @@ import {
 } from "@/lib/firestore/itinerary-queries";
 
 export default function ItineraryDetail({ slug }: { slug: string }) {
-  const { brand, dateRange, dataVersion } = useDashboard();
+  const { merchantQueryId: brand } = useBrand();
+  const { dateRange, dataVersion } = useDashboard();
   const [itinerary, setItinerary] = useState<ItinerarySummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
@@ -83,7 +85,7 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
       </div>
     );
   }
@@ -99,8 +101,8 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
   if (!itinerary) {
     return (
       <div className="text-center py-24">
-        <h1 className="text-2xl font-semibold text-[#1B3A5C] mb-4">Itinerary Not Found</h1>
-        <Link href="/itineraries" className="text-[#C5A258] hover:underline">Back to Itineraries</Link>
+        <h1 className="text-2xl font-semibold text-text-primary mb-4">Itinerary Not Found</h1>
+        <Link href="/itineraries" className="text-brand-accent hover:underline">Back to Itineraries</Link>
       </div>
     );
   }
@@ -110,12 +112,12 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/itineraries" className="hover:text-[#1B3A5C]">Itineraries</Link>
+      <div className="flex items-center gap-2 text-sm text-text-secondary">
+        <Link href="/itineraries" className="hover:text-text-primary">Itineraries</Link>
         <span>/</span>
-        <span className="text-[#1B3A5C]">{itinerary.name}</span>
+        <span className="text-text-primary">{itinerary.name}</span>
       </div>
-      <h1 className="text-2xl font-semibold text-[#1B3A5C]">{itinerary.name}</h1>
+      <h1 className="text-2xl font-semibold text-text-primary">{itinerary.name}</h1>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard title="Avg Rating" value={itinerary.averageRating.toFixed(2)} trendUp={ratingDelta >= 0} delta={`${ratingDelta >= 0 ? "+" : ""}${ratingDelta.toFixed(2)} vs fleet avg`} />
         <KpiCard title="Total Reviews" value={itinerary.reviewCount.toLocaleString()} />
@@ -127,13 +129,13 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
         <ThemeChart title="Positive Themes" data={itinerary.positiveThemes} type="positive" onBarClick={(theme) => openPanel(theme, "positive")} />
         <ThemeChart title="Negative Themes" data={itinerary.negativeThemes} type="negative" onBarClick={(theme) => openPanel(theme, "negative")} />
       </div>
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-[#1B3A5C] mb-4">Ships Operating This Itinerary</h3>
+      <div className="bg-surface rounded-lg shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-text-primary mb-4">Ships Operating This Itinerary</h3>
         <div className="flex flex-wrap gap-3">
           {itinerary.ships.map((ship) => (
-            <Link key={ship} href={`/ships?slug=${encodeURIComponent(ship.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""))}`} className="inline-flex items-center gap-2 bg-gray-50 rounded-lg px-4 py-3 hover:bg-gray-100 transition-colors">
-              <svg className="h-5 w-5 text-[#1B3A5C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
-              <span className="text-sm font-medium text-[#1B3A5C]">{ship}</span>
+            <Link key={ship} href={`/ships?slug=${encodeURIComponent(ship.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, ""))}`} className="inline-flex items-center gap-2 bg-surface-alt rounded-lg px-4 py-3 hover:bg-surface-hover transition-colors">
+              <svg className="h-5 w-5 text-text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+              <span className="text-sm font-medium text-text-primary">{ship}</span>
             </Link>
           ))}
         </div>

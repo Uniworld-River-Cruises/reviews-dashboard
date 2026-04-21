@@ -15,9 +15,12 @@ interface ReviewPanelProps {
 
 function StarRating({ rating }: { rating: number }) {
   return (
-    <span className="text-[#C5A258]" aria-label={`${rating} out of 5 stars`}>
+    <span
+      className="text-brand-accent"
+      aria-label={`${rating} out of 5 stars`}
+    >
       {Array.from({ length: 5 }, (_, i) => (
-        <span key={i}>{i < rating ? "\u2605" : "\u2606"}</span>
+        <span key={i}>{i < rating ? "★" : "☆"}</span>
       ))}
     </span>
   );
@@ -31,23 +34,26 @@ function QuoteCard({
   accent: "positive" | "negative" | "neutral";
 }) {
   const [expanded, setExpanded] = useState(false);
+
   const borderClass =
     accent === "negative"
       ? "border-l-4 border-l-red-400"
       : accent === "positive"
-        ? "border-l-4 border-l-[#1B3A5C]"
-        : "border-l-4 border-l-[#C5A258]";
+        ? "border-l-4 border-l-brand-accent"
+        : "border-l-4 border-l-brand-accent-light";
 
   return (
-    <div className={`bg-gray-50 rounded-lg p-4 ${borderClass}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-medium text-sm text-[#1B3A5C]">{review.guestName}</span>
+    <div className={`rounded-lg bg-surface-alt p-4 ${borderClass}`}>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-sm font-medium text-text-primary">
+          {review.guestName}
+        </span>
         <StarRating rating={review.rating} />
       </div>
-      <p className="text-xs text-gray-500 mb-2">
-        {review.itinerary} &middot; {review.ship}
+      <p className="mb-2 text-xs text-text-secondary">
+        {review.itinerary} · {review.ship}
       </p>
-      <p className="text-sm text-gray-700 leading-relaxed">
+      <p className="text-sm leading-relaxed text-text-primary">
         {expanded || review.text.length <= 150
           ? review.text
           : `${review.text.slice(0, 150)}...`}
@@ -55,7 +61,7 @@ function QuoteCard({
       {review.text.length > 150 && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="mt-1 text-xs font-medium text-[#1B3A5C] hover:underline"
+          className="mt-1 text-xs font-medium text-brand-accent hover:underline cursor-pointer"
         >
           {expanded ? "Show less" : "Read more"}
         </button>
@@ -81,7 +87,7 @@ export default function ReviewPanel({
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     },
-    [onClose]
+    [onClose],
   );
 
   useEffect(() => {
@@ -99,35 +105,47 @@ export default function ReviewPanel({
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       {/* Panel */}
-      <div className="relative w-full max-w-full sm:max-w-md bg-white shadow-xl flex flex-col animate-slide-in-right">
+      <div className="animate-slide-in-right relative flex w-full max-w-full flex-col bg-surface shadow-xl sm:max-w-md">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-[#1e2d44]">
+        <div className="flex items-center justify-between border-b border-border p-6">
           <div>
-            <h2 className="text-lg font-semibold text-[#1B3A5C]">{title}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
+            <p className="mt-0.5 text-sm text-text-secondary">
               {reviews.length} review{reviews.length !== 1 ? "s" : ""}
             </p>
-            <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+            <p className="mt-1 text-xs text-text-tertiary">{subtitle}</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-full p-2 hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="cursor-pointer rounded-full p-2 text-text-tertiary transition-colors hover:bg-surface-hover hover:text-text-primary"
             aria-label="Close panel"
           >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
 
         {/* Reviews */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-[#1B3A5C]" />
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-spinner-track border-t-spinner-accent" />
             </div>
           ) : reviews.length === 0 ? (
-            <p className="text-center text-gray-500 py-12">No matching reviews were found.</p>
+            <p className="py-12 text-center text-text-secondary">
+              No matching reviews were found.
+            </p>
           ) : (
             reviews.map((review) => (
               <QuoteCard key={review.id} review={review} accent={accent} />
