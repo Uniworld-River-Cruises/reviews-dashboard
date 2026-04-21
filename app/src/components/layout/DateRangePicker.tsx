@@ -131,7 +131,7 @@ export default function DateRangePicker({
               onClick={() => handlePresetClick(preset)}
               className={`cursor-pointer w-full px-4 py-2 text-left text-sm transition-colors ${
                 dateRange.preset === preset
-                  ? "bg-[#1B3A5C] text-white"
+                  ? "bg-[var(--brand-gold)] text-[#1B3A5C] dark:text-[#0F1A2E] font-semibold"
                   : "text-slate-700 hover:bg-slate-50 dark:text-white/80 dark:hover:bg-white/5"
               }`}
             >
@@ -165,7 +165,7 @@ export default function DateRangePicker({
               </div>
               <button
                 onClick={handleCustomApply}
-                className="cursor-pointer w-full rounded bg-[#C5A258] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#b3913e] transition-colors"
+                className="cursor-pointer w-full rounded bg-[var(--brand-gold)] px-3 py-1.5 text-sm font-semibold text-[#1B3A5C] dark:text-[#0F1A2E] hover:opacity-90 transition-colors"
               >
                 Apply
               </button>
