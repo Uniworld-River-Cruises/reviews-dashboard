@@ -161,3 +161,37 @@ export async function listOperationalLogs(
   });
   return response.logs ?? [];
 }
+
+export interface DuplicateMember {
+  id: string;
+  brand: string | null;
+  serviceId: string | null;
+  productId: string | null;
+  orderRef: string | null;
+  created: string | null;
+  lastUpdated: string | null;
+  productTitle: string | null;
+}
+
+export interface DuplicateGroup {
+  feedbackUrl: string;
+  members: DuplicateMember[];
+}
+
+export interface DuplicateAuditReport {
+  scannedDocs: number;
+  duplicateGroups: number;
+  extraDocs: number;
+  scannedBrand: string | null;
+  groups: DuplicateGroup[];
+}
+
+export async function runDuplicateReviewAudit(
+  brand?: string | null
+): Promise<DuplicateAuditReport> {
+  const response = await postFunction<{ report: DuplicateAuditReport }>(
+    "auditDuplicateReviews",
+    brand ? { brand } : {}
+  );
+  return response.report;
+}

@@ -24,6 +24,7 @@ import {
   rebuildMappings as rebuildItineraryMappings,
   updateMapping as updateItineraryMapping,
 } from "./sync/itinerary-mappings";
+import { findDuplicateReviews } from "./audit/find-duplicate-reviews";
 import {
   listOperationLogs,
   writeOperationLog,
@@ -543,6 +544,23 @@ export const itineraryMappings = onRequest(
     }
 
     res.status(400).json({ error: "Invalid action. Use 'rebuild', 'update', or 'recompute'." });
+  }
+);
+
+// Read-only audit: groups review docs by their stable feedbackUrl and reports
+// any that have more than one document. See functions/src/audit/find-duplicate-reviews.ts
+// for the rationale (transformReview's ID picker is unstable across review lifecycle).
+export const auditDuplicateReviews = onRequest(
+  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "sync");
+    if (!caller) return;
+
+    const rawBrand = typeof req.body?.brand === "string" ? req.body.brand : null;
+    const brand = rawBrand && isValidBrand(rawBrand) ? rawBrand : null;
+    const report = await findDuplicateReviews(brand);
+    res.json({ report });
   }
 );
 
