@@ -499,7 +499,7 @@ function ReviewsContent() {
             aria-pressed={sort === "newest"}
             className={`cursor-pointer rounded-l-lg border px-4 py-1.5 text-sm font-medium transition-colors ${
               sort === "newest"
-                ? "border-brand-accent bg-brand-accent text-brand-accent-foreground"
+                ? "border-brand-accent bg-brand-accent text-accent-foreground font-semibold"
                 : "border-input-border bg-surface text-text-primary hover:bg-surface-hover"
             }`}
           >
@@ -511,7 +511,7 @@ function ReviewsContent() {
             aria-pressed={sort === "oldest"}
             className={`cursor-pointer -ml-px rounded-r-lg border px-4 py-1.5 text-sm font-medium transition-colors ${
               sort === "oldest"
-                ? "border-brand-accent bg-brand-accent text-brand-accent-foreground"
+                ? "border-brand-accent bg-brand-accent text-accent-foreground font-semibold"
                 : "border-input-border bg-surface text-text-primary hover:bg-surface-hover"
             }`}
           >
