@@ -8,8 +8,16 @@ export function transformReview(raw: FeefoReview): ReviewDocument {
   const product = raw.products[0];
   const tags = parseTags(raw.tags, product?.product?.tags);
 
-  // Use service.id (feedback ID) as primary ID, fall back to product.id
-  const id = raw.service?.id ?? product?.id ?? extractIdFromUrl(raw.url);
+  // Doc ID comes from the URL hash first, because the URL never changes for
+  // a given review; service.id and product.id can shift over a review's
+  // lifecycle and previously caused duplicate documents. URL hash falls back
+  // to service.id, then product.id, then a timestamp-only fallback as a
+  // last-resort so we never throw.
+  const id =
+    extractIdFromUrl(raw.url) ??
+    raw.service?.id ??
+    product?.id ??
+    `url-${Date.now()}`;
 
   const merchantId = raw.merchant.identifier;
   if (!VALID_BRANDS.has(merchantId)) {
@@ -71,8 +79,8 @@ export function transformReview(raw: FeefoReview): ReviewDocument {
   };
 }
 
-function extractIdFromUrl(url: string): string {
+function extractIdFromUrl(url: string): string | null {
   const parts = url.split("/");
   const hexPart = parts.find((p) => /^[0-9a-f]{24}$/.test(p));
-  return hexPart ?? `url-${Date.now()}`;
+  return hexPart ?? null;
 }
