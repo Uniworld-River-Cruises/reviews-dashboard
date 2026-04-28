@@ -4,10 +4,10 @@
  * Header — two-row sticky application bar.
  *
  * Row 1 — Brand + Auth (always visible on desktop, title-only on mobile):
- *   [App title] ················ [ThemeToggle | AuthButton]
+ *   [App title | MerchantSwitcher] ················ [ThemeToggle | AuthButton]
  *
  * Row 2 — Nav + Data controls (desktop/large-tablet only):
- *   [NavTabs — scrollable] ····· [MerchantSwitcher | DatePicker | Refresh]
+ *   [NavTabs — scrollable] ····· [DatePicker | DateFieldSelector | Refresh]
  *
  * Mobile / small-tablet (< lg / 1024px):
  *   [App title] ················ [Hamburger → MobileDrawer]
@@ -51,6 +51,12 @@ export default function Header() {
           <span className="shrink-0 text-base font-bold tracking-wide sm:text-lg">
             {brand.appTitle}
           </span>
+
+          {/* Merchant switcher — sits next to the title on desktop so it stops
+              competing with the date controls for the right edge. */}
+          <div className="hidden lg:block">
+            <MerchantSwitcher tone="inverse" />
+          </div>
 
           {/* Spacer */}
           <div className="flex-1" />
@@ -105,7 +111,6 @@ export default function Header() {
             className="shrink-0 flex items-center gap-2 pl-4"
             style={{ borderLeft: "1px solid rgba(255,255,255,0.12)" }}
           >
-            <MerchantSwitcher tone="inverse" />
             <DateRangePicker tone="inverse" />
             <DateFieldSelector tone="inverse" />
             {showAuthControls && (
