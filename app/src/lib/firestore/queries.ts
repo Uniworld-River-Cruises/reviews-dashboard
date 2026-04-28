@@ -267,10 +267,36 @@ export async function getTrendSeries(
     rangeDays <= 45 ? "day" : rangeDays <= 366 ? "week" : "month";
 
   if (granularity === "month") {
-    const monthly = await getMonthlySummaries(brand);
+    // The pre-aggregated monthly_summaries collection is keyed off `dates.created`,
+    // so it can only serve the created-date trend. For lastUpdated we live-query
+    // the reviews collection and bucket by month off the chosen field — that keeps
+    // the trend chart consistent with the KPI counts on the same page.
+    if (dateField === "created") {
+      const monthly = await getMonthlySummaries(brand);
+      return {
+        granularity,
+        points: buildMonthlyTrendPoints(monthly, startDate, endDate),
+      };
+    }
+
+    const dbForMonth = getClientDb();
+    const refForMonth = collection(dbForMonth, "reviews");
+    const monthConstraints = buildDateRangeConstraints(
+      brand,
+      startDate.toISOString(),
+      endDate.toISOString(),
+      "<=",
+      dateField
+    );
+    const monthSnap = await getDocs(query(refForMonth, ...monthConstraints));
     return {
       granularity,
-      points: buildMonthlyTrendPoints(monthly, startDate, endDate),
+      points: buildMonthlyTrendPointsFromDocs(
+        monthSnap.docs.map((docSnap) => docSnap.data()),
+        startDate,
+        endDate,
+        dateField
+      ),
     };
   }
 
@@ -357,7 +383,7 @@ export async function getFleetSummaryByDateRange(
     where(path, "<=", endDate.toISOString()),
   ];
   if (brand !== "combined") {
-    constraints.push(where("brand", "==", brand));
+    constraints.unshift(where("brand", "==", brand));
   }
   constraints.push(orderBy(path, "desc"));
   const q = query(ref, ...constraints);
@@ -860,6 +886,58 @@ function buildAdaptiveTrendPoints(
     });
 
     bucketKey = nextBucketKey;
+  }
+
+  return points;
+}
+
+function buildMonthlyTrendPointsFromDocs(
+  docs: DocumentData[],
+  startDate: Date,
+  endDate: Date,
+  dateField: DateField
+): TrendPoint[] {
+  const bucketStats = new Map<string, { ratingSum: number; ratingCount: number; reviewCount: number }>();
+
+  for (const data of docs) {
+    const value = readDateFieldValue(data, dateField);
+    if (!value) continue;
+
+    const bucketKey = toUtcMonthKey(value);
+    const current = bucketStats.get(bucketKey) ?? { ratingSum: 0, ratingCount: 0, reviewCount: 0 };
+    const rating = data.ratings?.product ?? data.ratings?.service ?? null;
+
+    current.reviewCount += 1;
+    if (typeof rating === "number" && Number.isFinite(rating)) {
+      current.ratingSum += rating;
+      current.ratingCount += 1;
+    }
+    bucketStats.set(bucketKey, current);
+  }
+
+  const points: TrendPoint[] = [];
+  let monthKey = toUtcMonthKey(startDate);
+  const endMonthKey = toUtcMonthKey(endDate);
+
+  while (monthKey <= endMonthKey) {
+    const stats = bucketStats.get(monthKey) ?? { ratingSum: 0, ratingCount: 0, reviewCount: 0 };
+    const nextMonthKey = addUtcMonths(monthKey, 1);
+    const labels = formatPeriodLabel("month", monthKey, nextMonthKey);
+
+    points.push({
+      key: monthKey,
+      label: labels.label,
+      fullLabel: labels.fullLabel,
+      averageRating:
+        stats.ratingCount > 0
+          ? Math.round((stats.ratingSum / stats.ratingCount) * 100) / 100
+          : null,
+      reviewCount: stats.reviewCount,
+      periodStart: `${monthKey}-01T00:00:00.000Z`,
+      periodEnd: `${nextMonthKey}-01T00:00:00.000Z`,
+    });
+
+    monthKey = nextMonthKey;
   }
 
   return points;
