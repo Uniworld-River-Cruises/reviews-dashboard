@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { useDashboard } from "@/contexts/DashboardContext";
+import { useDashboard, type DateField } from "@/contexts/DashboardContext";
 import { useBrand } from "@/contexts/BrandContext";
 import { getClientDb } from "@/lib/firebase";
 import {
@@ -17,7 +17,12 @@ import {
   DocumentData,
   QueryConstraint,
 } from "firebase/firestore";
-import { getFilterOptions, getParentNameLookup, type FilterOptions } from "@/lib/firestore/queries";
+import {
+  dateFieldPath,
+  getFilterOptions,
+  getParentNameLookup,
+  type FilterOptions,
+} from "@/lib/firestore/queries";
 import FilterSidebar, {
   type Filters,
   emptyFilters,
@@ -31,10 +36,20 @@ import ExportButton from "@/components/reviews/ExportButton";
 
 function mapReviewDoc(
   doc: QueryDocumentSnapshot<DocumentData>,
+  dateField: DateField,
   parentLookup?: Map<string, string>
 ): ReviewData {
   const d = doc.data();
   const rawItinerary = d.tags?.tour || d.product?.title || "";
+  const dates = d.dates as { created?: unknown; lastUpdated?: unknown } | undefined;
+  const primary = dateField === "lastUpdated" ? dates?.lastUpdated : dates?.created;
+  const fallback = dateField === "lastUpdated" ? dates?.created : dates?.lastUpdated;
+  const date =
+    typeof primary === "string"
+      ? primary
+      : typeof fallback === "string"
+        ? fallback
+        : "";
   return {
     id: doc.id,
     customerName: d.customer?.displayName || "Trusted Customer",
@@ -50,7 +65,7 @@ function mapReviewDoc(
     bookingType: d.tags?.bookingType || "",
     region: d.tags?.region || "",
     loyalty: d.tags?.loyalty || "",
-    date: d.dates?.created || "",
+    date,
     media: Array.isArray(d.media) ? d.media : [],
   };
 }
@@ -69,7 +84,7 @@ const EMPTY_FILTER_OPTIONS: FilterOptions = {
 // Sort
 // ---------------------------------------------------------------------------
 
-type SortOption = "newest" | "oldest" | "highest" | "lowest";
+type SortOption = "newest" | "oldest";
 
 function sortReviews(reviews: ReviewData[], sort: SortOption): ReviewData[] {
   const sorted = [...reviews];
@@ -78,10 +93,6 @@ function sortReviews(reviews: ReviewData[], sort: SortOption): ReviewData[] {
       return sorted.sort((a, b) => b.date.localeCompare(a.date));
     case "oldest":
       return sorted.sort((a, b) => a.date.localeCompare(b.date));
-    case "highest":
-      return sorted.sort((a, b) => b.rating - a.rating || b.date.localeCompare(a.date));
-    case "lowest":
-      return sorted.sort((a, b) => a.rating - b.rating || b.date.localeCompare(a.date));
   }
 }
 
@@ -109,7 +120,8 @@ function paramsToFilters(searchParams: URLSearchParams): {
   sort: SortOption;
 } {
   const search = searchParams.get("q") || "";
-  const sort = (searchParams.get("sort") as SortOption) || "newest";
+  const rawSort = searchParams.get("sort");
+  const sort: SortOption = rawSort === "oldest" ? "oldest" : "newest";
 
   const parseArray = (key: string) => {
     const val = searchParams.get(key);
@@ -140,17 +152,19 @@ function buildServerConstraints(
   brand: string,
   dateStart: string,
   dateEnd: string,
-  filters: Filters
+  filters: Filters,
+  dateField: DateField
 ): QueryConstraint[] {
   const constraints: QueryConstraint[] = [];
+  const path = dateFieldPath(dateField);
 
   if (brand !== "combined") {
     constraints.push(where("brand", "==", brand));
   }
 
   // Date range
-  constraints.push(where("dates.created", ">=", dateStart));
-  constraints.push(where("dates.created", "<=", dateEnd));
+  constraints.push(where(path, ">=", dateStart));
+  constraints.push(where(path, "<=", dateEnd));
 
   // Single-value equality filters (Firestore supports these alongside orderBy)
   // We can only use ONE array-contains or "in" per query, so we pick the most
@@ -186,7 +200,7 @@ function buildServerConstraints(
     constraints.push(where("tags.tour", "in", filters.itinerary));
   }
 
-  constraints.push(orderBy("dates.created", "desc"));
+  constraints.push(orderBy(path, "desc"));
 
   return constraints;
 }
@@ -254,7 +268,7 @@ const DISPLAY_PAGE_SIZE = 10;
 function ReviewsContent() {
   const searchParams = useSearchParams();
   const { merchantQueryId: brand } = useBrand();
-  const { dateRange, dataVersion } = useDashboard();
+  const { dateRange, dateField, dataVersion } = useDashboard();
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
@@ -282,8 +296,10 @@ function ReviewsContent() {
 
   // Load filter options scoped to the selected date range
   useEffect(() => {
-    getFilterOptions(brand, dateStart, dateEnd).then(setFilterOptions).catch(() => {});
-  }, [brand, dateStart, dateEnd, dataVersion]);
+    getFilterOptions(brand, dateStart, dateEnd, dateField)
+      .then(setFilterOptions)
+      .catch(() => {});
+  }, [brand, dateStart, dateEnd, dateField, dataVersion]);
 
   // Main query — re-fetch when brand, date range, or server-side filters change
   useEffect(() => {
@@ -297,13 +313,13 @@ function ReviewsContent() {
 
     const db = getClientDb();
     const ref = collection(db, "reviews");
-    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters);
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField);
     constraints.push(limit(PAGE_SIZE));
     const q = query(ref, ...constraints);
 
     Promise.all([getDocs(q), getParentNameLookup(brand)]).then(([snap, parentLookup]) => {
       if (cancelled) return;
-      const reviews = snap.docs.map((d) => mapReviewDoc(d, parentLookup));
+      const reviews = snap.docs.map((d) => mapReviewDoc(d, dateField, parentLookup));
       setAllReviews(reviews);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
@@ -321,7 +337,7 @@ function ReviewsContent() {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brand, dateStart, dateEnd, srvFilterKey, dataVersion]);
+  }, [brand, dateStart, dateEnd, dateField, srvFilterKey, dataVersion]);
 
   // Load more from Firestore
   const loadMoreFromFirestore = useCallback(async () => {
@@ -330,14 +346,14 @@ function ReviewsContent() {
 
     const db = getClientDb();
     const ref = collection(db, "reviews");
-    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters);
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField);
     constraints.push(startAfter(lastDoc), limit(PAGE_SIZE));
     const q = query(ref, ...constraints);
     try {
       const snap = await getDocs(q);
 
       const parentLookup = await getParentNameLookup(brand);
-      const newReviews = snap.docs.map((d) => mapReviewDoc(d, parentLookup));
+      const newReviews = snap.docs.map((d) => mapReviewDoc(d, dateField, parentLookup));
       setAllReviews((prev) => [...prev, ...newReviews]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
@@ -351,7 +367,7 @@ function ReviewsContent() {
       setLoadingMore(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastDoc, hasMoreFirestore, loadingMore, brand, dateStart, dateEnd, srvFilterKey]);
+  }, [lastDoc, hasMoreFirestore, loadingMore, brand, dateStart, dateEnd, dateField, srvFilterKey]);
 
   // Sync state to URL using history API directly to avoid Next.js router re-render cycles
   useEffect(() => {
@@ -476,21 +492,31 @@ function ReviewsContent() {
             </span>
           )}
         </button>
-        <div className="flex items-center gap-2 ml-auto">
-          <label htmlFor="sort-select" className="text-sm text-text-secondary">
-            Sort:
-          </label>
-          <select
-            id="sort-select"
-            value={sort}
-            onChange={(e) => setSort(e.target.value as SortOption)}
-            className="rounded-lg border border-input-border bg-surface px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-brand-accent/30"
+        <div className="flex items-center ml-auto" role="group" aria-label="Sort order">
+          <button
+            type="button"
+            onClick={() => setSort("newest")}
+            aria-pressed={sort === "newest"}
+            className={`cursor-pointer rounded-l-lg border px-4 py-1.5 text-sm font-medium transition-colors ${
+              sort === "newest"
+                ? "border-brand-accent bg-brand-accent text-brand-accent-foreground"
+                : "border-input-border bg-surface text-text-primary hover:bg-surface-hover"
+            }`}
           >
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="highest">Highest Rating</option>
-            <option value="lowest">Lowest Rating</option>
-          </select>
+            Newest
+          </button>
+          <button
+            type="button"
+            onClick={() => setSort("oldest")}
+            aria-pressed={sort === "oldest"}
+            className={`cursor-pointer -ml-px rounded-r-lg border px-4 py-1.5 text-sm font-medium transition-colors ${
+              sort === "oldest"
+                ? "border-brand-accent bg-brand-accent text-brand-accent-foreground"
+                : "border-input-border bg-surface text-text-primary hover:bg-surface-hover"
+            }`}
+          >
+            Oldest
+          </button>
         </div>
       </div>
 

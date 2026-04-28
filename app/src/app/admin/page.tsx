@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useBrand } from "@/contexts/BrandContext";
 import { getClientAuth, getClientDb } from "@/lib/firebase";
+import { dateFieldPath } from "@/lib/firestore/queries";
 import { collection, query, where, getDocs, orderBy, QueryConstraint } from "firebase/firestore";
 import {
   getCurrentAdminAccess,
@@ -86,7 +87,7 @@ function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
 export default function AdminPage() {
   const router = useRouter();
   const { merchantQueryId: brand } = useBrand();
-  const { dateRange, dataVersion } = useDashboard();
+  const { dateRange, dateField, dataVersion } = useDashboard();
   const [user, setUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [currentAccess, setCurrentAccess] = useState<CurrentAdminAccess | null>(null);
@@ -165,10 +166,11 @@ export default function AdminPage() {
       // Query reviews within date range for tour counts
       const db = getClientDb();
       const ref = collection(db, "reviews");
+      const path = dateFieldPath(dateField);
       const constraints: QueryConstraint[] = [
-        where("dates.created", ">=", dateStart),
-        where("dates.created", "<=", dateEnd),
-        orderBy("dates.created", "desc"),
+        where(path, ">=", dateStart),
+        where(path, "<=", dateEnd),
+        orderBy(path, "desc"),
       ];
       if (brand !== "combined") {
         constraints.unshift(where("brand", "==", brand));
@@ -193,7 +195,7 @@ export default function AdminPage() {
     }
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- dataVersion is intentional to force reload after sync
-  }, [brand, dateStart, dateEnd, dataVersion]);
+  }, [brand, dateStart, dateEnd, dateField, dataVersion]);
 
   useEffect(() => {
     try {

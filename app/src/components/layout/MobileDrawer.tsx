@@ -24,6 +24,7 @@ import { getClientAuth, hasFirebaseWebConfig } from "@/lib/firebase";
 import { getCurrentAdminAccess } from "@/lib/firestore/admin-queries";
 import MerchantSwitcher from "./MerchantSwitcher";
 import DateRangePicker from "./DateRangePicker";
+import DateFieldSelector from "./DateFieldSelector";
 import RefreshButton from "./RefreshButton";
 import ThemeToggle from "./ThemeToggle";
 import AuthButton from "./AuthButton";
@@ -201,6 +202,14 @@ export default function MobileDrawer({ open, onClose }: MobileDrawerProps) {
               Date Range
             </p>
             <DateRangePicker tone="neutral" />
+          </div>
+
+          {/* Date field */}
+          <div className="space-y-1.5">
+            <p className="px-1 text-xs font-medium text-text-tertiary uppercase tracking-wide">
+              Date Field
+            </p>
+            <DateFieldSelector tone="neutral" />
           </div>
 
           {/* Refresh */}

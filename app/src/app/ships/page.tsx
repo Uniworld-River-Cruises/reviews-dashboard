@@ -41,7 +41,7 @@ function ShipsContent() {
 
 function ShipList() {
   const { merchantQueryId: brand } = useBrand();
-  const { dateRange, dataVersion } = useDashboard();
+  const { dateRange, dateField, dataVersion } = useDashboard();
   const [ships, setShips] = useState<ShipSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ function ShipList() {
       setLoading(true);
       setError(null);
     });
-    getShips(brand, dateRange).then((data) => {
+    getShips(brand, dateRange, dateField).then((data) => {
       if (cancelled) return;
       setShips(data);
       setLoading(false);
@@ -67,7 +67,7 @@ function ShipList() {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [brand, dateRange, dataVersion]);
+  }, [brand, dateRange, dateField, dataVersion]);
 
   const filtered = useMemo(() => {
     const result = ships.filter((s) =>

@@ -13,6 +13,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "themes.positive", "arrayConfig": "CONTAINS" }
       ]
     },
@@ -31,6 +39,15 @@
         { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "ratings.product", "order": "ASCENDING" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "ratings.product", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
       ]
     },
     {
@@ -61,6 +78,14 @@
       "collectionGroup": "reviews",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "tags.tour", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "tags.tour", "order": "ASCENDING" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
@@ -70,6 +95,32 @@
       "collectionGroup": "reviews",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "tags.tour", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "ship", "order": "ASCENDING" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
       ]
@@ -80,7 +131,7 @@
       "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "ship", "order": "ASCENDING" },
-        { "fieldPath": "dates.created", "order": "DESCENDING" }
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
       ]
     },
     {
@@ -97,8 +148,26 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "tags.ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "tags.region", "order": "ASCENDING" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "tags.region", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
       ]
     },
     {
@@ -115,8 +184,26 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "tags.bookingType", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "tags.loyalty", "order": "ASCENDING" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "tags.loyalty", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
       ]
     },
     {
@@ -133,8 +220,26 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "themes.positive", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "themes.negative", "arrayConfig": "CONTAINS" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "themes.negative", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
       ]
     }
   ],

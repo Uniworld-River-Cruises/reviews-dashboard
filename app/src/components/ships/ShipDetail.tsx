@@ -21,7 +21,7 @@ import {
 
 export default function ShipDetail({ slug }: { slug: string }) {
   const { merchantQueryId: brand } = useBrand();
-  const { dateRange, dataVersion } = useDashboard();
+  const { dateRange, dateField, dataVersion } = useDashboard();
   const [ship, setShip] = useState<ShipSummary | null>(null);
   const [quotes, setQuotes] = useState<{ positive: Quote[]; negative: Quote[] }>({
     positive: [],
@@ -39,11 +39,11 @@ export default function ShipDetail({ slug }: { slug: string }) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getShipBySlug(slug, brand, dateRange).then(async (data) => {
+    getShipBySlug(slug, brand, dateRange, dateField).then(async (data) => {
       if (cancelled) return;
       setShip(data);
       if (data) {
-        const q = await getShipQuotes(data.name, brand, dateRange);
+        const q = await getShipQuotes(data.name, brand, dateRange, dateField);
         if (!cancelled) setQuotes(q);
       }
       setLoading(false);
@@ -54,7 +54,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [slug, brand, dateRange, dataVersion]);
+  }, [slug, brand, dateRange, dateField, dataVersion]);
 
   const openPanel = useCallback(async (theme: string, type: "positive" | "negative") => {
     setPanelTheme(theme);
@@ -62,7 +62,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
     setPanelOpen(true);
     setPanelLoading(true);
     try {
-      const reviews = await getReviewsByTheme(brand, theme, type, dateRange.start, dateRange.end);
+      const reviews = await getReviewsByTheme(brand, theme, type, dateField, dateRange.start, dateRange.end);
       setPanelReviews(reviews);
     } catch (err) {
       console.error("Failed to load theme reviews", err);
@@ -70,7 +70,7 @@ export default function ShipDetail({ slug }: { slug: string }) {
     } finally {
       setPanelLoading(false);
     }
-  }, [brand, dateRange]);
+  }, [brand, dateRange, dateField]);
 
   const closePanel = useCallback(() => {
     setPanelOpen(false);

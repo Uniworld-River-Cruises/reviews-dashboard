@@ -26,7 +26,7 @@ import {
 
 export default function OverviewPage() {
   const { merchantQueryId: brand } = useBrand();
-  const { dateRange, dataVersion } = useDashboard();
+  const { dateRange, dateField, dataVersion } = useDashboard();
 
   const [fleet, setFleet] = useState<FleetSummary | null>(null);
   const [trendPoints, setTrendPoints] = useState<TrendPoint[]>([]);
@@ -52,15 +52,15 @@ export default function OverviewPage() {
     const isAllTime = dateRange.preset === "All Time";
     const fleetPromise = isAllTime
       ? getFleetSummary(brand)
-      : getFleetSummaryByDateRange(brand, dateRange.start, dateRange.end);
+      : getFleetSummaryByDateRange(brand, dateRange.start, dateRange.end, dateField);
 
     const entityPromise = isAllTime
       ? getEntitySummaries(brand)
-      : getEntitySummariesByDateRange(brand, dateRange.start, dateRange.end);
+      : getEntitySummariesByDateRange(brand, dateRange.start, dateRange.end, dateField);
 
     Promise.all([
       fleetPromise,
-      getTrendSeries(brand, dateRange.start, dateRange.end),
+      getTrendSeries(brand, dateRange.start, dateRange.end, dateField),
       entityPromise,
     ]).then(([f, trend, e]) => {
       if (cancelled) return;
@@ -85,7 +85,7 @@ export default function OverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [brand, dateRange, dataVersion]);
+  }, [brand, dateRange, dateField, dataVersion]);
 
   const openPanel = useCallback(
     async (selection: {
@@ -105,7 +105,8 @@ export default function OverviewPage() {
           brand,
           dateRange.start,
           dateRange.end,
-          selection.filter
+          selection.filter,
+          dateField
         );
         setPanelReviews(reviews);
       } catch (err) {
@@ -115,7 +116,7 @@ export default function OverviewPage() {
         setPanelLoading(false);
       }
     },
-    [brand, dateRange.end, dateRange.start]
+    [brand, dateRange.end, dateRange.start, dateField]
   );
 
   const closePanel = useCallback(() => {

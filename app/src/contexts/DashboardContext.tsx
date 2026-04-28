@@ -11,11 +11,26 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   useCallback,
   type ReactNode,
 } from "react";
 import { subMonths, subYears, startOfMonth, startOfYear, startOfWeek } from "date-fns";
+import { usePersistedState } from "@/hooks/usePersistedState";
+
+export type DateField = "lastUpdated" | "created";
+
+export const DATE_FIELD_LABELS: Record<DateField, string> = {
+  lastUpdated: "Review Updated Date",
+  created: "Review Created Date",
+};
+
+const VALID_DATE_FIELDS: readonly DateField[] = ["lastUpdated", "created"];
+
+function isDateField(value: unknown): value is DateField {
+  return typeof value === "string" && (VALID_DATE_FIELDS as readonly string[]).includes(value);
+}
 
 export type DatePreset =
   | "This Week"
@@ -39,6 +54,8 @@ export interface DateRange {
 interface DashboardContextValue {
   dateRange: DateRange;
   setDateRange: (range: DateRange) => void;
+  dateField: DateField;
+  setDateField: (field: DateField) => void;
   lastSynced: string | null;
   setLastSynced: (value: string | null) => void;
   dataVersion: number;
@@ -111,6 +128,28 @@ function getInitialDateRange(): DateRange {
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [dateRange, setDateRangeState] = useState<DateRange>(getInitialDateRange);
+  const [storedDateField, setStoredDateField] = usePersistedState<DateField>(
+    "pref:dateField",
+    "created"
+  );
+  // Guard against a corrupted localStorage value: anything outside our enum
+  // gets coerced back to "created" and the bad value is wiped from storage.
+  const dateField: DateField = isDateField(storedDateField) ? storedDateField : "created";
+
+  useEffect(() => {
+    if (!isDateField(storedDateField)) {
+      setStoredDateField("created");
+    }
+  }, [storedDateField, setStoredDateField]);
+
+  const setDateField = useCallback(
+    (next: DateField) => {
+      if (isDateField(next)) {
+        setStoredDateField(next);
+      }
+    },
+    [setStoredDateField]
+  );
   const [lastSynced, setLastSynced] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
 
@@ -140,6 +179,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       value={{
         dateRange,
         setDateRange: handleSetDateRange,
+        dateField,
+        setDateField,
         lastSynced,
         setLastSynced: handleSetLastSynced,
         dataVersion,
