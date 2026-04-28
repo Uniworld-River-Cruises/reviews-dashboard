@@ -1,8 +1,8 @@
 "use client";
 
 import { getClientDb } from "@/lib/firebase";
-import type { DateRange } from "@/contexts/DashboardContext";
-import { getFleetSummaryByDateRange } from "@/lib/firestore/queries";
+import type { DateField, DateRange } from "@/contexts/DashboardContext";
+import { dateFieldPath, getFleetSummaryByDateRange } from "@/lib/firestore/queries";
 import {
   collection,
   query,
@@ -56,12 +56,14 @@ function getReviewRating(data: Record<string, unknown>): number {
 function buildDateRangeConstraints(
   brand: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  dateField: DateField
 ) {
+  const path = dateFieldPath(dateField);
   const constraints = [
-    where("dates.created", ">=", startDate.toISOString()),
-    where("dates.created", "<=", endDate.toISOString()),
-    orderBy("dates.created", "desc"),
+    where(path, ">=", startDate.toISOString()),
+    where(path, "<=", endDate.toISOString()),
+    orderBy(path, "desc"),
   ];
 
   if (brand !== "combined") {
@@ -90,14 +92,15 @@ async function getParentNameLookup(brand: string): Promise<Map<string, string>> 
 
 async function getItinerariesByDateRange(
   brand: string,
-  dateRange: SummaryDateRange
+  dateRange: SummaryDateRange,
+  dateField: DateField
 ): Promise<ItinerarySummary[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const [snap, parentLookup, fleet] = await Promise.all([
-    getDocs(query(ref, ...buildDateRangeConstraints(brand, dateRange.start, dateRange.end))),
+    getDocs(query(ref, ...buildDateRangeConstraints(brand, dateRange.start, dateRange.end, dateField))),
     getParentNameLookup(brand),
-    getFleetSummaryByDateRange(brand, dateRange.start, dateRange.end),
+    getFleetSummaryByDateRange(brand, dateRange.start, dateRange.end, dateField),
   ]);
 
   if (snap.empty) return [];
@@ -220,10 +223,11 @@ async function getFleetAverages(brand: string): Promise<{ avgRating: number; avg
 
 export async function getItineraries(
   brand: string = "combined",
-  dateRange?: SummaryDateRange
+  dateRange?: SummaryDateRange,
+  dateField: DateField = "created"
 ): Promise<ItinerarySummary[]> {
   if (dateRange && !usesAllTimeSummaries(dateRange)) {
-    return getItinerariesByDateRange(brand, dateRange);
+    return getItinerariesByDateRange(brand, dateRange, dateField);
   }
 
   const db = getClientDb();
@@ -315,9 +319,10 @@ export async function getItineraries(
 export async function getItineraryBySlug(
   slug: string,
   brand: string = "combined",
-  dateRange?: SummaryDateRange
+  dateRange?: SummaryDateRange,
+  dateField: DateField = "created"
 ): Promise<ItinerarySummary | null> {
-  const itineraries = await getItineraries(brand, dateRange);
+  const itineraries = await getItineraries(brand, dateRange, dateField);
   return itineraries.find((it) => it.slug === slug) ?? null;
 }
 
@@ -326,16 +331,18 @@ export async function getItineraryQuotes(
   childItineraries: string[],
   _ship: string,
   brand: string = "combined",
-  dateRange?: SummaryDateRange
+  dateRange?: SummaryDateRange,
+  dateField: DateField = "created"
 ): Promise<{ positive: Quote[]; negative: Quote[] }> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
+  const path = dateFieldPath(dateField);
   // Use childItineraries to match all variant tour names; Firestore "in" supports up to 30
   const tourNames = childItineraries.length > 0 ? childItineraries.slice(0, 30) : [itineraryName];
   const reviewLimit = dateRange && !usesAllTimeSummaries(dateRange) ? 100 : 20;
   const baseConstraints = [
     where("tags.tour", "in", tourNames),
-    orderBy("dates.created", "desc"),
+    orderBy(path, "desc"),
     limit(reviewLimit),
   ];
   if (brand !== "combined") {
@@ -351,11 +358,13 @@ export async function getItineraryQuotes(
 
   for (const d of snap.docs) {
     const data = d.data();
-    const created = data.dates?.created;
+    const dates = data.dates as { created?: unknown; lastUpdated?: unknown } | undefined;
+    const rawValue = dateField === "lastUpdated" ? dates?.lastUpdated : dates?.created;
+    const value = typeof rawValue === "string" ? rawValue : "";
     if (
       startIso &&
       endIso &&
-      (typeof created !== "string" || created < startIso || created > endIso)
+      (!value || value < startIso || value > endIso)
     ) {
       continue;
     }
@@ -371,7 +380,7 @@ export async function getItineraryQuotes(
       ship: data.tags?.ship || "",
       itinerary: data.tags?.tour || data.product?.title || itineraryName,
       text,
-      date: data.dates?.created || "",
+      date: value,
     };
 
     if (rating >= 4 && positive.length < 5) {

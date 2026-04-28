@@ -27,6 +27,7 @@ import NavTabs from "./NavTabs";
 import MerchantSwitcher from "./MerchantSwitcher";
 import MobileDrawer from "./MobileDrawer";
 import DateRangePicker from "./DateRangePicker";
+import DateFieldSelector from "./DateFieldSelector";
 import RefreshButton from "./RefreshButton";
 import ThemeToggle from "./ThemeToggle";
 import AuthButton from "./AuthButton";
@@ -106,6 +107,7 @@ export default function Header() {
           >
             <MerchantSwitcher tone="inverse" />
             <DateRangePicker tone="inverse" />
+            <DateFieldSelector tone="inverse" />
             {showAuthControls && (
               <RefreshButton tone="inverse" showSyncLabel />
             )}

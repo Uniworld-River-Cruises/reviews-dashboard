@@ -96,5 +96,5 @@ jobs:
       - name: Build frontend
         run: npm --prefix app run build
 
-      - name: Deploy Hosting and Functions
-        run: firebase deploy --project feefo-reviews --only functions,hosting --non-interactive
+      - name: Deploy Hosting, Functions, and Firestore indexes
+        run: firebase deploy --project feefo-reviews --only functions,hosting,firestore:indexes --non-interactive

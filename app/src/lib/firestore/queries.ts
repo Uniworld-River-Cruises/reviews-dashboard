@@ -2,6 +2,7 @@
 
 import { format } from "date-fns";
 import { getClientDb } from "@/lib/firebase";
+import type { DateField } from "@/contexts/DashboardContext";
 import {
   collection,
   doc,
@@ -81,6 +82,10 @@ const PANEL_REVIEW_LIMIT = 100;
 const PANEL_REVIEW_BATCH_SIZE = 200;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+export function dateFieldPath(field: DateField): "dates.created" | "dates.lastUpdated" {
+  return field === "lastUpdated" ? "dates.lastUpdated" : "dates.created";
+}
 
 function slugify(text: string): string {
   return text
@@ -254,7 +259,8 @@ export async function getMonthlySummaries(brand: string): Promise<MonthlySummary
 export async function getTrendSeries(
   brand: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  dateField: DateField
 ): Promise<{ granularity: TrendGranularity; points: TrendPoint[] }> {
   const rangeDays = getRangeLengthInDays(startDate, endDate);
   const granularity: TrendGranularity =
@@ -271,13 +277,13 @@ export async function getTrendSeries(
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints = [
-    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString()),
+    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString(), "<=", dateField),
   ];
   const snap = await getDocs(query(ref, ...constraints));
 
   return {
     granularity,
-    points: buildAdaptiveTrendPoints(snap.docs.map((docSnap) => docSnap.data()), startDate, endDate, granularity),
+    points: buildAdaptiveTrendPoints(snap.docs.map((docSnap) => docSnap.data()), startDate, endDate, granularity, dateField),
   };
 }
 
@@ -340,18 +346,20 @@ export async function getEntitySummaries(
 export async function getFleetSummaryByDateRange(
   brand: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  dateField: DateField
 ): Promise<FleetSummary> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
+  const path = dateFieldPath(dateField);
   const constraints: QueryConstraint[] = [
-    where("dates.created", ">=", startDate.toISOString()),
-    where("dates.created", "<=", endDate.toISOString()),
+    where(path, ">=", startDate.toISOString()),
+    where(path, "<=", endDate.toISOString()),
   ];
   if (brand !== "combined") {
     constraints.push(where("brand", "==", brand));
   }
-  constraints.push(orderBy("dates.created", "desc"));
+  constraints.push(orderBy(path, "desc"));
   const q = query(ref, ...constraints);
   const snap = await getDocs(q);
 
@@ -441,14 +449,16 @@ export async function getEntitySummariesByDateRange(
   brand: string,
   startDate: Date,
   endDate: Date,
+  dateField: DateField,
   scope: "ship" | "itinerary" = "itinerary"
 ): Promise<EntitySummary[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
+  const path = dateFieldPath(dateField);
   const constraints: QueryConstraint[] = [
-    where("dates.created", ">=", startDate.toISOString()),
-    where("dates.created", "<=", endDate.toISOString()),
-    orderBy("dates.created", "desc"),
+    where(path, ">=", startDate.toISOString()),
+    where(path, "<=", endDate.toISOString()),
+    orderBy(path, "desc"),
   ];
   if (brand !== "combined") {
     constraints.unshift(where("brand", "==", brand));
@@ -517,14 +527,16 @@ export interface FilterOptions {
 export async function getFilterOptions(
   brand: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  dateField: DateField
 ): Promise<FilterOptions> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
+  const path = dateFieldPath(dateField);
   const constraints: QueryConstraint[] = [
-    where("dates.created", ">=", startDate),
-    where("dates.created", "<=", endDate),
-    orderBy("dates.created", "desc"),
+    where(path, ">=", startDate),
+    where(path, "<=", endDate),
+    orderBy(path, "desc"),
   ];
   if (brand !== "combined") {
     constraints.unshift(where("brand", "==", brand));
@@ -578,15 +590,17 @@ export async function getReviewsByTheme(
   brand: string,
   theme: string,
   type: "positive" | "negative",
+  dateField: DateField,
   startDate?: Date,
   endDate?: Date
 ): Promise<ThemeReview[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
+  const path = dateFieldPath(dateField);
   const fetchLimit = startDate && endDate ? 100 : 20;
   const constraints = [
     where(`themes.${type}`, "array-contains", theme),
-    orderBy("dates.created", "desc"),
+    orderBy(path, "desc"),
     limit(fetchLimit),
   ];
   if (brand !== "combined") {
@@ -600,17 +614,17 @@ export async function getReviewsByTheme(
   const filteredDocs =
     startDate && endDate
       ? snap.docs.filter((docSnap) => {
-          const created = docSnap.data().dates?.created;
+          const value = readDateFieldValue(docSnap.data(), dateField);
           return (
-            typeof created === "string" &&
-            created >= startDate.toISOString() &&
-            created <= endDate.toISOString()
+            typeof value === "string" &&
+            value >= startDate.toISOString() &&
+            value <= endDate.toISOString()
           );
         })
       : snap.docs;
 
   return filteredDocs.slice(0, 20).map((docSnap) =>
-    mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
+    mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
   );
 }
 
@@ -618,25 +632,36 @@ export async function getReviewsForOverviewSelection(
   brand: string,
   startDate: Date,
   endDate: Date,
-  filter: OverviewSelectionFilter
+  filter: OverviewSelectionFilter,
+  dateField: DateField
 ): Promise<ThemeReview[]> {
   if (filter.kind === "theme") {
-    return getThemeSelectionReviews(brand, startDate, endDate, filter);
+    return getThemeSelectionReviews(brand, startDate, endDate, filter, dateField);
   }
 
   if (filter.kind === "period") {
-    return getPeriodSelectionReviews(brand, filter.start, filter.end);
+    return getPeriodSelectionReviews(brand, filter.start, filter.end, dateField);
   }
 
   if (filter.kind === "month") {
-    return getMonthSelectionReviews(brand, filter.month);
+    return getMonthSelectionReviews(brand, filter.month, dateField);
   }
 
-  return getRatingSelectionReviews(brand, startDate, endDate, filter.star);
+  return getRatingSelectionReviews(brand, startDate, endDate, filter.star, dateField);
+}
+
+function readDateFieldValue(data: DocumentData, dateField: DateField): string {
+  const dates = data.dates as { created?: unknown; lastUpdated?: unknown } | undefined;
+  const primary = dateField === "lastUpdated" ? dates?.lastUpdated : dates?.created;
+  if (typeof primary === "string") return primary;
+  // Fallback so older reviews missing one field still render a date label.
+  const fallback = dateField === "lastUpdated" ? dates?.created : dates?.lastUpdated;
+  return typeof fallback === "string" ? fallback : "";
 }
 
 function mapReviewDoc(
-  review: { id: string; data: DocumentData }
+  review: { id: string; data: DocumentData },
+  dateField: DateField
 ): ThemeReview {
   const data = review.data;
   return {
@@ -646,12 +671,16 @@ function mapReviewDoc(
     itinerary: data.tags?.tour || data.product?.title || "",
     ship: data.tags?.ship || "",
     text: data.reviews?.productText || data.reviews?.serviceText || "",
-    date: data.dates?.created || "",
+    date: readDateFieldValue(data, dateField),
     media: Array.isArray(data.media) ? data.media : [],
   };
 }
 
-function matchesOverviewSelection(data: DocumentData, filter: OverviewSelectionFilter): boolean {
+function matchesOverviewSelection(
+  data: DocumentData,
+  filter: OverviewSelectionFilter,
+  dateField: DateField
+): boolean {
   if (filter.kind === "theme") {
     const values = data.themes?.[filter.sentiment] || [];
     return Array.isArray(values) && values.includes(filter.theme);
@@ -662,11 +691,11 @@ function matchesOverviewSelection(data: DocumentData, filter: OverviewSelectionF
     return rating !== null && Math.round(rating) === filter.star;
   }
 
-  const created = typeof data.dates?.created === "string" ? data.dates.created : "";
+  const value = readDateFieldValue(data, dateField);
   if (filter.kind === "period") {
-    return created >= filter.start && created < filter.end;
+    return value >= filter.start && value < filter.end;
   }
-  return created.startsWith(filter.month);
+  return value.startsWith(filter.month);
 }
 
 function getMonthBounds(month: string): { start: string; end: string } {
@@ -777,7 +806,8 @@ function buildAdaptiveTrendPoints(
   docs: DocumentData[],
   startDate: Date,
   endDate: Date,
-  granularity: Extract<TrendGranularity, "day" | "week">
+  granularity: Extract<TrendGranularity, "day" | "week">,
+  dateField: DateField
 ): TrendPoint[] {
   const bucketStats = new Map<string, { ratingSum: number; ratingCount: number; reviewCount: number }>();
   const rangeStartKey = granularity === "day" ? toUtcDayKey(startDate) : getUtcWeekStartKey(startDate);
@@ -786,10 +816,10 @@ function buildAdaptiveTrendPoints(
   const selectedEndExclusiveIso = `${addUtcDays(toUtcDayKey(endDate), 1)}T00:00:00.000Z`;
 
   for (const data of docs) {
-    const created = typeof data.dates?.created === "string" ? data.dates.created : null;
-    if (!created) continue;
+    const value = readDateFieldValue(data, dateField);
+    if (!value) continue;
 
-    const bucketKey = granularity === "day" ? toUtcDayKey(created) : getUtcWeekStartKey(created);
+    const bucketKey = granularity === "day" ? toUtcDayKey(value) : getUtcWeekStartKey(value);
     const current = bucketStats.get(bucketKey) ?? { ratingSum: 0, ratingCount: 0, reviewCount: 0 };
     const rating = data.ratings?.product ?? data.ratings?.service ?? null;
 
@@ -870,18 +900,20 @@ function buildDateRangeConstraints(
   brand: string,
   start: string,
   end: string,
-  endOperator: "<" | "<=" = "<="
+  endOperator: "<" | "<=" = "<=",
+  dateField: DateField = "created"
 ): QueryConstraint[] {
+  const path = dateFieldPath(dateField);
   const constraints: QueryConstraint[] = [
-    where("dates.created", ">=", start),
-    where("dates.created", endOperator, end),
+    where(path, ">=", start),
+    where(path, endOperator, end),
   ];
 
   if (brand !== "combined") {
     constraints.push(where("brand", "==", brand));
   }
 
-  constraints.push(orderBy("dates.created", "desc"));
+  constraints.push(orderBy(path, "desc"));
   return constraints;
 }
 
@@ -889,12 +921,13 @@ async function getThemeSelectionReviews(
   brand: string,
   startDate: Date,
   endDate: Date,
-  filter: Extract<OverviewSelectionFilter, { kind: "theme" }>
+  filter: Extract<OverviewSelectionFilter, { kind: "theme" }>,
+  dateField: DateField
 ): Promise<ThemeReview[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints = [
-    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString()),
+    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString(), "<=", dateField),
     where(`themes.${filter.sentiment}`, "array-contains", filter.theme),
     limit(PANEL_REVIEW_LIMIT),
   ];
@@ -902,33 +935,38 @@ async function getThemeSelectionReviews(
   try {
     const snap = await getDocs(query(ref, ...constraints));
     return snap.docs.map((docSnap) =>
-      mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
+      mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
     );
   } catch (error) {
     console.warn("Falling back to paged theme filtering for overview selection", error);
-    return getFilteredPagedReviews(brand, startDate, endDate, filter);
+    return getFilteredPagedReviews(brand, startDate, endDate, filter, dateField);
   }
 }
 
-async function getMonthSelectionReviews(brand: string, month: string): Promise<ThemeReview[]> {
+async function getMonthSelectionReviews(
+  brand: string,
+  month: string,
+  dateField: DateField
+): Promise<ThemeReview[]> {
   const bounds = getMonthBounds(month);
-  return getPeriodSelectionReviews(brand, bounds.start, bounds.end);
+  return getPeriodSelectionReviews(brand, bounds.start, bounds.end, dateField);
 }
 
 async function getPeriodSelectionReviews(
   brand: string,
   periodStart: string,
-  periodEnd: string
+  periodEnd: string,
+  dateField: DateField
 ): Promise<ThemeReview[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints = [
-    ...buildDateRangeConstraints(brand, periodStart, periodEnd, "<"),
+    ...buildDateRangeConstraints(brand, periodStart, periodEnd, "<", dateField),
     limit(PANEL_REVIEW_LIMIT),
   ];
   const snap = await getDocs(query(ref, ...constraints));
   return snap.docs.map((docSnap) =>
-    mapReviewDoc({ id: docSnap.id, data: docSnap.data() })
+    mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
   );
 }
 
@@ -936,26 +974,33 @@ async function getRatingSelectionReviews(
   brand: string,
   startDate: Date,
   endDate: Date,
-  star: number
+  star: number,
+  dateField: DateField
 ): Promise<ThemeReview[]> {
-  return getFilteredPagedReviews(brand, startDate, endDate, {
-    kind: "rating",
-    star,
-  });
+  return getFilteredPagedReviews(
+    brand,
+    startDate,
+    endDate,
+    { kind: "rating", star },
+    dateField
+  );
 }
 
 async function getFilteredPagedReviews(
   brand: string,
   startDate: Date,
   endDate: Date,
-  filter: OverviewSelectionFilter
+  filter: OverviewSelectionFilter,
+  dateField: DateField
 ): Promise<ThemeReview[]> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints = buildDateRangeConstraints(
     brand,
     startDate.toISOString(),
-    endDate.toISOString()
+    endDate.toISOString(),
+    "<=",
+    dateField
   );
   const reviews: ThemeReview[] = [];
   let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null;
@@ -973,8 +1018,8 @@ async function getFilteredPagedReviews(
 
     for (const docSnap of snap.docs) {
       const data = docSnap.data();
-      if (matchesOverviewSelection(data, filter)) {
-        reviews.push(mapReviewDoc({ id: docSnap.id, data }));
+      if (matchesOverviewSelection(data, filter, dateField)) {
+        reviews.push(mapReviewDoc({ id: docSnap.id, data }, dateField));
         if (reviews.length >= PANEL_REVIEW_LIMIT) {
           break;
         }
