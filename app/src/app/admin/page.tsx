@@ -852,7 +852,7 @@ export default function AdminPage() {
                   type="button"
                   onClick={runDuplicateAudit}
                   disabled={duplicateLoading}
-                  className="inline-flex items-center rounded-lg bg-brand-accent px-4 py-2 text-sm font-medium text-brand-accent-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex items-center rounded-lg bg-brand-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
                 >
                   {duplicateLoading ? "Running…" : "Run audit"}
                 </button>
