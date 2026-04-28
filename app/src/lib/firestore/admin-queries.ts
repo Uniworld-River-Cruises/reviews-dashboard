@@ -195,3 +195,19 @@ export async function runDuplicateReviewAudit(
   );
   return response.report;
 }
+
+export interface DuplicateResolutionResult {
+  groupsResolved: number;
+  docsDeleted: number;
+  scannedBrand: string | null;
+}
+
+export async function resolveDuplicateReviews(
+  brand?: string | null
+): Promise<DuplicateResolutionResult> {
+  const response = await postFunction<{ result: DuplicateResolutionResult }>(
+    "resolveDuplicateReviews",
+    brand ? { brand } : {}
+  );
+  return response.result;
+}
