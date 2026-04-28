@@ -863,17 +863,22 @@ export default function AdminPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={duplicateBrand}
-                  onChange={(event) =>
-                    setDuplicateBrand(event.target.value as "" | "uniworld" | "luxury-gold")
-                  }
-                  className="rounded-lg border border-input-border bg-surface px-3 py-2 text-sm text-text-primary"
-                >
-                  <option value="">All brands</option>
-                  <option value="uniworld">Uniworld</option>
-                  <option value="luxury-gold">Luxury Gold</option>
-                </select>
+                <label className="inline-flex items-center gap-2 rounded-lg border border-input-border bg-surface px-3 py-2 text-sm text-text-primary shadow-sm">
+                  <span className="text-xs font-medium uppercase tracking-wide text-text-secondary">
+                    Brand
+                  </span>
+                  <select
+                    value={duplicateBrand}
+                    onChange={(event) =>
+                      setDuplicateBrand(event.target.value as "" | "uniworld" | "luxury-gold")
+                    }
+                    className="bg-transparent text-sm font-medium text-text-primary focus:outline-none"
+                  >
+                    <option value="">All brands</option>
+                    <option value="uniworld">Uniworld</option>
+                    <option value="luxury-gold">Luxury Gold</option>
+                  </select>
+                </label>
                 <button
                   type="button"
                   onClick={runDuplicateAudit}
