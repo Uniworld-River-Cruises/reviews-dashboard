@@ -15,6 +15,7 @@ import {
   listKnownUsers,
   listOperationalLogs,
   removeAdminUser,
+  resolveDuplicateReviews,
   runDuplicateReviewAudit,
   getItineraryMappings,
   upsertAdminUser,
@@ -121,6 +122,7 @@ export default function AdminPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [duplicateReport, setDuplicateReport] = useState<DuplicateAuditReport | null>(null);
   const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [duplicateResolving, setDuplicateResolving] = useState(false);
   const [duplicateBrand, setDuplicateBrand] = useState<"" | "uniworld" | "luxury-gold">("");
   const [duplicatesExpanded, setDuplicatesExpanded] = useState(false);
 
@@ -174,6 +176,30 @@ export default function AdminPage() {
     }
     setDuplicateLoading(false);
   }, [duplicateBrand]);
+
+  const removeDuplicates = useCallback(async () => {
+    if (!duplicateReport || duplicateReport.duplicateGroups === 0) return;
+    const summary =
+      `${duplicateReport.duplicateGroups} duplicate group(s) (${duplicateReport.extraDocs} extra doc(s))`;
+    const confirmed = window.confirm(
+      `Remove duplicates?\n\nThis will delete ${duplicateReport.extraDocs} document(s) across ${summary}, keeping the document with the most recent Last Updated timestamp in each group. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDuplicateResolving(true);
+    try {
+      const result = await resolveDuplicateReviews(duplicateBrand || null);
+      setToast(
+        `Removed ${result.docsDeleted} duplicate doc(s) across ${result.groupsResolved} group(s).`
+      );
+      // Re-run the audit so the table reflects the new state.
+      const report = await runDuplicateReviewAudit(duplicateBrand || null);
+      setDuplicateReport(report);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to remove duplicates");
+    }
+    setDuplicateResolving(false);
+  }, [duplicateBrand, duplicateReport]);
 
   const loadMappings = useCallback(async () => {
     setLoading(true);
@@ -851,11 +877,23 @@ export default function AdminPage() {
                 <button
                   type="button"
                   onClick={runDuplicateAudit}
-                  disabled={duplicateLoading}
+                  disabled={duplicateLoading || duplicateResolving}
                   className="inline-flex items-center rounded-lg bg-brand-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
                 >
                   {duplicateLoading ? "Running…" : "Run audit"}
                 </button>
+                {duplicateReport && duplicateReport.duplicateGroups > 0 ? (
+                  <button
+                    type="button"
+                    onClick={removeDuplicates}
+                    disabled={duplicateResolving || duplicateLoading}
+                    className="inline-flex items-center rounded-lg border border-red-500 bg-red-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-600 disabled:opacity-50"
+                  >
+                    {duplicateResolving
+                      ? "Removing…"
+                      : `Remove duplicates (${duplicateReport.extraDocs})`}
+                  </button>
+                ) : null}
                 {duplicateReport ? (
                   <button
                     type="button"

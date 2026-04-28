@@ -110,3 +110,46 @@ export async function findDuplicateReviews(
     groups: groups.slice(0, MAX_GROUPS_RETURNED),
   };
 }
+
+export interface DuplicateResolutionResult {
+  groupsResolved: number;
+  docsDeleted: number;
+  scannedBrand: string | null;
+}
+
+/**
+ * Consolidates duplicates by keeping the document with the most recent
+ * `dates.lastUpdated` in each group and deleting the rest. Operates on the
+ * same group definition as `findDuplicateReviews` (same feedbackUrl with
+ * more than one document).
+ */
+export async function removeDuplicateReviews(
+  filterBrand: string | null = null
+): Promise<DuplicateResolutionResult> {
+  const report = await findDuplicateReviews(filterBrand);
+  const db = getFirestore();
+  const writer = db.bulkWriter();
+
+  let groupsResolved = 0;
+  let docsDeleted = 0;
+
+  for (const group of report.groups) {
+    if (group.members.length < 2) continue;
+    // findDuplicateReviews already sorts members by lastUpdated desc, so the
+    // first entry is the keeper and everything after it is a duplicate.
+    const [, ...toDelete] = group.members;
+    for (const member of toDelete) {
+      writer.delete(db.collection("reviews").doc(member.id));
+      docsDeleted += 1;
+    }
+    groupsResolved += 1;
+  }
+
+  await writer.close();
+
+  return {
+    groupsResolved,
+    docsDeleted,
+    scannedBrand: filterBrand,
+  };
+}
