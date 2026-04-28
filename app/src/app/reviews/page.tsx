@@ -58,6 +58,7 @@ function mapReviewDoc(
     itinerary: rawItinerary,
     parentItinerary: parentLookup?.get(rawItinerary) ?? rawItinerary,
     brand: d.brand || "",
+    serviceTitle: d.reviews?.serviceTitle || "",
     serviceReview: d.reviews?.serviceText || "",
     productReview: d.reviews?.productText || "",
     positiveThemes: d.themes?.positive || [],

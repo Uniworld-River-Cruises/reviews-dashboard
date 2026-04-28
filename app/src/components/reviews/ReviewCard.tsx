@@ -19,6 +19,7 @@ export interface ReviewData {
   ship: string;
   itinerary: string;
   brand: string;
+  serviceTitle: string;
   serviceReview: string;
   productReview: string;
   positiveThemes: string[];
@@ -80,6 +81,13 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
         </div>
         <StarRating rating={review.rating} />
       </div>
+
+      {/* Service title — Feefo lets reviewers add a short headline */}
+      {review.serviceTitle && (
+        <h3 className="mb-2 text-base font-semibold text-text-primary">
+          {review.serviceTitle}
+        </h3>
+      )}
 
       {/* Meta — clickable itinerary and ship links */}
       <div className="text-xs text-text-secondary mb-3 space-y-0.5">
