@@ -15,6 +15,7 @@ import {
   listKnownUsers,
   listOperationalLogs,
   removeAdminUser,
+  runDuplicateReviewAudit,
   getItineraryMappings,
   upsertAdminUser,
   saveManualMapping,
@@ -23,6 +24,7 @@ import {
   type AdminRole,
   type CurrentAdminAccess,
   type AdminUserAccess,
+  type DuplicateAuditReport,
   type ItineraryMapping,
   type KnownUser,
   type OperationLogEntry,
@@ -117,6 +119,10 @@ export default function AdminPage() {
   const [renameValue, setRenameValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [duplicateReport, setDuplicateReport] = useState<DuplicateAuditReport | null>(null);
+  const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [duplicateBrand, setDuplicateBrand] = useState<"" | "uniworld" | "luxury-gold">("");
+  const [duplicatesExpanded, setDuplicatesExpanded] = useState(false);
 
   const dateStart = dateRange.start.toISOString();
   const dateEnd = dateRange.end.toISOString();
@@ -156,6 +162,18 @@ export default function AdminPage() {
     }
     setLogsLoading(false);
   }, [logsRangeHours]);
+
+  const runDuplicateAudit = useCallback(async () => {
+    setDuplicateLoading(true);
+    setDuplicatesExpanded(true);
+    try {
+      const report = await runDuplicateReviewAudit(duplicateBrand || null);
+      setDuplicateReport(report);
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : "Failed to run duplicate audit");
+    }
+    setDuplicateLoading(false);
+  }, [duplicateBrand]);
 
   const loadMappings = useCallback(async () => {
     setLoading(true);
@@ -803,6 +821,135 @@ export default function AdminPage() {
                 loading={logsLoading}
                 emptyMessage={`No operational logs were recorded in the ${getLogsRangeLabel(logsRangeHours).toLowerCase()}.`}
               />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canViewLogs ? (
+        <div className="mb-8 rounded-lg border border-border bg-surface shadow-sm">
+          <div className="px-6 py-4 border-b border-border">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">Duplicate Review Audit</h2>
+                <p className="mt-1 text-sm text-text-secondary">
+                  Read-only check that groups review documents by their stable Feefo URL and lists any URL with more than one document. Useful for finding duplicates created when a review&apos;s service/product IDs shift over its lifecycle.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={duplicateBrand}
+                  onChange={(event) =>
+                    setDuplicateBrand(event.target.value as "" | "uniworld" | "luxury-gold")
+                  }
+                  className="rounded-lg border border-input-border bg-surface px-3 py-2 text-sm text-text-primary"
+                >
+                  <option value="">All brands</option>
+                  <option value="uniworld">Uniworld</option>
+                  <option value="luxury-gold">Luxury Gold</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={runDuplicateAudit}
+                  disabled={duplicateLoading}
+                  className="inline-flex items-center rounded-lg bg-brand-accent px-4 py-2 text-sm font-medium text-brand-accent-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
+                >
+                  {duplicateLoading ? "Running…" : "Run audit"}
+                </button>
+                {duplicateReport ? (
+                  <button
+                    type="button"
+                    onClick={() => setDuplicatesExpanded((value) => !value)}
+                    aria-expanded={duplicatesExpanded}
+                    className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-input-border bg-surface text-text-secondary shadow-sm transition-transform hover:bg-surface-hover ${
+                      duplicatesExpanded ? "rotate-180" : ""
+                    }`}
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path
+                        fillRule="evenodd"
+                        d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+          {duplicateReport && duplicatesExpanded ? (
+            <div className="px-6 py-5">
+              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border border-border bg-surface p-3">
+                  <div className="text-2xl font-bold text-text-primary">{duplicateReport.scannedDocs}</div>
+                  <div className="text-xs text-text-secondary">Scanned docs</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface p-3">
+                  <div className="text-2xl font-bold text-text-primary">{duplicateReport.duplicateGroups}</div>
+                  <div className="text-xs text-text-secondary">Duplicate groups</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface p-3">
+                  <div className="text-2xl font-bold text-text-primary">{duplicateReport.extraDocs}</div>
+                  <div className="text-xs text-text-secondary">Extra docs</div>
+                </div>
+                <div className="rounded-lg border border-border bg-surface p-3">
+                  <div className="text-sm font-medium text-text-primary">
+                    {duplicateReport.scannedBrand ?? "All brands"}
+                  </div>
+                  <div className="text-xs text-text-secondary">Scope</div>
+                </div>
+              </div>
+              {duplicateReport.groups.length === 0 ? (
+                <p className="text-sm text-text-secondary">
+                  No duplicates found. Every review document has a unique Feefo URL.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {duplicateReport.groups.map((group) => (
+                    <details
+                      key={group.feedbackUrl}
+                      className="rounded-lg border border-border bg-surface-alt"
+                    >
+                      <summary className="cursor-pointer px-4 py-3 text-sm">
+                        <span className="font-medium text-text-primary">
+                          {group.members.length} docs
+                        </span>
+                        <span className="ml-2 text-text-secondary break-all">
+                          {group.feedbackUrl}
+                        </span>
+                      </summary>
+                      <div className="px-4 pb-3">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-text-tertiary">
+                              <th className="py-1 pr-3">Doc ID</th>
+                              <th className="py-1 pr-3">Brand</th>
+                              <th className="py-1 pr-3">Service ID</th>
+                              <th className="py-1 pr-3">Product ID</th>
+                              <th className="py-1 pr-3">Order Ref</th>
+                              <th className="py-1 pr-3">Created</th>
+                              <th className="py-1 pr-3">Last Updated</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {group.members.map((member) => (
+                              <tr key={member.id} className="border-t border-border/50 text-text-primary">
+                                <td className="py-1 pr-3 font-mono">{member.id}</td>
+                                <td className="py-1 pr-3">{member.brand ?? "—"}</td>
+                                <td className="py-1 pr-3 font-mono">{member.serviceId ?? "—"}</td>
+                                <td className="py-1 pr-3 font-mono">{member.productId ?? "—"}</td>
+                                <td className="py-1 pr-3">{member.orderRef ?? "—"}</td>
+                                <td className="py-1 pr-3">{member.created ?? "—"}</td>
+                                <td className="py-1 pr-3">{member.lastUpdated ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
         </div>
