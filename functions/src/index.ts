@@ -25,10 +25,6 @@ import {
   updateMapping as updateItineraryMapping,
 } from "./sync/itinerary-mappings";
 import {
-  findDuplicateReviews,
-  removeDuplicateReviews,
-} from "./audit/find-duplicate-reviews";
-import {
   listOperationLogs,
   writeOperationLog,
   type OperationLogSource,
@@ -547,54 +543,6 @@ export const itineraryMappings = onRequest(
     }
 
     res.status(400).json({ error: "Invalid action. Use 'rebuild', 'update', or 'recompute'." });
-  }
-);
-
-// Read-only audit: groups review docs by their stable feedbackUrl and reports
-// any that have more than one document. See functions/src/audit/find-duplicate-reviews.ts
-// for the rationale (transformReview's ID picker is unstable across review lifecycle).
-export const auditDuplicateReviews = onRequest(
-  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
-  async (req, res) => {
-    if (!ensurePost(req, res)) return;
-    const caller = await authorizeRequest(req, res, "sync");
-    if (!caller) return;
-
-    const rawBrand = typeof req.body?.brand === "string" ? req.body.brand : null;
-    const brand = rawBrand && isValidBrand(rawBrand) ? rawBrand : null;
-    const report = await findDuplicateReviews(brand);
-    res.json({ report });
-  }
-);
-
-// Resolve duplicate review documents by keeping the row with the most recent
-// `dates.lastUpdated` in each group and deleting the rest. Same authorization
-// gate as the audit; pairs with the audit panel's "Remove duplicates" button.
-export const resolveDuplicateReviews = onRequest(
-  { timeoutSeconds: 300, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
-  async (req, res) => {
-    if (!ensurePost(req, res)) return;
-    const caller = await authorizeRequest(req, res, "sync");
-    if (!caller) return;
-
-    const rawBrand = typeof req.body?.brand === "string" ? req.body.brand : null;
-    const brand = rawBrand && isValidBrand(rawBrand) ? rawBrand : null;
-    const result = await removeDuplicateReviews(brand);
-    await writeOperationLog({
-      type: "sync",
-      level: "success",
-      action: "duplicate_reviews_resolved",
-      message: `Resolved ${result.groupsResolved} duplicate review group(s)`,
-      brand: brand ?? null,
-      source: "manual",
-      actorEmail: caller.email,
-      actorUid: caller.uid,
-      details: {
-        groupsResolved: result.groupsResolved,
-        docsDeleted: result.docsDeleted,
-      },
-    });
-    res.json({ result });
   }
 );
 
