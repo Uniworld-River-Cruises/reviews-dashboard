@@ -144,15 +144,30 @@ Writes results into `merchants/{id}.counts`.
 
 **Normalization helper:** the trigger must treat a *missing* `themes` map (or missing `themes.classifiedAt`) as `classifiedAt == null`. The current sync writes use `merge: true` and intentionally do not overwrite the `themes` map on incremental updates ([functions/src/sync/sync-reviews.ts:134](functions/src/sync/sync-reviews.ts:134)), so existing review docs may have no `themes` field at all. A `normalizeClassification(data) -> { classifiedAt: string | null }` helper centralizes this and is the only path the trigger uses to read classification state.
 
-**All transition cases the test must cover (six total):**
-1. **Create, hasComment true, unclassified** → `total++`, `pending++`. If `dates.created < cachedOldestPendingDate` (or cached is null) → update `oldestPendingDate` in place.
-2. **Create, hasComment true, already classified** (rare, e.g. backfill writes) → `total++`, `classified++`. No change to `oldestPendingDate`.
-3. **Create, hasComment false** → `total++`. No effect on `pending` or `classified`.
-4. **Update: classification applied** (`classifiedAt` null → ISO) → `classified++`, `pending--`. If this review *was* the cached oldest pending → trigger a recompute job for `oldestPendingDate` (don't try to find the new oldest incrementally).
-5. **Update: `brand` field changed** (merchant reassignment, expected to be rare but possible) → decrement old merchant's counters, increment new merchant's counters; recompute `oldestPendingDate` on both if affected.
-6. **Delete** → mirror create logic in reverse; if review was cached oldest pending → trigger recompute.
+**Helper — "within classify window" predicate.** The trigger needs to know whether a review is within the merchant's `classifySinceYears` window to update `pendingWithinClassifyWindow` correctly. Define `isWithinClassifyWindow(merchant, review): boolean` as `review.dates.created >= now - merchant.classifySinceYears years`. Computed at the moment of the trigger fire. If the computed cutoff drifts during the trigger run by milliseconds, that's fine — it self-corrects on the next event.
+
+**All transition cases the test must cover (six total). Each case lists every counter it touches.**
+
+1. **Create, hasComment true, unclassified** → `total++`, `pending++`; if `isWithinClassifyWindow` → `pendingWithinClassifyWindow++`. If `dates.created < cachedOldestPendingDate` (or cached is null) → update `oldestPendingDate` in place.
+2. **Create, hasComment true, already classified** (rare, e.g. backfill writes) → `total++`, `classified++`. No change to `pending` / `pendingWithinClassifyWindow` / `oldestPendingDate`.
+3. **Create, hasComment false** → `total++`. No effect on classification counters.
+4. **Update: classification applied** (`classifiedAt` null → ISO) → `classified++`, `pending--`; if review was within classify window → `pendingWithinClassifyWindow--`. If this review *was* the cached oldest pending → trigger an `oldestPendingDate` recompute job.
+5. **Update: `brand` field changed** (merchant reassignment, expected to be rare but possible) → decrement *all five* counters on the old merchant (`total`, `pending`/`classified`, `pendingWithinClassifyWindow` if it was in the old merchant's window) and increment on the new merchant (re-evaluate window with the new merchant's `classifySinceYears`). Recompute `oldestPendingDate` on both if affected.
+6. **Delete** → mirror create logic in reverse; if review was cached oldest pending → trigger recompute. If review was within the classify window and pending → `pendingWithinClassifyWindow--`.
 
 `oldestPendingDate` recompute is a single ordered query: `where brand == X and hasComment == true and themes.classifiedAt == null orderBy dates.created asc limit 1`. Cheap; safe to run inline rather than as a separate scheduled job, but the trigger flags it as a follow-up write to keep the main transaction small.
+
+**Recompute on config change (NOT triggered by review writes — triggered by `setMerchantConfig` from Task 5.1b):**
+
+`pendingWithinClassifyWindow` depends on `merchant.classifySinceYears`, so a config change has to be reflected in the cached count. When `setMerchantConfig` changes `classifySinceYears`, it enqueues a recompute that runs the aggregation:
+```
+where brand == X
+  and hasComment == true
+  and themes.classifiedAt == null
+  and dates.created >= now - newClassifySinceYears years
+  count
+```
+Result is written to `counts.pendingWithinClassifyWindow`, and `counts.countsUpdatedAt` is bumped. This is the ONLY path that writes `pendingWithinClassifyWindow` from a config change — the review-write trigger only handles per-review deltas. Without this hook, increasing the window would leave the count stale (auto-chain stops too early); decreasing the window would leave it inflated (auto-chain keeps submitting reviews that are now outside the window). Daily reconciliation (Task 7.3) is a backstop, not a substitute.
 
 **Test:** unit-test the diff logic with all six cases; integration-test against emulator covering create + classify + delete sequence end to end.
 
@@ -180,7 +195,9 @@ cd functions && npm install @google-cloud/secret-manager
 **Files:**
 - Create: `functions/src/feefo/credentials.ts` — exports `getMerchantCredentials(merchantId)` reading from Secret Manager (`feefo-{merchantId}-client-id` / `-client-secret`) with a 10-minute in-process cache.
 - Create: `functions/src/feefo/merchants.ts` — exports `getMerchantConfig(merchantId)` reading the Firestore `merchants/{id}` doc with a 5-minute in-process cache.
-- Modify: [shared/src/feefo/client.ts:44-148](shared/src/feefo/client.ts:44) — remove `getBrandCredentials`, the `envMap`, and the `MERCHANT_IDENTIFIERS` table. Change `fetchReviews`, `fetchAllReviews`, `getAccessToken`, and `fetchSummary` signatures to accept `{ credentials: FeefoCredentials, merchantIdentifier: string }` rather than a `Brand` enum. The token cache key becomes `merchantIdentifier`.
+- Modify: [shared/src/feefo/client.ts:44-148](shared/src/feefo/client.ts:44) — remove `getBrandCredentials`, the `envMap`, and the `MERCHANT_IDENTIFIERS` table. Change `fetchReviews`, `fetchAllReviews`, `getAccessToken`, and `fetchSummary` signatures to accept `{ credentials: FeefoCredentials, merchantIdentifier: string }` rather than a `Brand` enum.
+
+**Cache keying — single rule, applies everywhere downstream:** the in-process OAuth token cache in `shared/src/feefo/client.ts` is keyed by `merchantIdentifier` (the Feefo-side string), because that's what the OAuth call is scoped to and what callers naturally have when invoking the client. The merchant-doc cache in `functions/src/feefo/merchants.ts` and the credential cache in `functions/src/feefo/credentials.ts` are both keyed by `merchantId` (the Firestore doc id). When clearing caches after a credential rotation (Task 2.4), the caller looks up `feefoMerchantIdentifier` from the merchant doc and uses it to clear the token cache. To make this clean, `shared/src/feefo/client.ts` exposes a small `clearAccessToken(merchantIdentifier: string)` helper rather than letting callers reach into the cache map directly.
 - Modify: every Functions call site (sync, summary recompute, etc.) to fetch credentials first and pass them in.
 
 **Step 1: Write the failing test** in `functions/src/feefo/__tests__/credentials.test.ts` — mock Secret Manager; assert correct secret names are accessed and that a second call within TTL hits the cache.
@@ -220,7 +237,11 @@ Use `defineSecret` per-merchant is impossible (merchants are dynamic). Instead, 
    a. OAuth round-trip: prove `clientId` + `clientSecret` are valid.
    b. Merchant-scoped probe: with the access token, call a cheap merchant-scoped endpoint (e.g. `GET /api/20/reviews/summary/all?merchant_identifier={feefoMerchantIdentifier}` from the merchant doc). OAuth success alone does not prove the doc's `feefoMerchantIdentifier` is correct — different Feefo accounts can hold the same OAuth client but expose different merchants. If the probe returns 0 reviews / 404 / wrong identifier, return 400 with a clear message.
 3. **Only on both checks passing:** `createSecret` if missing, `addSecretVersion` for `feefo-{merchantId}-client-id` and `feefo-{merchantId}-client-secret`.
-4. **Invalidate caches after a successful write.** The credential cache (Task 2.2) and the OAuth token cache (existing in `shared/src/feefo/client.ts`) both keyed by merchant id must be cleared so the next API call uses the new secret. This is a small in-process map clear — no cross-instance broadcast needed for our scale.
+4. **Invalidate caches after a successful write.** Two caches need clearing, with different keys (per the rule in Task 2.2):
+   - **Credential cache** (`functions/src/feefo/credentials.ts`) keyed by `merchantId` — clear by `merchantId`.
+   - **OAuth token cache** (`shared/src/feefo/client.ts`) keyed by `merchantIdentifier` — clear via `clearAccessToken(merchant.feefoMerchantIdentifier)`. The handler must read the merchant doc to get the identifier.
+
+   Both clears are small in-process map writes — no cross-instance broadcast needed at our scale. (If we later go multi-region or scale to many warm instances, revisit; until then a stale cached token in another instance will simply expire within `expires_in` and pull the new credentials on next refresh.)
 5. **Write an operation log entry** with `merchantId`, `actorEmail`, `secretVersion` (returned from Secret Manager), and **no** secret values.
 
 **Test cases:**
@@ -271,14 +292,32 @@ Use `defineSecret` per-merchant is impossible (merchants are dynamic). Instead, 
 - Modify: [shared/src/feefo/types.ts:123](shared/src/feefo/types.ts:123)
 - Modify: [shared/src/feefo/transform.ts:5](shared/src/feefo/transform.ts:5)
 - Modify: [functions/src/sync/sync-reviews.ts](functions/src/sync/sync-reviews.ts)
+- Modify: every other call site (find via `grep -rn "Brand[^A-Za-z]" shared/ functions/ app/`)
 
-Replace `export type Brand = "uniworld" | "luxury-gold"` with `export type Brand = string` (kept for now to minimize churn) — or rename to `MerchantId` across the codebase. The plan recommends renaming; one large find-replace commit is cleanest.
+**Step 1: Define the new type.** Replace
+```ts
+export type Brand = "uniworld" | "luxury-gold";
+```
+with
+```ts
+export type MerchantId = string;
+/** @deprecated Use MerchantId. Kept for one transitional commit so call sites can be renamed in a focused diff. */
+export type Brand = MerchantId;
+```
+The alias keeps the rename mechanical — the next commit is a project-wide find-replace from `Brand` to `MerchantId`. Removing the alias is the final step in this task.
 
-Remove the `VALID_BRANDS` gate in `transformReview` and validate against the `merchants/{id}` doc instead (caller fetches once per sync run and passes the validated id).
+**Step 2: Find-replace `Brand` → `MerchantId`** across `shared/`, `functions/`, and `app/`. Type imports, parameter names, generic parameters. Rename `brand` *parameter* names to `merchantId` only when it improves clarity locally; the `brand` *field* on `reviews` documents stays (renaming a Firestore field would require a backfill that's out of scope).
+
+**Step 3: Remove the `VALID_BRANDS` gate** in `transformReview` and validate against the `merchants/{id}` doc instead (caller fetches once per sync run and passes the validated id).
+
+**Step 4: Delete the `Brand` alias.** Last commit of the task.
 
 **Test:** existing `transform.test.ts` expectations updated to allow arbitrary merchant ids.
 
-**Commit:** `refactor(shared): allow arbitrary merchant ids`
+**Commits:**
+1. `refactor(shared): introduce MerchantId, alias Brand for transition`
+2. `refactor: rename Brand → MerchantId across codebase`
+3. `refactor(shared): drop deprecated Brand alias`
 
 ### Task 3.2: Sweep hard-coded brand call sites in `functions/src/index.ts`
 
@@ -461,6 +500,39 @@ Returns the full `merchants` collection plus computed fields (`hasCredentials: b
 
 **Commit:** `feat(functions): list-merchants admin endpoint`
 
+### Task 5.1b: `setMerchantConfig` create/update endpoint
+
+**Why this task exists:** Task 1.1 references "validation enforced in `setMerchantConfig`" and Task 5.2's admin dialog calls a server endpoint to save merchant metadata, but no earlier task actually defines or exports that Cloud Function. This task fills that gap.
+
+**Files:**
+- Create: `functions/src/admin/set-merchant-config.ts`
+- Modify: `functions/src/index.ts` (export `setMerchantConfig` HTTP function)
+
+**Behavior:**
+- `POST { merchantId, config: Partial<Merchant> }` — single endpoint handles both create and update; the handler reads `merchants/{merchantId}` to decide.
+- Auth: same admin gate as `setMerchantCredentials` (`manageUsers` for now; rename to `manageMerchants` later if we split).
+
+**Validation rules (server-side authoritative — admin UI mirrors but does not replace):**
+- On **create**: all required fields present (`id`, `displayName`, `feefoMerchantIdentifier`, `urlSlug`); `id` matches the URL `merchantId` param; `urlSlug` not in the reserved-slug constant from `shared/src/types/merchant.ts`; `urlSlug` unique across `merchants` (Firestore `where("urlSlug", "==", x).limit(1)` check inside a transaction with the write).
+- On **update**: reject any change to `id`, `urlSlug`, or `feefoMerchantIdentifier` once `createdAt` is set (slug-immutability rule from Task 1.1). Return 400 with a clear message — don't silently drop the field.
+- `syncSinceYears`, `classifySinceYears`: positive integers, max 20 (sanity cap).
+- `enabled`, `autoChain`: booleans.
+- `brandThemeId`: must be null or reference an existing `brands/{id}` doc.
+
+**Side effects on update:**
+- If `classifySinceYears` changed, schedule a recompute of `counts.pendingWithinClassifyWindow` and `counts.oldestPendingDate` for that merchant (cross-references Task 1.4 trigger logic — see the new "Recompute on config change" section there).
+- Bump `updatedAt = now`. On create, set `createdAt = updatedAt = now`.
+- Write an operation log entry (`type: "admin"`, `action: "merchant_config_set"`, includes the diff, omits no values since metadata isn't sensitive).
+
+**Test cases:**
+- Create with reserved slug → 400.
+- Create duplicating an existing `urlSlug` → 400 (and the transactional check works under concurrent writes — two simultaneous creates with the same slug must not both succeed).
+- Update changing `urlSlug` after `createdAt` is set → 400.
+- Update with `classifySinceYears` change → recompute scheduled (verify by checking the merchant's `counts.countsUpdatedAt` advances).
+- Non-admin caller → 403.
+
+**Commit:** `feat(functions): setMerchantConfig admin endpoint`
+
 ### Task 5.2: Merchants screen UI
 
 **Files:**
@@ -521,7 +593,11 @@ When a user clicks a row on a list view to navigate into a detail page, the mult
 
 **Selection cap:** company has ~16 merchants total. The multi-select hard-caps at 10 chosen items (Firestore `IN` limit). "Select all" is a separate state — it issues queries scoped to **all enabled merchants visible to the current tenant** rather than packing all ids into an `IN`. The popover disables remaining checkboxes once 10 are selected and shows "Use 'Select all' to include every merchant."
 
-**Theme-scoped "Select all":** the dashboard's `BrandContext` already carries an active `brandThemeId`. "Select all" scopes to merchants where `enabled == true AND brandThemeId == BrandContext.brandThemeId` (or `brandThemeId IS NULL` if the active context is the default). This is a **UI scoping mechanism**, not access control — `brandThemeId` is a visual theme FK and two unrelated merchants could legitimately share a theme. If true tenant isolation becomes a requirement (different customer accounts not seeing each other's data), that's a separate change introducing a `tenantId` field with appropriate Firestore security rules; do not retrofit `brandThemeId` for that purpose. Implementation: client passes either an explicit list of merchant ids (≤10) *or* a sentinel `{ allInActiveTheme: true, brandThemeId }` to query helpers; helpers translate the sentinel into the theme-scoped query at the data layer, not in UI components.
+**Theme-scoped "Select all":** "Select all" scopes to merchants where `enabled == true AND brandThemeId == <currently-active theme id>`. This is a **UI scoping mechanism**, not access control — `brandThemeId` is a visual theme FK and two unrelated merchants could legitimately share a theme. If true tenant isolation becomes a requirement (different customer accounts not seeing each other's data), that's a separate change introducing a `tenantId` field with appropriate Firestore security rules; do not retrofit `brandThemeId` for that purpose.
+
+**Reading the active theme id from `BrandContext` — current shape vs target shape:** the existing context ([`app/src/contexts/BrandContext.tsx`](app/src/contexts/BrandContext.tsx)) exposes `brand: BrandTheme` with a `brand.id` field; there is **no separate `brandThemeId` property** today. For this issue, the sentinel resolves to `BrandContext.brand.id`. If a future change splits the brand-theme concept from the active-tenant concept, it should add a dedicated `brandThemeId` (and possibly `tenantId`) to the context — that is *not* this issue's scope.
+
+**Implementation:** client passes either an explicit list of merchant ids (≤10) *or* a sentinel `{ allInActiveTheme: true, brandThemeId: BrandContext.brand.id }` to query helpers; helpers translate the sentinel into the theme-scoped query at the data layer, not in UI components.
 
 **UX:**
 - Trigger button shows "All merchants" or "3 merchants" or the single label.
