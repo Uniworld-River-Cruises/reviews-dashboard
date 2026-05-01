@@ -11,6 +11,7 @@
 - Per-merchant classification batches replace the single global lock. Each merchant gets its own `sync_meta/batch_classify_{merchantId}` doc and can auto-chain 10K-request batches until the pending queue is drained.
 - An admin merchants screen surfaces counts, oldest pending review date, estimated cost to finish, and per-merchant Classify / Pause / Enable / Disable controls.
 - The header `MerchantSwitcher` becomes a searchable multi-select (with "All") backed by the Firestore merchant list.
+- **URL slug vs Feefo identifier vs document id:** these are three distinct strings even though they often coincide. `id` is the Firestore doc id (used as the value stored in `reviews.brand`). `feefoMerchantIdentifier` is what Feefo accepts in API calls (may be different, e.g. `uniworld_us`). `urlSlug` is what appears in user-facing URLs (`/{urlSlug}/...`) and is set by the admin — added so the upcoming routing refactor (`/itineraries?slug=...` → `/{merchantSlug}/itineraries/{slug}`) lands cleanly without another schema change. Two merchants can share a `brandThemeId` (visual theme), but each has its own `urlSlug`. URL paths are always single-merchant.
 
 **Tech Stack:** Firebase Functions v2 (Node 20, TypeScript — matches current `functions/package.json` `engines.node`; a Node 22 upgrade is out of scope for this plan), Firestore, Google Secret Manager (`@google-cloud/secret-manager` SDK, IAM-based access — no `defineSecret`), Next.js App Router, React, Tailwind, Anthropic Batch API (Haiku 4.5).
 
@@ -18,6 +19,9 @@
 - Re-classification of already-classified reviews (one-off admin script if ever needed).
 - Auto-discovery of merchants from Feefo (admins add merchants manually).
 - Self-service merchant onboarding by non-admins.
+- The URL/routing refactor from `/itineraries?slug=...` to `/{merchantSlug}/itineraries/{slug}` — owned by a separate plan. This plan adds the `urlSlug` *field* so the routing work can land cleanly later, but does not change any routes or add redirects for the old query-param URLs.
+- Brand-neutral terminology for what the dashboard currently calls "itineraries" and "ships". Non-cruise brands offer tours/trips, not itineraries — and Feefo itself uses the term **products** for what we display. The likely direction is a global rename of "itineraries" → "products" rather than per-merchant configuration, since "products" matches the source data. Deferred to its own follow-up plan/issue (created alongside this one) because the rename touches page titles, nav labels, route segments, breadcrumbs, copy, and possibly Firestore collection naming — large enough to risk this issue's scope.
+- Locale-aware date formatting. Tangential; pursued separately.
 
 ---
 
@@ -42,8 +46,12 @@ No code change in this task. This is the freeze point before refactor.
 ### Task 0.2: Decide on naming
 
 - **Firestore collection:** `merchants` (not `brands` — the existing `brands` collection is for visual themes and is a separate concern).
-- **Field on `reviews`:** keep existing `brand` field, repurposed to hold the Feefo merchant identifier (`uniworld`, `trafalgar`, etc.). No new field added.
-- **Secret Manager naming:** `feefo-{merchantId}-client-id`, `feefo-{merchantId}-client-secret`. IDs are slug-safe (lowercase, alphanumeric + hyphen).
+- **Field on `reviews`:** keep existing `brand` field, repurposed to hold the merchant doc `id` (`uniworld`, `trafalgar`, etc.). No new field added on reviews.
+- **Three distinct merchant strings** (see architecture):
+  - `id` — Firestore doc id, stored in `reviews.brand`. Slug-safe.
+  - `feefoMerchantIdentifier` — what we send to Feefo. Often equals `id` but may differ.
+  - `urlSlug` — public URL segment for the upcoming routing refactor. Often equals `id`, but admin can set differently. Reserved-slug + uniqueness validated.
+- **Secret Manager naming:** `feefo-{id}-client-id`, `feefo-{id}-client-secret` (keyed by `id`, not `urlSlug` — secrets are infrastructure, not user-facing).
 
 ---
 
@@ -58,9 +66,10 @@ No code change in this task. This is the freeze point before refactor.
 ```typescript
 // shared/src/types/merchant.ts
 export interface Merchant {
-  id: string;                       // slug, matches Feefo merchant_identifier
+  id: string;                       // Firestore doc id; used as value of reviews.brand. Lowercase, slug-safe.
   displayName: string;              // "Trafalgar"
-  feefoMerchantIdentifier: string;  // Feefo URL slug, often === id
+  feefoMerchantIdentifier: string;  // What Feefo accepts as merchant_identifier (may differ from id, e.g. "uniworld_us")
+  urlSlug: string;                  // Public URL segment (/{urlSlug}/...). Unique across merchants. Immutable after first save.
   enabled: boolean;                 // disabled merchants skipped by sync + UI
   syncSinceYears: number;           // how far back to pull raw reviews (default 5)
   classifySinceYears: number;       // how far back to classify with Claude (default 2)
@@ -78,6 +87,13 @@ export interface Merchant {
 }
 ```
 
+**Validation rules** (enforced at write time, both in admin UI and in the `setMerchantConfig` Cloud Function):
+- `id`, `urlSlug`: lowercase ASCII, alphanumeric + hyphens, 2-40 chars, must not start or end with hyphen.
+- `urlSlug`: must be unique across `merchants` (Firestore query at write time).
+- `urlSlug`: must not be one of the **reserved slugs**: `admin`, `api`, `_next`, `login`, `logout`, `signin`, `signout`, `settings`, `account`, `static`, `public`, `assets`, `merchants`, `themes`, `overview`. Maintained as a constant in `shared/src/types/merchant.ts` so both admin UI and server validation use the same list.
+- `urlSlug` is **immutable** after first save. The admin edit dialog disables the field once `createdAt` is non-null. Rationale: changing a slug breaks any external links/bookmarks; redirect-table machinery is more complexity than it's worth for an internal admin tool.
+- `feefoMerchantIdentifier`: validated by attempting an OAuth round-trip against Feefo before saving credentials (already covered by Task 2.4).
+
 **Test:** `shared/src/types/__tests__/merchant.test.ts` — type-only file, add a compile-time assertion test that a sample object satisfies `Merchant`.
 
 **Commit:** `feat(shared): add Merchant type`
@@ -90,7 +106,7 @@ export interface Merchant {
 
 **Step 1: Write the failing test** that asserts running the migration on a fresh emulator creates two docs with the expected shape and `enabled: true`.
 
-**Step 2: Implement** — idempotent (skip if doc exists), logs to ops log, callable via a one-off `onRequest` admin endpoint guarded by `manageUsers` permission.
+**Step 2: Implement** — idempotent (skip if doc exists), logs to ops log, callable via a one-off `onRequest` admin endpoint guarded by `manageUsers` permission. Seed values: `urlSlug = id`, `feefoMerchantIdentifier = id`, `enabled = true`, `syncSinceYears = 5`, `classifySinceYears = 2`, `brandThemeId = null`. Counts are populated by Task 1.3.
 
 **Step 3: Verify** against Firestore emulator.
 
@@ -415,7 +431,9 @@ Returns the full `merchants` collection plus computed fields (`hasCredentials: b
 
 **Empty state:** "No merchants yet — add one to start syncing."
 
-**"Add merchant" CTA:** opens `MerchantEditDialog` with fields for id, display name, Feefo merchant identifier, sync window, classify window.
+**"Add merchant" CTA:** opens `MerchantEditDialog` with fields for **id**, **display name**, **Feefo merchant identifier**, **URL slug** (defaults to id, editable on create), **sync window**, **classify window**, **brand theme** (optional). Inline validation enforces the rules from Task 1.1: lowercase/alphanumeric/hyphen, length, not in the reserved-slug list, not duplicating an existing merchant's `urlSlug`. Submit-time uniqueness check happens server-side too.
+
+**Edit-existing-merchant dialog:** same fields but `id`, `urlSlug`, and `feefoMerchantIdentifier` are read-only. Slug immutability is enforced by both the disabled UI input and a server-side check that rejects writes that change `urlSlug` after `createdAt` is set.
 
 **"Set credentials" dialog:** id + secret fields, both `type="password"`, never echoed back from the server. Submit calls `setMerchantCredentials`. Surfaces the Feefo validation error if creds are wrong.
 
@@ -439,6 +457,16 @@ Buttons call `batchClassify({ action: "submit", merchantId })` and toggle `autoC
 ---
 
 ## Phase 6 — Merchant Selector Refactor (Multi-Select)
+
+**Scope rule — multi-select applies to overview/list views only.** Detail pages (a single review, a single product/itinerary, a single ship) always represent one merchant in the URL path. When the user navigates from a list view into a detail page, the selector visually collapses to the single merchant carried by the path. This matches Feefo's data model where each review belongs to exactly one merchant + one product, and avoids the impossible state of a multi-merchant detail URL. Concretely:
+
+| View | Selector behaviour | URL state |
+|---|---|---|
+| Executive dashboard, themes, reviews list | Multi-select active; up to 10 ids or "All" | `?merchants=a,b,c` (or absent for "All") |
+| Single product / single ship / single review detail | Selector shows the path's merchant; cannot multi-select from this page | `/{urlSlug}/...` carries one merchant |
+| Admin merchants table | Always shows every merchant (admin scope) | n/a |
+
+When a user clicks a row on a list view to navigate into a detail page, the multi-select state is cleared and replaced by the single merchant the row belongs to. The browser back-button restores the prior multi-select.
 
 ### Task 6.1: New `MerchantMultiSelect` component
 
