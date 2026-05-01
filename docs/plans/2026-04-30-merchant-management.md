@@ -73,6 +73,7 @@ export interface Merchant {
   enabled: boolean;                 // disabled merchants skipped by sync + UI
   syncSinceYears: number;           // how far back to pull raw reviews (default 5)
   classifySinceYears: number;       // how far back to classify with Claude (default 2)
+  autoChain: boolean;               // when true, completing a classification batch immediately submits the next 10K. Default true. Per-merchant kill switch surfaced in admin UI.
   brandThemeId: string | null;      // optional FK to brand theme doc; null = default
   counts: {
     total: number;                  // total reviews stored
@@ -106,7 +107,7 @@ export interface Merchant {
 
 **Step 1: Write the failing test** that asserts running the migration on a fresh emulator creates two docs with the expected shape and `enabled: true`.
 
-**Step 2: Implement** — idempotent (skip if doc exists), logs to ops log, callable via a one-off `onRequest` admin endpoint guarded by `manageUsers` permission. Seed values: `urlSlug = id`, `feefoMerchantIdentifier = id`, `enabled = true`, `syncSinceYears = 5`, `classifySinceYears = 2`, `brandThemeId = null`. Counts are populated by Task 1.3.
+**Step 2: Implement** — idempotent (skip if doc exists), logs to ops log, callable via a one-off `onRequest` admin endpoint guarded by `manageUsers` permission. Seed values: `urlSlug = id`, `feefoMerchantIdentifier = id`, `enabled = true`, `syncSinceYears = 5`, `classifySinceYears = 2`, `autoChain = true`, `brandThemeId = null`. Counts are populated by Task 1.3.
 
 **Step 3: Verify** against Firestore emulator.
 
@@ -211,11 +212,22 @@ Use `defineSecret` per-merchant is impossible (merchants are dynamic). Instead, 
 **Behavior:**
 - POST `{ merchantId, clientId, clientSecret }`.
 - Auth: requires `manageUsers` permission (the existing top-tier admin gate; rename to `manageMerchants` in a follow-up if we want finer-grained).
-- Creates the secret if missing, adds a new version if it exists. Uses `SecretManagerServiceClient.createSecret` + `addSecretVersion`.
-- Validates the credentials by performing a `getAccessToken` round-trip against Feefo before storing — if Feefo rejects, return 400 and don't write.
-- Writes an entry to operation logs (without the secret values).
 
-**Test:** mock Secret Manager + Feefo; assert validation-failure path doesn't write.
+**Validation flow (this is order-sensitive — do NOT short-circuit):**
+
+1. **Validate using the supplied credentials directly.** Call the *pure* shared Feefo client (the post-Task-2.2 version that accepts injected credentials) with `{ clientId, clientSecret }` from the POST body. **Do not** route through `getMerchantCredentials(merchantId)` — that adapter reads existing Secret Manager values and may also serve from the 10-minute in-process cache, both of which would validate the *old* credentials, not the ones being submitted.
+2. **Two-step Feefo check.**
+   a. OAuth round-trip: prove `clientId` + `clientSecret` are valid.
+   b. Merchant-scoped probe: with the access token, call a cheap merchant-scoped endpoint (e.g. `GET /api/20/reviews/summary/all?merchant_identifier={feefoMerchantIdentifier}` from the merchant doc). OAuth success alone does not prove the doc's `feefoMerchantIdentifier` is correct — different Feefo accounts can hold the same OAuth client but expose different merchants. If the probe returns 0 reviews / 404 / wrong identifier, return 400 with a clear message.
+3. **Only on both checks passing:** `createSecret` if missing, `addSecretVersion` for `feefo-{merchantId}-client-id` and `feefo-{merchantId}-client-secret`.
+4. **Invalidate caches after a successful write.** The credential cache (Task 2.2) and the OAuth token cache (existing in `shared/src/feefo/client.ts`) both keyed by merchant id must be cleared so the next API call uses the new secret. This is a small in-process map clear — no cross-instance broadcast needed for our scale.
+5. **Write an operation log entry** with `merchantId`, `actorEmail`, `secretVersion` (returned from Secret Manager), and **no** secret values.
+
+**Test cases:**
+- Wrong client id/secret → 400, no Secret Manager write, no cache clear.
+- Right OAuth + wrong merchant identifier → 400, no write, no cache clear.
+- Both correct → secret version written; cache invalidation observed (next `getMerchantCredentials` call hits Secret Manager, not the cache).
+- Concurrent writes from two admins → both succeed (Secret Manager versions); last-write-wins for the cache.
 
 **Commit:** `feat(functions): admin endpoint to set Feefo credentials`
 
@@ -270,16 +282,26 @@ Remove the `VALID_BRANDS` gate in `transformReview` and validate against the `me
 
 ### Task 3.2: Sweep hard-coded brand call sites in `functions/src/index.ts`
 
+**Two distinct merchant-set queries — pick the right one per call site:**
+
+| Helper | Returns | Use for |
+|---|---|---|
+| `listEnabledMerchants()` | `merchants where enabled == true` | Scheduled syncs, scheduled classification candidates, the default behaviour of "loop over merchants" in batch operations. |
+| `isKnownMerchant(id)` | `merchants/{id}` exists (any `enabled` value) | Validation of a `merchantId` query param on admin endpoints — admins must still be able to act on a *disabled* merchant (recompute summaries, clean up mappings, inspect state, force a one-off sync). Disabling a merchant only stops *automatic* operations against it. |
+| `listAllMerchants()` | every doc in `merchants` | Admin merchants screen, operational tooling that surfaces disabled merchants alongside enabled ones. |
+
+Disabling a merchant means "skip from scheduled work and from the user-facing multi-select", **not** "lose access to". An admin opening the merchants screen still sees disabled merchants and can re-enable them or run one-off operations.
+
 **Files (all in [functions/src/index.ts](functions/src/index.ts)):**
 
-Replace each of the following with iteration over `merchants where enabled == true`:
+Replace each of the following per the rule above:
 
-- **Line 46-49** — delete `VALID_BRANDS` and `isValidBrand`. Replace with `isKnownMerchant(merchantId): Promise<boolean>` reading the merchants collection (cached).
-- **Line 293-294 (scheduled sync summary recompute)** — loop over enabled merchants instead of two literal calls.
-- **Line 352-353 (sync lock reset error path)** — read merchant ids dynamically; reset lock for every merchant whose sync was attempted in this run, not the two literals.
-- **Line 379-380 (manual sync summary recompute)** — same pattern as scheduled.
-- **Line 481-502 (itinerary mappings: rebuild + name-fix)** — `brand` query param validation goes through `isKnownMerchant`; the rebuild loop iterates the merchants collection when no brand is specified.
-- **Line 516-524 (manual summary recompute endpoint)** — same.
+- **Line 46-49** — delete `VALID_BRANDS` and `isValidBrand`. Replace with `isKnownMerchant(merchantId): Promise<boolean>` reading the merchants collection (cached). Use this for query-param validation everywhere `isValidBrand` was used.
+- **Line 293-294 (scheduled sync summary recompute)** — loop with `listEnabledMerchants()`.
+- **Line 352-353 (sync lock reset error path)** — read merchant ids dynamically; reset lock for every merchant whose sync was attempted in *this* run (track in-process), not via a fresh query. Don't accidentally clear locks for merchants that weren't being synced.
+- **Line 379-380 (manual sync summary recompute)** — when no `brand` arg is supplied, loop with `listEnabledMerchants()`. When a specific `brand` is supplied, validate via `isKnownMerchant` and recompute even if disabled (admin operation).
+- **Line 481-502 (itinerary mappings: rebuild + name-fix)** — `brand` query param validation goes through `isKnownMerchant`. The rebuild-all path uses `listEnabledMerchants()`; explicit per-merchant rebuild proceeds even on disabled merchants.
+- **Line 516-524 (manual summary recompute endpoint)** — same pattern.
 
 Each replacement is a small, isolated diff. Group by handler and commit per handler so reviewers can follow.
 
@@ -338,17 +360,39 @@ Each replacement is a small, isolated diff. Group by handler and commit per hand
 **Files:**
 - Modify: `functions/src/sync/batch-classify.ts`
 
-**Decision:** maintain a small reverse-lookup collection.
+**Decision:** maintain a small reverse-lookup collection `batches/{batchId}`.
 
-When a batch is submitted, write **two** docs in the same transaction:
-- `sync_meta/batch_classify_{merchantId}` — per-merchant lock and current state (status, batchId, submittedAt). Existing shape, scoped per merchant.
-- `batches/{batchId}` — `{ merchantId, submittedAt, status }`. Cleaned up (deleted) when the batch reaches a terminal state.
+**Why this can't be a single transaction:** the `batchId` is only known *after* Anthropic's API returns. So writes around it have to span the API call. The implementation is a three-step sequence with explicit rollback on failure:
 
-`processBatchResults(batchId)` reads `batches/{batchId}` first to resolve `merchantId`, then proceeds with merchant-scoped writes. The HTTP endpoint accepts either `{ batchId }` (resolves merchant from the lookup doc) or `{ merchantId }` (uses that merchant's current `batchId` from the lock doc) — never both. Reject ambiguous calls with 400.
+**Step A — Reserve the per-merchant submission lock (Firestore transaction).**
+Set `sync_meta/batch_classify_{merchantId}` to `{ status: "submitting", submissionLockToken, submissionLockExpiresAt }`. Same shape as the existing global lock, just per-merchant. If the doc already shows an active batch or live submission lock, abort with `acquired: false` (existing behavior in `batch-classify.ts:37`).
 
-**Test:** unit-test resolution in both directions; integration-test that two merchants submitting concurrently each resolve correctly on poll.
+**Step B — Call Anthropic.**
+Outside the transaction. On HTTP error, jump to Step D.
 
-**Commit:** `feat(functions): batchId↔merchantId reverse lookup for classification`
+**Step C — Commit `{ merchantId, batchId }` mapping (Firestore transaction).**
+On Anthropic success, run a single transaction that writes BOTH:
+- `sync_meta/batch_classify_{merchantId}` ← `{ status: <Anthropic processing_status>, batchId, submittedAt, totalRequests, submissionLockToken: null, submissionLockExpiresAt: null }`.
+- `batches/{batchId}` ← `{ merchantId, submittedAt, status: <Anthropic processing_status>, terminalAt: null }`.
+
+Both docs land atomically; downstream pollers can resolve in either direction.
+
+**Step D — Rollback on failure.**
+If Step B failed, clear the submitting lock so a retry can acquire it: set `sync_meta/batch_classify_{merchantId}` to `{ status: "error", errorMessage, submissionLockToken: null, submissionLockExpiresAt: null }`. Mirror the existing error path in `batch-classify.ts:218`.
+
+**Resolution paths:**
+- `processBatchResults(batchId)` reads `batches/{batchId}` to resolve `merchantId`, then writes results scoped to that merchant.
+- The HTTP endpoint accepts either `{ batchId }` (resolves merchant from the lookup doc) or `{ merchantId }` (reads the per-merchant lock to get current `batchId`) — never both. Reject ambiguous calls with 400.
+
+**Retention of `batches/{batchId}` after terminal state:**
+Don't delete eagerly. When a batch reaches a terminal state (`complete`, `ended_no_results`, `error`), set `terminalAt: <now>` on the doc but leave it in place. A scheduled function `cleanupTerminalBatches` (runs daily) deletes docs where `terminalAt < now - 30d`. Rationale: retries, manual debugging, and operation-log correlation all benefit from being able to resolve a `batchId` for some time after the batch ends. 30 days is arbitrary but generous; tune later if storage becomes a concern.
+
+**Test:**
+- Unit: resolution in both directions, ambiguous-input 400.
+- Unit: rollback path leaves the lock in `error` state with no `batchId`.
+- Integration: two merchants submit concurrently; each resolves to its own `merchantId` on poll. Cleanup job deletes only docs older than the TTL.
+
+**Commit:** `feat(functions): batchId↔merchantId reverse lookup with rollback and TTL`
 
 ### Task 4.1: Move batch lock from global to per-merchant
 
@@ -458,15 +502,15 @@ Buttons call `batchClassify({ action: "submit", merchantId })` and toggle `autoC
 
 ## Phase 6 — Merchant Selector Refactor (Multi-Select)
 
-**Scope rule — multi-select applies to overview/list views only.** Detail pages (a single review, a single product/itinerary, a single ship) always represent one merchant in the URL path. When the user navigates from a list view into a detail page, the selector visually collapses to the single merchant carried by the path. This matches Feefo's data model where each review belongs to exactly one merchant + one product, and avoids the impossible state of a multi-merchant detail URL. Concretely:
+**Scope rule — multi-select applies to overview/list views only.** Detail pages (a single review, a single product/itinerary, a single ship) always represent one merchant. When the user navigates from a list view into a detail page, the selector visually collapses to the single merchant carried by the page context. This matches Feefo's data model where each review belongs to exactly one merchant + one product, and avoids the impossible state of a multi-merchant detail URL. Concretely:
 
-| View | Selector behaviour | URL state |
-|---|---|---|
-| Executive dashboard, themes, reviews list | Multi-select active; up to 10 ids or "All" | `?merchants=a,b,c` (or absent for "All") |
-| Single product / single ship / single review detail | Selector shows the path's merchant; cannot multi-select from this page | `/{urlSlug}/...` carries one merchant |
-| Admin merchants table | Always shows every merchant (admin scope) | n/a |
+| View | Selector behaviour | URL state — today (this issue) | URL state — future (post-routing-refactor, [#49](https://github.com/Uniworld-River-Cruises/reviews-dashboard/issues/49)) |
+|---|---|---|---|
+| Executive dashboard, themes, reviews list | Multi-select active; up to 10 ids or "All" | `?merchants=a,b,c` (or `?merchants=all`) | Same — overview routes stay query-param driven |
+| Single product / itinerary / ship / review detail | Selector shows the path's / page's merchant; cannot multi-select from this page | `?slug=...&merchant=X` (existing query-param routing — extend to carry `merchant`) | `/{urlSlug}/products/{productSlug}` (or whatever #49 lands on) |
+| Admin merchants table | Always shows every merchant (admin scope) | `/admin/merchants` | unchanged |
 
-When a user clicks a row on a list view to navigate into a detail page, the multi-select state is cleared and replaced by the single merchant the row belongs to. The browser back-button restores the prior multi-select.
+When a user clicks a row on a list view to navigate into a detail page, the multi-select state is cleared and replaced by the single merchant the row belongs to. The browser back-button restores the prior multi-select. **For this issue's scope:** the detail page reads its merchant from a `merchant` query param (added to the existing route shape); the path-based form is a future-compatibility note and is not implemented here.
 
 ### Task 6.1: New `MerchantMultiSelect` component
 
@@ -477,7 +521,7 @@ When a user clicks a row on a list view to navigate into a detail page, the mult
 
 **Selection cap:** company has ~16 merchants total. The multi-select hard-caps at 10 chosen items (Firestore `IN` limit). "Select all" is a separate state — it issues queries scoped to **all enabled merchants visible to the current tenant** rather than packing all ids into an `IN`. The popover disables remaining checkboxes once 10 are selected and shows "Use 'Select all' to include every merchant."
 
-**Tenant scoping for "Select all":** the dashboard already has tenant/brand-theme concepts via `BrandContext` and `brandThemeId` on the merchant doc. "Select all" must scope to merchants where `enabled == true AND brandThemeId == currentTenant.brandThemeId` (or `brandThemeId IS NULL` if the current tenant is the default). This keeps the door open for adding a second tenant later without retroactively leaking data across tenants. Implementation: client passes either an explicit list of merchant ids (≤10) *or* a sentinel `{ allForTenant: true, brandThemeId }` to query helpers; helpers translate the sentinel into the tenant-scoped query at the data layer, not in UI components.
+**Theme-scoped "Select all":** the dashboard's `BrandContext` already carries an active `brandThemeId`. "Select all" scopes to merchants where `enabled == true AND brandThemeId == BrandContext.brandThemeId` (or `brandThemeId IS NULL` if the active context is the default). This is a **UI scoping mechanism**, not access control — `brandThemeId` is a visual theme FK and two unrelated merchants could legitimately share a theme. If true tenant isolation becomes a requirement (different customer accounts not seeing each other's data), that's a separate change introducing a `tenantId` field with appropriate Firestore security rules; do not retrofit `brandThemeId` for that purpose. Implementation: client passes either an explicit list of merchant ids (≤10) *or* a sentinel `{ allInActiveTheme: true, brandThemeId }` to query helpers; helpers translate the sentinel into the theme-scoped query at the data layer, not in UI components.
 
 **UX:**
 - Trigger button shows "All merchants" or "3 merchants" or the single label.
@@ -525,7 +569,7 @@ Add a third test merchant (e.g., `insight-vacations`) on staging:
 | Secret Manager API quota under heavy traffic | In-process cache (Task 2.2); secrets read at most once per 10 min per cold start. |
 | Composite index build time on production reviews collection | Build the index *before* shipping query changes; Firestore rejects queries that hit a missing index, so deploy the index commit first. |
 | Cost estimator under-counts (token heuristic too rough) | Sample size 200 + show "± 20%" range in UI. |
-| 10-item Firestore `IN` cap when many merchants selected | Company has ~16 merchants total, so multi-select is capped at 10 in the UI. "Select all" bypasses the `IN` filter entirely (issues an unfiltered query). |
+| 10-item Firestore `IN` cap when many merchants selected | Company has ~16 merchants total, so multi-select is capped at 10 in the UI. "Select all" bypasses the `IN` filter by issuing the theme-scoped all-merchants query (Phase 6 sentinel `{ allInActiveTheme: true, brandThemeId }`), not an unfiltered reviews query. |
 | Two admins set credentials simultaneously | Secret Manager handles versioning; last write wins, both versions retained. |
 
 ---
@@ -536,7 +580,8 @@ Add a third test merchant (e.g., `insight-vacations`) on staging:
 - [ ] No Feefo credentials exist in environment variables, GitHub secrets, or git history (post-rotation).
 - [ ] Admin merchants screen shows accurate counts and an oldest-pending date for every merchant.
 - [ ] Cost preview returns within 5 seconds for a merchant with 100K pending.
-- [ ] Auto-chain classify drains a 25K pending queue end-to-end without admin intervention.
+- [ ] Auto-chain classify drains a 25K pending queue end-to-end without admin intervention when `merchant.autoChain == true`.
+- [ ] Toggling `autoChain` to false on the admin screen halts further submissions for that merchant within one batch cycle without affecting other merchants.
 - [ ] `MerchantMultiSelect` works with 1, 2, 10, and 25 merchants.
 - [ ] Existing Uniworld and Luxury Gold dashboards function identically post-migration (regression tested).
 - [ ] All new endpoints are admin-gated; Secret Manager IAM is documented.
