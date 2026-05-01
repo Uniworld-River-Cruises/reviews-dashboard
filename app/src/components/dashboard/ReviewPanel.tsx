@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { ThemeReview } from "@/lib/firestore/queries";
 import MediaThumbnails from "@/components/reviews/MediaThumbnails";
+import { formatReviewDate } from "@/lib/format/date";
 
 interface ReviewPanelProps {
   title: string;
@@ -11,6 +12,9 @@ interface ReviewPanelProps {
   reviews: ThemeReview[];
   loading: boolean;
   onClose: () => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 }
 
 function StarRating({ rating }: { rating: number }) {
@@ -52,6 +56,7 @@ function QuoteCard({
       </div>
       <p className="mb-2 text-xs text-text-secondary">
         {review.itinerary} · {review.ship}
+        {review.date && ` · ${formatReviewDate(review.date)}`}
       </p>
       <p className="text-sm leading-relaxed text-text-primary">
         {expanded || review.text.length <= 150
@@ -82,6 +87,9 @@ export default function ReviewPanel({
   reviews,
   loading,
   onClose,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
 }: ReviewPanelProps) {
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -111,7 +119,9 @@ export default function ReviewPanel({
           <div>
             <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
             <p className="mt-0.5 text-sm text-text-secondary">
-              {reviews.length} review{reviews.length !== 1 ? "s" : ""}
+              {hasMore
+                ? `Showing ${reviews.length}+ reviews`
+                : `${reviews.length} review${reviews.length !== 1 ? "s" : ""}`}
             </p>
             <p className="mt-1 text-xs text-text-tertiary">{subtitle}</p>
           </div>
@@ -147,9 +157,29 @@ export default function ReviewPanel({
               No matching reviews were found.
             </p>
           ) : (
-            reviews.map((review) => (
-              <QuoteCard key={review.id} review={review} accent={accent} />
-            ))
+            <>
+              {reviews.map((review) => (
+                <QuoteCard key={review.id} review={review} accent={accent} />
+              ))}
+              {hasMore && onLoadMore && (
+                <div className="pt-2 text-center">
+                  <button
+                    onClick={onLoadMore}
+                    disabled={loadingMore}
+                    className="inline-flex items-center gap-2 rounded-lg bg-header-bg px-6 py-2.5 text-sm font-medium text-header-text shadow-sm transition-colors hover:opacity-90 disabled:opacity-50 cursor-pointer"
+                  >
+                    {loadingMore ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        Loading...
+                      </>
+                    ) : (
+                      "Show more"
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

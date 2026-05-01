@@ -72,13 +72,23 @@ export interface ThemeReview {
   media: { type: string; url: string }[];
 }
 
+/** Cursor for paged theme/rating panels. Opaque to callers. */
+export type ReviewPageCursor = QueryDocumentSnapshot<DocumentData> | null;
+
+export interface ReviewPage {
+  reviews: ThemeReview[];
+  cursor: ReviewPageCursor;
+  hasMore: boolean;
+}
+
+export const REVIEW_PANEL_PAGE_SIZE = 50;
+
 export type OverviewSelectionFilter =
   | { kind: "theme"; theme: string; sentiment: "positive" | "negative" }
   | { kind: "rating"; star: number }
   | { kind: "month"; month: string }
   | { kind: "period"; start: string; end: string; label: string };
 
-const PANEL_REVIEW_LIMIT = 100;
 const PANEL_REVIEW_BATCH_SIZE = 200;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -612,46 +622,45 @@ export async function getFilterOptions(
   };
 }
 
+/**
+ * Fetch a page of reviews matching a theme. Pass the previous page's `cursor`
+ * to load the next page; pass `null` to start from the beginning.
+ */
 export async function getReviewsByTheme(
   brand: string,
   theme: string,
   type: "positive" | "negative",
   dateField: DateField,
-  startDate?: Date,
-  endDate?: Date
-): Promise<ThemeReview[]> {
+  startDate: Date | undefined,
+  endDate: Date | undefined,
+  pageSize: number = REVIEW_PANEL_PAGE_SIZE,
+  cursor: ReviewPageCursor = null
+): Promise<ReviewPage> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const path = dateFieldPath(dateField);
-  const fetchLimit = startDate && endDate ? 100 : 20;
-  const constraints = [
-    where(`themes.${type}`, "array-contains", theme),
-    orderBy(path, "desc"),
-    limit(fetchLimit),
-  ];
-  if (brand !== "combined") {
-    constraints.unshift(where("brand", "==", brand));
-  }
-  const q = query(ref, ...constraints);
-  const snap = await getDocs(q);
+  const constraints: QueryConstraint[] = [];
+  if (brand !== "combined") constraints.push(where("brand", "==", brand));
+  if (startDate) constraints.push(where(path, ">=", startDate.toISOString()));
+  if (endDate) constraints.push(where(path, "<=", endDate.toISOString()));
+  constraints.push(where(`themes.${type}`, "array-contains", theme));
+  constraints.push(orderBy(path, "desc"));
+  if (cursor) constraints.push(startAfter(cursor));
+  // Fetch one extra row to know if a next page exists without lying when
+  // the result count exactly equals pageSize.
+  constraints.push(limit(pageSize + 1));
 
-  if (snap.empty) return [];
-
-  const filteredDocs =
-    startDate && endDate
-      ? snap.docs.filter((docSnap) => {
-          const value = readDateFieldValue(docSnap.data(), dateField);
-          return (
-            typeof value === "string" &&
-            value >= startDate.toISOString() &&
-            value <= endDate.toISOString()
-          );
-        })
-      : snap.docs;
-
-  return filteredDocs.slice(0, 20).map((docSnap) =>
+  const snap = await getDocs(query(ref, ...constraints));
+  const hasMore = snap.docs.length > pageSize;
+  const pageDocs = snap.docs.slice(0, pageSize);
+  const reviews = pageDocs.map((docSnap) =>
     mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
   );
+  return {
+    reviews,
+    cursor: pageDocs[pageDocs.length - 1] ?? cursor,
+    hasMore,
+  };
 }
 
 export async function getReviewsForOverviewSelection(
@@ -659,21 +668,47 @@ export async function getReviewsForOverviewSelection(
   startDate: Date,
   endDate: Date,
   filter: OverviewSelectionFilter,
-  dateField: DateField
-): Promise<ThemeReview[]> {
+  dateField: DateField,
+  pageSize: number = REVIEW_PANEL_PAGE_SIZE,
+  cursor: ReviewPageCursor = null
+): Promise<ReviewPage> {
   if (filter.kind === "theme") {
-    return getThemeSelectionReviews(brand, startDate, endDate, filter, dateField);
+    return getReviewsByTheme(
+      brand,
+      filter.theme,
+      filter.sentiment,
+      dateField,
+      startDate,
+      endDate,
+      pageSize,
+      cursor
+    );
   }
 
   if (filter.kind === "period") {
-    return getPeriodSelectionReviews(brand, filter.start, filter.end, dateField);
+    return getPeriodSelectionReviews(
+      brand,
+      filter.start,
+      filter.end,
+      dateField,
+      pageSize,
+      cursor
+    );
   }
 
   if (filter.kind === "month") {
-    return getMonthSelectionReviews(brand, filter.month, dateField);
+    return getMonthSelectionReviews(brand, filter.month, dateField, pageSize, cursor);
   }
 
-  return getRatingSelectionReviews(brand, startDate, endDate, filter.star, dateField);
+  return getRatingSelectionReviews(
+    brand,
+    startDate,
+    endDate,
+    filter.star,
+    dateField,
+    pageSize,
+    cursor
+  );
 }
 
 function readDateFieldValue(data: DocumentData, dateField: DateField): string {
@@ -995,57 +1030,51 @@ function buildDateRangeConstraints(
   return constraints;
 }
 
-async function getThemeSelectionReviews(
-  brand: string,
-  startDate: Date,
-  endDate: Date,
-  filter: Extract<OverviewSelectionFilter, { kind: "theme" }>,
-  dateField: DateField
-): Promise<ThemeReview[]> {
-  const db = getClientDb();
-  const ref = collection(db, "reviews");
-  const constraints = [
-    ...buildDateRangeConstraints(brand, startDate.toISOString(), endDate.toISOString(), "<=", dateField),
-    where(`themes.${filter.sentiment}`, "array-contains", filter.theme),
-    limit(PANEL_REVIEW_LIMIT),
-  ];
-
-  try {
-    const snap = await getDocs(query(ref, ...constraints));
-    return snap.docs.map((docSnap) =>
-      mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
-    );
-  } catch (error) {
-    console.warn("Falling back to paged theme filtering for overview selection", error);
-    return getFilteredPagedReviews(brand, startDate, endDate, filter, dateField);
-  }
-}
-
 async function getMonthSelectionReviews(
   brand: string,
   month: string,
-  dateField: DateField
-): Promise<ThemeReview[]> {
+  dateField: DateField,
+  pageSize: number,
+  cursor: ReviewPageCursor
+): Promise<ReviewPage> {
   const bounds = getMonthBounds(month);
-  return getPeriodSelectionReviews(brand, bounds.start, bounds.end, dateField);
+  return getPeriodSelectionReviews(
+    brand,
+    bounds.start,
+    bounds.end,
+    dateField,
+    pageSize,
+    cursor
+  );
 }
 
 async function getPeriodSelectionReviews(
   brand: string,
   periodStart: string,
   periodEnd: string,
-  dateField: DateField
-): Promise<ThemeReview[]> {
+  dateField: DateField,
+  pageSize: number,
+  cursor: ReviewPageCursor
+): Promise<ReviewPage> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
-  const constraints = [
+  const constraints: QueryConstraint[] = [
     ...buildDateRangeConstraints(brand, periodStart, periodEnd, "<", dateField),
-    limit(PANEL_REVIEW_LIMIT),
   ];
+  if (cursor) constraints.push(startAfter(cursor));
+  constraints.push(limit(pageSize + 1));
+
   const snap = await getDocs(query(ref, ...constraints));
-  return snap.docs.map((docSnap) =>
+  const hasMore = snap.docs.length > pageSize;
+  const pageDocs = snap.docs.slice(0, pageSize);
+  const reviews = pageDocs.map((docSnap) =>
     mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
   );
+  return {
+    reviews,
+    cursor: pageDocs[pageDocs.length - 1] ?? cursor,
+    hasMore,
+  };
 }
 
 async function getRatingSelectionReviews(
@@ -1053,14 +1082,18 @@ async function getRatingSelectionReviews(
   startDate: Date,
   endDate: Date,
   star: number,
-  dateField: DateField
-): Promise<ThemeReview[]> {
+  dateField: DateField,
+  pageSize: number,
+  cursor: ReviewPageCursor
+): Promise<ReviewPage> {
   return getFilteredPagedReviews(
     brand,
     startDate,
     endDate,
     { kind: "rating", star },
-    dateField
+    dateField,
+    pageSize,
+    cursor
   );
 }
 
@@ -1069,8 +1102,10 @@ async function getFilteredPagedReviews(
   startDate: Date,
   endDate: Date,
   filter: OverviewSelectionFilter,
-  dateField: DateField
-): Promise<ThemeReview[]> {
+  dateField: DateField,
+  pageSize: number,
+  cursor: ReviewPageCursor
+): Promise<ReviewPage> {
   const db = getClientDb();
   const ref = collection(db, "reviews");
   const constraints = buildDateRangeConstraints(
@@ -1080,36 +1115,41 @@ async function getFilteredPagedReviews(
     "<=",
     dateField
   );
+  // Fetch one extra match so hasMore reflects whether a real next page exists.
+  const targetSize = pageSize + 1;
   const reviews: ThemeReview[] = [];
-  let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null;
+  const matchDocs: QueryDocumentSnapshot<DocumentData>[] = [];
+  let scanCursor: QueryDocumentSnapshot<DocumentData> | null = cursor;
 
-  while (reviews.length < PANEL_REVIEW_LIMIT) {
-    const pageConstraints = [...constraints, limit(PANEL_REVIEW_BATCH_SIZE)];
-    if (lastDoc) {
-      pageConstraints.push(startAfter(lastDoc));
+  outer: while (reviews.length < targetSize) {
+    const pageConstraints: QueryConstraint[] = [...constraints, limit(PANEL_REVIEW_BATCH_SIZE)];
+    if (scanCursor) {
+      pageConstraints.push(startAfter(scanCursor));
     }
 
     const snap = await getDocs(query(ref, ...pageConstraints));
-    if (snap.empty) {
-      break;
-    }
+    if (snap.empty) break;
 
     for (const docSnap of snap.docs) {
+      scanCursor = docSnap;
       const data = docSnap.data();
       if (matchesOverviewSelection(data, filter, dateField)) {
         reviews.push(mapReviewDoc({ id: docSnap.id, data }, dateField));
-        if (reviews.length >= PANEL_REVIEW_LIMIT) {
-          break;
-        }
+        matchDocs.push(docSnap);
+        if (reviews.length >= targetSize) break outer;
       }
     }
 
-    if (snap.docs.length < PANEL_REVIEW_BATCH_SIZE) {
-      break;
-    }
-
-    lastDoc = snap.docs[snap.docs.length - 1];
+    if (snap.docs.length < PANEL_REVIEW_BATCH_SIZE) break;
   }
 
-  return reviews;
+  const hasMore = reviews.length > pageSize;
+  const pageReviews = reviews.slice(0, pageSize);
+  const pageMatchDocs = matchDocs.slice(0, pageSize);
+
+  return {
+    reviews: pageReviews,
+    cursor: pageMatchDocs[pageMatchDocs.length - 1] ?? scanCursor,
+    hasMore,
+  };
 }

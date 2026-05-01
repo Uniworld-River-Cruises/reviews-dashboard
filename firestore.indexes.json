@@ -138,6 +138,22 @@
       "collectionGroup": "reviews",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "tags.ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
         { "fieldPath": "tags.ship", "order": "ASCENDING" },
         { "fieldPath": "dates.created", "order": "DESCENDING" }
@@ -238,6 +254,38 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "themes.negative", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "themes.positive", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "themes.positive", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "themes.negative", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "themes.negative", "arrayConfig": "CONTAINS" },
         { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
       ]

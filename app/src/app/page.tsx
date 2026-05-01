@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useBrand } from "@/contexts/BrandContext";
 import KpiCard from "@/components/dashboard/KpiCard";
@@ -19,6 +19,7 @@ import {
   type OverviewSelectionFilter,
   type FleetSummary,
   type EntitySummary,
+  type ReviewPageCursor,
   type ThemeReview,
   type TrendPoint,
   type TrendGranularity,
@@ -42,6 +43,10 @@ export default function OverviewPage() {
   const [panelAccent, setPanelAccent] = useState<"positive" | "negative" | "neutral">("neutral");
   const [panelReviews, setPanelReviews] = useState<ThemeReview[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
+  const [panelLoadingMore, setPanelLoadingMore] = useState(false);
+  const [panelHasMore, setPanelHasMore] = useState(false);
+  const panelCursorRef = useRef<ReviewPageCursor>(null);
+  const panelFilterRef = useRef<OverviewSelectionFilter | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,18 +105,22 @@ export default function OverviewPage() {
       setPanelOpen(true);
       setPanelReviews([]);
       setPanelLoading(true);
+      setPanelHasMore(false);
+      panelCursorRef.current = null;
+      panelFilterRef.current = selection.filter;
       try {
-        const reviews = await getReviewsForOverviewSelection(
+        const page = await getReviewsForOverviewSelection(
           brand,
           dateRange.start,
           dateRange.end,
           selection.filter,
           dateField
         );
-        setPanelReviews(reviews);
+        setPanelReviews(page.reviews);
+        panelCursorRef.current = page.cursor;
+        setPanelHasMore(page.hasMore);
       } catch (err) {
         console.error("Failed to load overview panel reviews", err);
-        setPanelReviews([]);
       } finally {
         setPanelLoading(false);
       }
@@ -119,10 +128,42 @@ export default function OverviewPage() {
     [brand, dateRange.end, dateRange.start, dateField]
   );
 
+  const loadMorePanel = useCallback(async () => {
+    if (panelLoadingMore || !panelFilterRef.current) return;
+    setPanelLoadingMore(true);
+    try {
+      const page = await getReviewsForOverviewSelection(
+        brand,
+        dateRange.start,
+        dateRange.end,
+        panelFilterRef.current,
+        dateField,
+        undefined,
+        panelCursorRef.current
+      );
+      setPanelReviews((prev) => [...prev, ...page.reviews]);
+      panelCursorRef.current = page.cursor;
+      setPanelHasMore(page.hasMore);
+    } catch (err) {
+      console.error("Failed to load more overview panel reviews", err);
+    } finally {
+      setPanelLoadingMore(false);
+    }
+  }, [brand, dateRange.end, dateRange.start, dateField, panelLoadingMore]);
+
   const closePanel = useCallback(() => {
     setPanelOpen(false);
     setPanelReviews([]);
+    panelCursorRef.current = null;
+    panelFilterRef.current = null;
+    setPanelHasMore(false);
   }, []);
+
+  // Panel cursor and selection are tied to the current filters; close on
+  // filter change so Show more never resumes against a stale selection.
+  useEffect(() => {
+    closePanel();
+  }, [brand, dateField, dateRange, closePanel]);
 
   if (loading) {
     return (
@@ -277,6 +318,9 @@ export default function OverviewPage() {
           reviews={panelReviews}
           loading={panelLoading}
           onClose={closePanel}
+          onLoadMore={loadMorePanel}
+          hasMore={panelHasMore}
+          loadingMore={panelLoadingMore}
         />
       )}
     </div>
