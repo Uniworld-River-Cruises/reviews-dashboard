@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { formatReviewDate } from "@/lib/format/date";
 
 export interface Quote {
   id: string;
@@ -58,6 +59,7 @@ function QuoteCard({
       </div>
       <p className="mb-2 text-xs text-text-secondary">
         {quote.itinerary} · {quote.ship}
+        {quote.date && ` · ${formatReviewDate(quote.date)}`}
       </p>
       <p
         ref={textRef}

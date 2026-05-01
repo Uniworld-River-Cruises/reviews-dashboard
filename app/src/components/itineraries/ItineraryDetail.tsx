@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useBrand } from "@/contexts/BrandContext";
@@ -10,13 +10,18 @@ import ThemeChart from "@/components/dashboard/ThemeChart";
 import ReviewPanel from "@/components/dashboard/ReviewPanel";
 import QuotesSection from "@/components/dashboard/QuotesSection";
 import type { Quote } from "@/components/dashboard/QuotesSection";
-import { getReviewsByTheme } from "@/lib/firestore/queries";
-import type { ThemeReview } from "@/lib/firestore/queries";
+import type { ReviewPageCursor, ThemeReview } from "@/lib/firestore/queries";
 import {
   getItineraryBySlug,
   getItineraryQuotes,
+  getItineraryReviewsByStar,
+  getItineraryReviewsByTheme,
   type ItinerarySummary,
 } from "@/lib/firestore/itinerary-queries";
+
+type PanelState =
+  | { kind: "theme"; theme: string; type: "positive" | "negative" }
+  | { kind: "rating"; star: number };
 
 export default function ItineraryDetail({ slug }: { slug: string }) {
   const { merchantQueryId: brand } = useBrand();
@@ -28,11 +33,13 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelTheme, setPanelTheme] = useState("");
-  const [panelType, setPanelType] = useState<"positive" | "negative">("positive");
+
+  const [panelState, setPanelState] = useState<PanelState | null>(null);
   const [panelReviews, setPanelReviews] = useState<ThemeReview[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
+  const [panelLoadingMore, setPanelLoadingMore] = useState(false);
+  const [panelHasMore, setPanelHasMore] = useState(false);
+  const panelCursorRef = useRef<ReviewPageCursor>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,25 +69,77 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
     return () => { cancelled = true; };
   }, [slug, brand, dateRange, dateField, dataVersion]);
 
-  const openPanel = useCallback(async (theme: string, type: "positive" | "negative") => {
-    setPanelTheme(theme);
-    setPanelType(type);
-    setPanelOpen(true);
-    setPanelLoading(true);
-    try {
-      const reviews = await getReviewsByTheme(brand, theme, type, dateField, dateRange.start, dateRange.end);
-      setPanelReviews(reviews);
-    } catch (err) {
-      console.error("Failed to load theme reviews", err);
+  const fetchPanelPage = useCallback(
+    async (state: PanelState, cursor: ReviewPageCursor) => {
+      if (!itinerary) {
+        return { reviews: [], cursor: null, hasMore: false };
+      }
+      if (state.kind === "theme") {
+        return getItineraryReviewsByTheme(
+          brand,
+          itinerary.childItineraries,
+          state.theme,
+          state.type,
+          dateField,
+          dateRange,
+          undefined,
+          cursor
+        );
+      }
+      return getItineraryReviewsByStar(
+        brand,
+        itinerary.childItineraries,
+        state.star,
+        dateField,
+        dateRange,
+        undefined,
+        cursor
+      );
+    },
+    [itinerary, brand, dateField, dateRange]
+  );
+
+  const openPanel = useCallback(
+    async (state: PanelState) => {
+      setPanelState(state);
       setPanelReviews([]);
+      setPanelLoading(true);
+      setPanelHasMore(false);
+      panelCursorRef.current = null;
+      try {
+        const page = await fetchPanelPage(state, null);
+        setPanelReviews(page.reviews);
+        panelCursorRef.current = page.cursor;
+        setPanelHasMore(page.hasMore);
+      } catch (err) {
+        console.error("Failed to load panel reviews", err);
+      } finally {
+        setPanelLoading(false);
+      }
+    },
+    [fetchPanelPage]
+  );
+
+  const loadMorePanel = useCallback(async () => {
+    if (!panelState || panelLoadingMore) return;
+    setPanelLoadingMore(true);
+    try {
+      const page = await fetchPanelPage(panelState, panelCursorRef.current);
+      setPanelReviews((prev) => [...prev, ...page.reviews]);
+      panelCursorRef.current = page.cursor;
+      setPanelHasMore(page.hasMore);
+    } catch (err) {
+      console.error("Failed to load more panel reviews", err);
     } finally {
-      setPanelLoading(false);
+      setPanelLoadingMore(false);
     }
-  }, [brand, dateRange, dateField]);
+  }, [panelState, panelLoadingMore, fetchPanelPage]);
 
   const closePanel = useCallback(() => {
-    setPanelOpen(false);
+    setPanelState(null);
     setPanelReviews([]);
+    panelCursorRef.current = null;
+    setPanelHasMore(false);
   }, []);
 
   if (loading) {
@@ -111,6 +170,21 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
   const ratingDelta = itinerary.averageRating - itinerary.fleetAvgRating;
   const fiveStarDelta = itinerary.fiveStarPercent - itinerary.fleetAvgFiveStar;
 
+  const panelTitle =
+    panelState?.kind === "theme"
+      ? panelState.theme
+      : panelState
+        ? `${panelState.star}-Star Reviews`
+        : "";
+  const panelSubtitle =
+    panelState?.kind === "theme"
+      ? `Reviews for ${itinerary.name} matching the selected ${panelState.type} theme`
+      : panelState
+        ? `${panelState.star}-star reviews for ${itinerary.name}`
+        : "";
+  const panelAccent: "positive" | "negative" | "neutral" =
+    panelState?.kind === "theme" ? panelState.type : "neutral";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-text-secondary">
@@ -125,10 +199,13 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
         <KpiCard title="5-Star %" value={`${itinerary.fiveStarPercent.toFixed(1)}%`} trendUp={fiveStarDelta >= 0} delta={`${fiveStarDelta >= 0 ? "+" : ""}${fiveStarDelta.toFixed(1)}% vs fleet avg`} />
         <KpiCard title="4+ Star %" value={`${itinerary.fourPlusPercent.toFixed(1)}%`} />
       </div>
-      <RatingDistributionChart data={itinerary.ratingDistribution} />
+      <RatingDistributionChart
+        data={itinerary.ratingDistribution}
+        onBarClick={(star) => openPanel({ kind: "rating", star })}
+      />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ThemeChart title="Positive Themes" data={itinerary.positiveThemes} type="positive" onBarClick={(theme) => openPanel(theme, "positive")} />
-        <ThemeChart title="Negative Themes" data={itinerary.negativeThemes} type="negative" onBarClick={(theme) => openPanel(theme, "negative")} />
+        <ThemeChart title="Positive Themes" data={itinerary.positiveThemes} type="positive" onBarClick={(theme) => openPanel({ kind: "theme", theme, type: "positive" })} />
+        <ThemeChart title="Negative Themes" data={itinerary.negativeThemes} type="negative" onBarClick={(theme) => openPanel({ kind: "theme", theme, type: "negative" })} />
       </div>
       <div className="bg-surface rounded-lg shadow-sm p-6">
         <h3 className="text-lg font-semibold text-text-primary mb-4">Ships Operating This Itinerary</h3>
@@ -142,14 +219,17 @@ export default function ItineraryDetail({ slug }: { slug: string }) {
         </div>
       </div>
       <QuotesSection positiveQuotes={quotes.positive} negativeQuotes={quotes.negative} />
-      {panelOpen && (
+      {panelState && (
         <ReviewPanel
-          title={panelTheme}
-          subtitle={`Reviews matching the selected ${panelType} theme`}
-          accent={panelType}
+          title={panelTitle}
+          subtitle={panelSubtitle}
+          accent={panelAccent}
           reviews={panelReviews}
           loading={panelLoading}
           onClose={closePanel}
+          onLoadMore={loadMorePanel}
+          hasMore={panelHasMore}
+          loadingMore={panelLoadingMore}
         />
       )}
     </div>
