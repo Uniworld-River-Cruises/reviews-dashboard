@@ -646,16 +646,20 @@ export async function getReviewsByTheme(
   constraints.push(where(`themes.${type}`, "array-contains", theme));
   constraints.push(orderBy(path, "desc"));
   if (cursor) constraints.push(startAfter(cursor));
-  constraints.push(limit(pageSize));
+  // Fetch one extra row to know if a next page exists without lying when
+  // the result count exactly equals pageSize.
+  constraints.push(limit(pageSize + 1));
 
   const snap = await getDocs(query(ref, ...constraints));
-  const reviews = snap.docs.map((docSnap) =>
+  const hasMore = snap.docs.length > pageSize;
+  const pageDocs = snap.docs.slice(0, pageSize);
+  const reviews = pageDocs.map((docSnap) =>
     mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
   );
   return {
     reviews,
-    cursor: snap.docs[snap.docs.length - 1] ?? cursor,
-    hasMore: snap.docs.length === pageSize,
+    cursor: pageDocs[pageDocs.length - 1] ?? cursor,
+    hasMore,
   };
 }
 
@@ -1058,16 +1062,18 @@ async function getPeriodSelectionReviews(
     ...buildDateRangeConstraints(brand, periodStart, periodEnd, "<", dateField),
   ];
   if (cursor) constraints.push(startAfter(cursor));
-  constraints.push(limit(pageSize));
+  constraints.push(limit(pageSize + 1));
 
   const snap = await getDocs(query(ref, ...constraints));
-  const reviews = snap.docs.map((docSnap) =>
+  const hasMore = snap.docs.length > pageSize;
+  const pageDocs = snap.docs.slice(0, pageSize);
+  const reviews = pageDocs.map((docSnap) =>
     mapReviewDoc({ id: docSnap.id, data: docSnap.data() }, dateField)
   );
   return {
     reviews,
-    cursor: snap.docs[snap.docs.length - 1] ?? cursor,
-    hasMore: snap.docs.length === pageSize,
+    cursor: pageDocs[pageDocs.length - 1] ?? cursor,
+    hasMore,
   };
 }
 
@@ -1109,42 +1115,41 @@ async function getFilteredPagedReviews(
     "<=",
     dateField
   );
+  // Fetch one extra match so hasMore reflects whether a real next page exists.
+  const targetSize = pageSize + 1;
   const reviews: ThemeReview[] = [];
-  let lastDoc: QueryDocumentSnapshot<DocumentData> | null = cursor;
-  let scanExhausted = false;
+  const matchDocs: QueryDocumentSnapshot<DocumentData>[] = [];
+  let scanCursor: QueryDocumentSnapshot<DocumentData> | null = cursor;
 
-  while (reviews.length < pageSize) {
+  outer: while (reviews.length < targetSize) {
     const pageConstraints: QueryConstraint[] = [...constraints, limit(PANEL_REVIEW_BATCH_SIZE)];
-    if (lastDoc) {
-      pageConstraints.push(startAfter(lastDoc));
+    if (scanCursor) {
+      pageConstraints.push(startAfter(scanCursor));
     }
 
     const snap = await getDocs(query(ref, ...pageConstraints));
-    if (snap.empty) {
-      scanExhausted = true;
-      break;
-    }
+    if (snap.empty) break;
 
     for (const docSnap of snap.docs) {
+      scanCursor = docSnap;
       const data = docSnap.data();
       if (matchesOverviewSelection(data, filter, dateField)) {
         reviews.push(mapReviewDoc({ id: docSnap.id, data }, dateField));
-        lastDoc = docSnap;
-        if (reviews.length >= pageSize) break;
-      } else {
-        lastDoc = docSnap;
+        matchDocs.push(docSnap);
+        if (reviews.length >= targetSize) break outer;
       }
     }
 
-    if (snap.docs.length < PANEL_REVIEW_BATCH_SIZE) {
-      scanExhausted = true;
-      break;
-    }
+    if (snap.docs.length < PANEL_REVIEW_BATCH_SIZE) break;
   }
 
+  const hasMore = reviews.length > pageSize;
+  const pageReviews = reviews.slice(0, pageSize);
+  const pageMatchDocs = matchDocs.slice(0, pageSize);
+
   return {
-    reviews,
-    cursor: lastDoc,
-    hasMore: !scanExhausted,
+    reviews: pageReviews,
+    cursor: pageMatchDocs[pageMatchDocs.length - 1] ?? scanCursor,
+    hasMore,
   };
 }

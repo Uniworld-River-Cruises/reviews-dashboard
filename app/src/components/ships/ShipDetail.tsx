@@ -136,6 +136,12 @@ export default function ShipDetail({ slug }: { slug: string }) {
     setPanelHasMore(false);
   }, []);
 
+  // Panel cursor is tied to the current filters; close on filter change so
+  // Show more never resumes against a stale selection.
+  useEffect(() => {
+    closePanel();
+  }, [brand, dateField, dateRange, closePanel]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">

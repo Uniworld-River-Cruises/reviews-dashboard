@@ -159,6 +159,12 @@ export default function OverviewPage() {
     setPanelHasMore(false);
   }, []);
 
+  // Panel cursor and selection are tied to the current filters; close on
+  // filter change so Show more never resumes against a stale selection.
+  useEffect(() => {
+    closePanel();
+  }, [brand, dateField, dateRange, closePanel]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">

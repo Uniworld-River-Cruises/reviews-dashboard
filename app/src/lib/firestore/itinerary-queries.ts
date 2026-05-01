@@ -393,42 +393,42 @@ async function getItineraryReviewsFiltered(
   if (dateRange?.end) constraints.push(where(path, "<=", dateRange.end.toISOString()));
   constraints.push(orderBy(path, "desc"));
 
+  const targetSize = pageSize + 1;
   const reviews: ThemeReview[] = [];
-  let lastDoc: QueryDocumentSnapshot<DocumentData> | null = cursor;
-  let scanExhausted = false;
+  const matchDocs: QueryDocumentSnapshot<DocumentData>[] = [];
+  let scanCursor: QueryDocumentSnapshot<DocumentData> | null = cursor;
 
-  while (reviews.length < pageSize) {
+  outer: while (reviews.length < targetSize) {
     const pageConstraints: QueryConstraint[] = [
       ...constraints,
       limit(ITINERARY_REVIEW_BATCH_SIZE),
     ];
-    if (lastDoc) pageConstraints.push(startAfter(lastDoc));
+    if (scanCursor) pageConstraints.push(startAfter(scanCursor));
 
     const snap = await getDocs(query(ref, ...pageConstraints));
-    if (snap.empty) {
-      scanExhausted = true;
-      break;
-    }
+    if (snap.empty) break;
 
     for (const docSnap of snap.docs) {
+      scanCursor = docSnap;
       const data = docSnap.data();
-      lastDoc = docSnap;
       if (matcher(data)) {
         reviews.push(mapItineraryReviewDoc(docSnap.id, data, dateField));
-        if (reviews.length >= pageSize) break;
+        matchDocs.push(docSnap);
+        if (reviews.length >= targetSize) break outer;
       }
     }
 
-    if (snap.docs.length < ITINERARY_REVIEW_BATCH_SIZE) {
-      scanExhausted = true;
-      break;
-    }
+    if (snap.docs.length < ITINERARY_REVIEW_BATCH_SIZE) break;
   }
 
+  const hasMore = reviews.length > pageSize;
+  const pageReviews = reviews.slice(0, pageSize);
+  const pageMatchDocs = matchDocs.slice(0, pageSize);
+
   return {
-    reviews,
-    cursor: lastDoc,
-    hasMore: !scanExhausted,
+    reviews: pageReviews,
+    cursor: pageMatchDocs[pageMatchDocs.length - 1] ?? scanCursor,
+    hasMore,
   };
 }
 
