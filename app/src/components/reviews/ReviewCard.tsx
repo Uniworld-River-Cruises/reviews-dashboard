@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import MediaThumbnails from "./MediaThumbnails";
+import type { ReviewType } from "./FilterSidebar";
 
 function slugify(text: string): string {
   return text
@@ -15,7 +16,14 @@ function slugify(text: string): string {
 export interface ReviewData {
   id: string;
   customerName: string;
-  rating: number;
+  /** Star rating attached to the service review (the merchant's customer
+   * service / booking experience). `null` when the customer left no service
+   * rating. */
+  serviceRating: number | null;
+  /** Star rating attached to the product review (the actual product — for
+   * Uniworld, the cruise itinerary). `null` when the customer left no
+   * product rating. */
+  productRating: number | null;
   ship: string;
   itinerary: string;
   brand: string;
@@ -36,50 +44,95 @@ function StarRating({ rating }: { rating: number }) {
   return (
     <span className="text-brand-accent" aria-label={`${rating} out of 5 stars`}>
       {Array.from({ length: 5 }, (_, i) => (
-        <span key={i}>{i < rating ? "\u2605" : "\u2606"}</span>
+        <span key={i}>{i < rating ? "★" : "☆"}</span>
       ))}
     </span>
+  );
+}
+
+/** A single labelled review section — "Service" or "Product" — with its own
+ * star rating header above the review text. */
+function ReviewSection({
+  kind,
+  rating,
+  text,
+  expanded,
+  onMeasureClamp,
+}: {
+  kind: "service" | "product";
+  rating: number | null;
+  text: string;
+  expanded: boolean;
+  onMeasureClamp: (clamped: boolean) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el) {
+      onMeasureClamp(el.scrollHeight > el.clientHeight + 1);
+    }
+  }, [text, onMeasureClamp]);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+          {kind === "service" ? "Service review" : "Product review"}
+        </span>
+        {rating != null && rating > 0 && <StarRating rating={rating} />}
+      </div>
+      <div
+        ref={ref}
+        className={`text-sm text-text-primary leading-relaxed ${
+          expanded ? "" : "line-clamp-4"
+        }`}
+      >
+        {text}
+      </div>
+    </div>
   );
 }
 
 interface ReviewCardProps {
   review: ReviewData;
   onThemeClick?: (theme: string, type: "positive" | "negative") => void;
+  /** When set, hides the off-type section so the card reflects the active
+   * "All / Service / Product" filter. Undefined or "all" shows both sections
+   * if their text is present. */
+  reviewTypeFilter?: ReviewType;
 }
 
-export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
+export default function ReviewCard({ review, onThemeClick, reviewTypeFilter }: ReviewCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [clamped, setClamped] = useState(false);
-  const textRef = useRef<HTMLDivElement>(null);
+  const [serviceClamped, setServiceClamped] = useState(false);
+  const [productClamped, setProductClamped] = useState(false);
 
-  const fullText = [review.serviceReview, review.productReview]
-    .filter(Boolean)
-    .join(" ");
+  // Decide which sections render. A section needs both non-empty text AND no
+  // off-type filter excluding it.
+  const showService =
+    Boolean(review.serviceReview) &&
+    (reviewTypeFilter !== "product");
+  const showProduct =
+    Boolean(review.productReview) &&
+    (reviewTypeFilter !== "service");
 
-  useEffect(() => {
-    const el = textRef.current;
-    if (el) {
-      setClamped(el.scrollHeight > el.clientHeight + 1);
-    }
-  }, [fullText]);
+  const clamped = (showService && serviceClamped) || (showProduct && productClamped);
 
   return (
     <div className="rounded-lg border border-border bg-surface p-5 shadow-sm">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <div>
-          <span className="font-medium text-text-primary">
-            {review.customerName || "Trusted Customer"}
-          </span>
-          <span className="ml-2 text-xs text-text-tertiary">
-            {new Date(review.date).toLocaleDateString("en-GB", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-        <StarRating rating={review.rating} />
+      <div className="mb-2">
+        <span className="font-medium text-text-primary">
+          {review.customerName || "Trusted Customer"}
+        </span>
+        <span className="ml-2 text-xs text-text-tertiary">
+          {new Date(review.date).toLocaleDateString("en-GB", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
       </div>
 
       {/* Service title — Feefo lets reviewers add a short headline */}
@@ -118,14 +171,28 @@ export default function ReviewCard({ review, onThemeClick }: ReviewCardProps) {
         )}
       </div>
 
-      {/* Review text */}
-      <div
-        ref={textRef}
-        className={`text-sm text-text-primary leading-relaxed ${
-          expanded ? "" : "line-clamp-4"
-        }`}
-      >
-        {fullText}
+      {/* Review sections — Service and/or Product, each labelled with its own
+       * star rating. Mirrors how Feefo's public review pages tag each card by
+       * type. When only one is present, only one renders. */}
+      <div className="space-y-3">
+        {showService && (
+          <ReviewSection
+            kind="service"
+            rating={review.serviceRating}
+            text={review.serviceReview}
+            expanded={expanded}
+            onMeasureClamp={setServiceClamped}
+          />
+        )}
+        {showProduct && (
+          <ReviewSection
+            kind="product"
+            rating={review.productRating}
+            text={review.productReview}
+            expanded={expanded}
+            onMeasureClamp={setProductClamped}
+          />
+        )}
       </div>
       {clamped && (
         <button

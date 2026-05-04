@@ -53,7 +53,8 @@ function mapReviewDoc(
   return {
     id: doc.id,
     customerName: d.customer?.displayName || "Trusted Customer",
-    rating: d.ratings?.product ?? d.ratings?.service ?? 0,
+    serviceRating: typeof d.ratings?.service === "number" ? d.ratings.service : null,
+    productRating: typeof d.ratings?.product === "number" ? d.ratings.product : null,
     ship: d.tags?.ship || "",
     itinerary: rawItinerary,
     parentItinerary: parentLookup?.get(rawItinerary) ?? rawItinerary,
@@ -108,6 +109,10 @@ function filtersToParams(filters: Filters, search: string, sort: SortOption): st
   for (const [key, values] of Object.entries(filters)) {
     if (key === "hasMedia") {
       if (values) params.set("hasMedia", "true");
+    } else if (key === "reviewType") {
+      // Default-omitted: only write the param when not "all" so URLs stay
+      // clean for the common case.
+      if (values !== "all") params.set("reviewType", values as string);
     } else if ((values as Array<string | number>).length > 0) {
       params.set(key, (values as Array<string | number>).join(","));
     }
@@ -129,6 +134,12 @@ function paramsToFilters(searchParams: URLSearchParams): {
     return val ? val.split(",") : [];
   };
 
+  const reviewTypeParam = searchParams.get("reviewType");
+  const reviewType: Filters["reviewType"] =
+    reviewTypeParam === "service" || reviewTypeParam === "product"
+      ? reviewTypeParam
+      : "all";
+
   const filters: Filters = {
     brand: parseArray("brand"),
     rating: parseArray("rating").map(Number).filter((n) => !isNaN(n)),
@@ -140,6 +151,7 @@ function paramsToFilters(searchParams: URLSearchParams): {
     region: parseArray("region"),
     loyalty: parseArray("loyalty"),
     hasMedia: searchParams.get("hasMedia") === "true",
+    reviewType,
   };
 
   return { filters, search, sort };
@@ -219,8 +231,12 @@ function applyClientFilters(reviews: ReviewData[], filters: Filters, search: str
     // Brand filter (only if not applied server-side via brand selector)
     if (filters.brand.length && !filters.brand.includes(r.brand)) return false;
 
-    // Rating filter
-    if (filters.rating.length && !filters.rating.includes(r.rating)) return false;
+    // Rating filter — match against the primary display rating, which falls
+    // back from product to service the same way Feefo's "headline" star does.
+    if (filters.rating.length) {
+      const primary = r.productRating ?? r.serviceRating ?? 0;
+      if (!filters.rating.includes(primary)) return false;
+    }
 
     // Theme filters (array-contains can only be used once per Firestore query)
     if (
@@ -243,6 +259,10 @@ function applyClientFilters(reviews: ReviewData[], filters: Filters, search: str
 
     // Media filter
     if (filters.hasMedia && r.media.length === 0) return false;
+
+    // Review type — exclude reviews that don't have text of the active type.
+    if (filters.reviewType === "service" && !r.serviceReview) return false;
+    if (filters.reviewType === "product" && !r.productReview) return false;
 
     return true;
   });
@@ -585,6 +605,7 @@ function ReviewsContent() {
                     key={review.id}
                     review={review}
                     onThemeClick={handleThemeClick}
+                    reviewTypeFilter={filters.reviewType}
                   />
                 ))}
               </div>
