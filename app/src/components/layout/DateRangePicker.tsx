@@ -8,16 +8,21 @@ import {
   type DatePreset,
 } from "@/contexts/DashboardContext";
 
+// Order mirrors Feefo's date filter (Today first, calendar-aligned options
+// grouped together, All Time last). Keep this list in sync with the
+// `DatePreset` union in DashboardContext.
 const presets: DatePreset[] = [
-  "This Week",
-  "This Month",
-  "Last Quarter",
-  "Last 6 Months",
-  "YTD",
+  "Today",
+  "Yesterday",
+  "Last 7 Days",
+  "Last 30 Days",
   "Last 12 Months",
-  "Last 2 Years",
-  "Last 5 Years",
-  "Last 10 Years",
+  "Current Calendar Week",
+  "Current Calendar Month",
+  "Current Calendar Year",
+  "Last Calendar Week",
+  "Last Calendar Month",
+  "Last Calendar Year",
   "All Time",
   "Custom Range",
 ];
