@@ -2,6 +2,12 @@
 
 import React, { useState } from "react";
 
+/** Mirrors Feefo's All / Service reviews / Product reviews tabs on their
+ * public review pages. "Service" = customer-service / booking-experience
+ * reviews; "Product" = reviews of the actual product (the cruise itinerary
+ * for Uniworld). */
+export type ReviewType = "all" | "service" | "product";
+
 export interface Filters {
   brand: string[];
   rating: number[];
@@ -13,6 +19,7 @@ export interface Filters {
   region: string[];
   loyalty: string[];
   hasMedia: boolean;
+  reviewType: ReviewType;
 }
 
 export const emptyFilters: Filters = {
@@ -26,6 +33,7 @@ export const emptyFilters: Filters = {
   region: [],
   loyalty: [],
   hasMedia: false,
+  reviewType: "all",
 };
 
 interface FilterSidebarProps {
@@ -115,12 +123,13 @@ function formatBrandName(slug: string): string {
 }
 
 export default function FilterSidebar({ filters, onChange, options }: FilterSidebarProps) {
-  const activeFilterCount = Object.entries(filters).reduce(
-    (sum, [key, val]) => sum + (key === "hasMedia" ? (val ? 1 : 0) : (val as unknown[]).length),
-    0
-  );
+  const activeFilterCount = Object.entries(filters).reduce((sum, [key, val]) => {
+    if (key === "hasMedia") return sum + (val ? 1 : 0);
+    if (key === "reviewType") return sum + (val !== "all" ? 1 : 0);
+    return sum + (val as unknown[]).length;
+  }, 0);
 
-  type ArrayFilterKey = Exclude<keyof Filters, "hasMedia">;
+  type ArrayFilterKey = Exclude<keyof Filters, "hasMedia" | "reviewType">;
 
   function toggleArrayFilter<K extends ArrayFilterKey>(
     key: K,
@@ -136,6 +145,8 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
   function removeChip(key: keyof Filters, value: string | number | boolean) {
     if (key === "hasMedia") {
       onChange({ ...filters, hasMedia: false });
+    } else if (key === "reviewType") {
+      onChange({ ...filters, reviewType: "all" });
     } else {
       const current = filters[key] as Array<string | number>;
       onChange({ ...filters, [key]: current.filter((v) => v !== value) });
@@ -157,6 +168,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
   for (const [key, values] of Object.entries(filters)) {
     if (key === "hasMedia") {
       if (values) chips.push({ key: "hasMedia", value: true, label: "Has media" });
+    } else if (key === "reviewType") {
+      if (values !== "all") {
+        const label = values === "service" ? "Service reviews" : "Product reviews";
+        chips.push({ key: "reviewType", value: values as string, label });
+      }
     } else {
       for (const value of values as Array<string | number>) {
         chips.push({ key: key as keyof Filters, value, label: chipLabel(key as keyof Filters, value) });
@@ -199,6 +215,37 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
           </div>
         </div>
       )}
+
+      {/* Review type — mirrors Feefo's All / Service / Product tabs */}
+      <div className="border-b border-border-light py-3">
+        <div className="mb-2 text-xs font-medium uppercase tracking-wide text-text-secondary">
+          Review type
+        </div>
+        <div
+          role="tablist"
+          aria-label="Review type"
+          className="grid grid-cols-3 gap-1 rounded-full bg-surface-alt p-1"
+        >
+          {(["all", "service", "product"] as ReviewType[]).map((rt) => {
+            const active = filters.reviewType === rt;
+            return (
+              <button
+                key={rt}
+                role="tab"
+                aria-selected={active}
+                onClick={() => onChange({ ...filters, reviewType: rt })}
+                className={
+                  active
+                    ? "rounded-full bg-brand-accent px-3 py-1 text-xs font-semibold text-accent-foreground"
+                    : "rounded-full px-3 py-1 text-xs font-medium text-text-secondary hover:text-text-primary"
+                }
+              >
+                {rt === "all" ? "All" : rt === "service" ? "Service" : "Product"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Media toggle */}
       <div className="border-b border-border-light py-3">

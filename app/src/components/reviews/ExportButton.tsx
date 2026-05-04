@@ -17,7 +17,8 @@ export default function ExportButton({ reviews }: ExportButtonProps) {
   function handleExport() {
     const headers = [
       "Name",
-      "Rating",
+      "Service Rating",
+      "Product Rating",
       "Ship",
       "Itinerary",
       "Title",
@@ -29,7 +30,8 @@ export default function ExportButton({ reviews }: ExportButtonProps) {
 
     const rows = reviews.map((r) => [
       escapeCsv(r.customerName || "Trusted Customer"),
-      String(r.rating),
+      r.serviceRating == null ? "" : String(r.serviceRating),
+      r.productRating == null ? "" : String(r.productRating),
       escapeCsv(r.ship),
       escapeCsv(r.itinerary),
       escapeCsv(r.serviceTitle),
