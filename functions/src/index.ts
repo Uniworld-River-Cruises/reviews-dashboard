@@ -7,6 +7,7 @@ import { timingSafeEqual } from "crypto";
 import { syncAll } from "./sync/sync-reviews";
 import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
+import { backfillMissingThemes } from "./sync/backfill-themes";
 import {
   deleteAdminUser,
   getAdminUserByEmail,
@@ -464,6 +465,38 @@ export const batchClassify = onRequest(
     }
 
     res.status(400).json({ error: "Invalid action. Use 'submit' or 'results'." });
+  }
+);
+
+// One-shot repair: re-seed the default `themes` map on review documents that
+// are missing it. Whenever the sync regresses and writes new reviews without
+// `themes`, the classifier silently skips them (its `themes.classifiedAt ==
+// null` query does not match documents where the field is absent). After
+// fixing the sync, call this endpoint once to recover the affected docs.
+// Paginate by passing `since` (ISO timestamp) and `maxDocs`; the response
+// returns `done`, `repaired`, and `lastScannedId` so you can call again.
+export const backfillThemes = onRequest(
+  { timeoutSeconds: 540, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "batchClassify");
+    if (!caller) return;
+
+    const since = typeof req.body?.since === "string" ? req.body.since : null;
+    const maxDocs =
+      typeof req.body?.maxDocs === "number" && req.body.maxDocs > 0
+        ? Math.min(req.body.maxDocs, 20000)
+        : undefined;
+
+    const result = await backfillMissingThemes({
+      since,
+      maxDocs,
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+    });
+    console.log(`backfillThemes by ${caller.source}:${caller.email ?? caller.uid}`, result);
+    res.json(result);
   }
 );
 

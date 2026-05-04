@@ -129,9 +129,24 @@ export async function syncBrand(
       }
 
       // Write this page to Firestore immediately.
-      // We intentionally strip `themes` and only merge the remaining fields
-      // so that any existing theme/classification data on a review is preserved
-      // and managed by the batch-classify pipeline, not overwritten by sync.
+      //
+      // Themes handling — DO NOT "simplify" by always stripping themes.
+      // The batch classifier finds work via
+      //   .where("themes.classifiedAt", "==", null)
+      // and Firestore's `== null` does NOT match documents where the field
+      // is missing. So:
+      //
+      //   * For brand-new reviews we MUST write the default themes map
+      //     ({ positive: [], negative: [], classifiedAt: null }) so the
+      //     classifier can see them on the next pass.
+      //   * For existing reviews we strip themes from the merge payload
+      //     so the classifier's previous output (positive/negative arrays
+      //     and classifiedAt timestamp) is preserved across re-syncs.
+      //
+      // A previous regression silently dropped the new-review branch and
+      // left ~11 days of reviews permanently unclassified — see the
+      // `backfillThemes` HTTP endpoint and the operation logs around
+      // 2026-05-04 for the recovery procedure.
       const reviewRefs = pageReviews.map((doc) => db.collection("reviews").doc(doc.id));
       const existingSnapshots =
         reviewRefs.length > 0 ? await db.getAll(...reviewRefs) : [];
@@ -147,7 +162,8 @@ export async function syncBrand(
             ? existingData.dates.lastUpdated
             : null;
 
-        if (!existingSnapshot?.exists) {
+        const isNew = !existingSnapshot?.exists;
+        if (isNew) {
           result.newReviews += 1;
         } else if (isIncomingReviewNewer(existingLastUpdated, doc.dates.lastUpdated)) {
           result.updatedReviews += 1;
@@ -156,7 +172,12 @@ export async function syncBrand(
         }
 
         result.writtenReviews += 1;
-        writer.set(db.collection("reviews").doc(doc.id), docWithoutThemes, { merge: true });
+        // See the comment above this loop: include themes only on new
+        // inserts; preserve existing themes by stripping them on update.
+        const payload = isNew
+          ? { ...docWithoutThemes, themes }
+          : docWithoutThemes;
+        writer.set(db.collection("reviews").doc(doc.id), payload, { merge: true });
       }
       await writer.close();
 
