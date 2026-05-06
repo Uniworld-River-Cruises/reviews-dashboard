@@ -10,6 +10,7 @@ import {
   query,
   where,
   getDocs,
+  getCountFromServer,
   orderBy,
   limit,
   startAfter,
@@ -296,7 +297,6 @@ function serverFilterKey(filters: Filters): string {
 // ---------------------------------------------------------------------------
 
 const PAGE_SIZE = 50;
-const DISPLAY_PAGE_SIZE = 10;
 
 function ReviewsContent() {
   const searchParams = useSearchParams();
@@ -308,7 +308,6 @@ function ReviewsContent() {
   const [search, setSearch] = useState(initial.search);
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [sort, setSort] = useState<SortOption>(initial.sort);
-  const [visibleCount, setVisibleCount] = useState(DISPLAY_PAGE_SIZE);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Firestore data
@@ -318,6 +317,14 @@ function ReviewsContent() {
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreFirestore, setHasMoreFirestore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  /**
+   * Total number of reviews matching the active server-side filters
+   * (date range + brand + ship/region/etc + hasMedia). Populated by a
+   * separate `getCountFromServer` aggregate call on the same constraints,
+   * minus the LIMIT/orderBy. Lets us show the user the real match count
+   * up front instead of just "loaded so far". `null` while in flight.
+   */
+  const [totalMatching, setTotalMatching] = useState<number | null>(null);
 
   // Filter options derived from reviews within the date range
   const [filterOptions, setFilterOptions] = useState<FilterOptions>(EMPTY_FILTER_OPTIONS);
@@ -342,15 +349,22 @@ function ReviewsContent() {
     setAllReviews([]);
     setLastDoc(null);
     setHasMoreFirestore(true);
-    setVisibleCount(DISPLAY_PAGE_SIZE);
+    setTotalMatching(null);
 
     const db = getClientDb();
     const ref = collection(db, "reviews");
     const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField);
-    constraints.push(limit(PAGE_SIZE));
-    const q = query(ref, ...constraints);
+    const countQuery = query(ref, ...constraints);
+    const pagedQuery = query(ref, ...constraints, limit(PAGE_SIZE));
 
-    Promise.all([getDocs(q), getParentNameLookup(brand)]).then(([snap, parentLookup]) => {
+    // Aggregate count runs in parallel with the first page fetch — the count
+    // request is cheap and resolves a UX gap (the header was previously
+    // showing the loaded-so-far count instead of the true match total).
+    getCountFromServer(countQuery)
+      .then((snap) => { if (!cancelled) setTotalMatching(snap.data().count); })
+      .catch(() => { /* fall back to loaded-count display */ });
+
+    Promise.all([getDocs(pagedQuery), getParentNameLookup(brand)]).then(([snap, parentLookup]) => {
       if (cancelled) return;
       const reviews = snap.docs.map((d) => mapReviewDoc(d, dateField, parentLookup));
       setAllReviews(reviews);
@@ -409,11 +423,6 @@ function ReviewsContent() {
     window.history.replaceState(null, "", newUrl);
   }, [filters, search, sort]);
 
-  // Reset visible count when filters/search/sort change
-  useEffect(() => {
-    setVisibleCount(DISPLAY_PAGE_SIZE);
-  }, [filters, search, sort]);
-
   const options = filterOptions;
 
   // Client-side filtering (text search, themes, rating, brand sub-filter)
@@ -422,16 +431,16 @@ function ReviewsContent() {
   }, [search, filters, allReviews]);
 
   const sorted = useMemo(() => sortReviews(filtered, sort), [filtered, sort]);
-  const visible = sorted.slice(0, visibleCount);
-  const hasMore = visibleCount < sorted.length || hasMoreFirestore;
+  // Render every loaded-and-client-filtered review at once. Each "Load
+  // more" click pulls the next Firestore page directly, so 287 matches
+  // takes 6 clicks (PAGE_SIZE chunks) instead of 30 with the previous
+  // 10-at-a-time display pagination.
+  const visible = sorted;
+  const hasMore = hasMoreFirestore;
 
   const handleLoadMore = useCallback(() => {
-    if (visibleCount < sorted.length) {
-      setVisibleCount((c) => c + DISPLAY_PAGE_SIZE);
-    } else if (hasMoreFirestore) {
-      loadMoreFromFirestore();
-    }
-  }, [visibleCount, sorted.length, hasMoreFirestore, loadMoreFromFirestore]);
+    if (hasMoreFirestore) loadMoreFromFirestore();
+  }, [hasMoreFirestore, loadMoreFromFirestore]);
 
   const handleThemeClick = useCallback(
     (theme: string, type: "positive" | "negative") => {
@@ -504,7 +513,13 @@ function ReviewsContent() {
         <div className="flex items-center gap-3">
           <ExportButton reviews={sorted} />
           <span className="text-sm text-text-secondary whitespace-nowrap">
-            {sorted.length} review{sorted.length !== 1 ? "s" : ""}
+            {/* Total comes from a getCountFromServer aggregate on the same
+             * server-side constraints, so it reflects every match in the
+             * collection — not just the docs we've paged in. Falls back to
+             * the loaded count if the aggregate is still in flight or fails. */}
+            {totalMatching != null
+              ? `${totalMatching.toLocaleString()} review${totalMatching !== 1 ? "s" : ""}`
+              : `${sorted.length} review${sorted.length !== 1 ? "s" : ""}`}
           </span>
         </div>
       </div>
@@ -638,9 +653,9 @@ function ReviewsContent() {
                     ) : (
                       <>
                         Load more reviews
-                        {visibleCount < sorted.length && (
+                        {totalMatching != null && totalMatching - allReviews.length > 0 && (
                           <span className="text-white/70">
-                            ({sorted.length - visibleCount} remaining)
+                            ({(totalMatching - allReviews.length).toLocaleString()} remaining)
                           </span>
                         )}
                       </>
