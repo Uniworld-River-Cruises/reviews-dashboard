@@ -9,6 +9,7 @@ import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
 import { backfillMissingThemes } from "./sync/backfill-themes";
 import { backfillMissingMedia } from "./sync/backfill-media";
+import { backfillHasMedia } from "./sync/backfill-has-media";
 import {
   deleteAdminUser,
   getAdminUserByEmail,
@@ -534,6 +535,33 @@ export const backfillMedia = onRequest(
       actorUid: caller.uid,
     });
     console.log(`backfillMedia by ${caller.source}:${caller.email ?? caller.uid}`, result);
+    res.json(result);
+  }
+);
+
+// One-shot repair: derive `hasMedia: boolean` from each review's `media`
+// array and persist it. Run once after the schema change so the Reviews
+// Explorer's server-side "Has media" filter has the field to query.
+// Subsequent syncs maintain the field via `transformReview`.
+export const backfillHasMediaFlag = onRequest(
+  { timeoutSeconds: 540, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "sync");
+    if (!caller) return;
+
+    const maxDocs =
+      typeof req.body?.maxDocs === "number" && req.body.maxDocs > 0
+        ? Math.min(req.body.maxDocs, 50000)
+        : undefined;
+
+    const result = await backfillHasMedia({
+      maxDocs,
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+    });
+    console.log(`backfillHasMediaFlag by ${caller.source}:${caller.email ?? caller.uid}`, result);
     res.json(result);
   }
 );

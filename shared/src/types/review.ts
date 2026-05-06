@@ -48,6 +48,10 @@ export interface ReviewDocument {
     synced: string;
   };
   hasComment: boolean;
+  /** Mirror of `media.length > 0`. Persisted as its own boolean so the
+   * Reviews Explorer can filter media-bearing reviews server-side —
+   * Firestore can't query "array length > 0" directly. */
+  hasMedia: boolean;
   moderationStatus: string;
   verified: boolean;
 }

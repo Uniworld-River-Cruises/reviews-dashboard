@@ -47,6 +47,12 @@ export function transformReview(
       (productText && productText.trim().length > 0)
   );
 
+  // Mirror of `media.length > 0` so the Reviews Explorer's "Has media"
+  // filter can be applied server-side. Computed here from the same source
+  // we'd persist into `media` so the boolean and the array can never drift.
+  const mediaSource = mediaOverride ?? product?.media ?? [];
+  const hasMedia = mediaSource.length > 0;
+
   return {
     id,
     feedbackUrl: raw.url,
@@ -81,10 +87,7 @@ export function transformReview(
       negative: [],
       classifiedAt: null,
     },
-    media: (mediaOverride ?? product?.media ?? []).map((m) => ({
-      type: m.type,
-      url: m.url,
-    })),
+    media: mediaSource.map((m) => ({ type: m.type, url: m.url })),
     dates: {
       created:
         product?.created_at ?? raw.service?.created_at ?? raw.last_updated_date,
@@ -92,6 +95,7 @@ export function transformReview(
       synced: new Date().toISOString(),
     },
     hasComment,
+    hasMedia,
     moderationStatus: "published",
     verified: true,
   };
