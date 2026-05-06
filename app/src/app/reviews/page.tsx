@@ -643,18 +643,18 @@ function ReviewsContent() {
                   <button
                     onClick={handleLoadMore}
                     disabled={loadingMore}
-                    className="inline-flex items-center gap-2 rounded-lg bg-header-bg px-6 py-2.5 text-sm font-medium text-header-text shadow-sm hover:opacity-90 transition-colors disabled:opacity-50"
+                    className="cursor-pointer inline-flex items-center gap-2 rounded-full bg-brand-accent px-6 py-2.5 text-sm font-semibold text-accent-foreground shadow-sm transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {loadingMore ? (
                       <>
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current" />
                         Loading...
                       </>
                     ) : (
                       <>
                         Load more reviews
                         {totalMatching != null && totalMatching - allReviews.length > 0 && (
-                          <span className="text-white/70">
+                          <span className="opacity-75">
                             ({(totalMatching - allReviews.length).toLocaleString()} remaining)
                           </span>
                         )}
