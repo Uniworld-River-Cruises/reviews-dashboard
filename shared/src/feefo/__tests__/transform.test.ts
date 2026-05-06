@@ -139,4 +139,37 @@ describe("transformReview", () => {
       expect(result.media).toEqual([]);
     });
   });
+
+  // hasMedia mirrors media.length > 0 — drives the Reviews Explorer's
+  // server-side "Has media" filter.
+  describe("hasMedia boolean", () => {
+    it("is true when product.media is non-empty (no override)", () => {
+      const result = transformReview(sampleReview);
+      expect(result.hasMedia).toBe(true);
+    });
+
+    it("is false when product.media is undefined (no override)", () => {
+      const noMedia: FeefoReview = {
+        ...sampleReview,
+        products: [{ ...sampleReview.products[0], media: undefined }],
+      };
+      const result = transformReview(noMedia);
+      expect(result.hasMedia).toBe(false);
+    });
+
+    it("follows the override even when product.media disagrees", () => {
+      // override empty, product has media → hasMedia false
+      expect(transformReview(sampleReview, []).hasMedia).toBe(false);
+      // override has items, product has none → hasMedia true
+      const noProductMedia: FeefoReview = {
+        ...sampleReview,
+        products: [{ ...sampleReview.products[0], media: undefined }],
+      };
+      expect(
+        transformReview(noProductMedia, [
+          { type: "PHOTO", url: "https://feefo.com/api/feedback-image/abc" },
+        ]).hasMedia
+      ).toBe(true);
+    });
+  });
 });

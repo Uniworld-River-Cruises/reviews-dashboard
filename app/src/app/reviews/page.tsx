@@ -213,6 +213,16 @@ function buildServerConstraints(
     constraints.push(where("tags.tour", "in", filters.itinerary));
   }
 
+  // hasMedia is a persisted boolean (mirror of `media.length > 0`) so the
+  // filter runs server-side. Doing it client-side meant the filter only
+  // saw whatever first 50 the page had loaded — when those happened to be
+  // media-less (the common case for the newest reviews), the filter
+  // returned 0 even though hundreds of media-bearing reviews existed
+  // within the date range.
+  if (filters.hasMedia) {
+    constraints.push(where("hasMedia", "==", true));
+  }
+
   constraints.push(orderBy(path, "desc"));
 
   return constraints;
@@ -257,8 +267,9 @@ function applyClientFilters(reviews: ReviewData[], filters: Filters, search: str
     if (filters.loyalty.length > 30 && !filters.loyalty.includes(r.loyalty)) return false;
     if (filters.itinerary.length > 30 && !filters.itinerary.includes(r.itinerary)) return false;
 
-    // Media filter
-    if (filters.hasMedia && r.media.length === 0) return false;
+    // Note: hasMedia filter is applied server-side via the `hasMedia`
+    // boolean (see buildServerConstraints) so it correctly returns matches
+    // across the whole date range, not just the first page.
 
     // Review type — exclude reviews that don't have text of the active type.
     if (filters.reviewType === "service" && !r.serviceReview) return false;
@@ -276,6 +287,7 @@ function serverFilterKey(filters: Filters): string {
     filters.bookingType.join("|"),
     filters.loyalty.join("|"),
     filters.itinerary.join("|"),
+    filters.hasMedia ? "media" : "",
   ].join("~");
 }
 
