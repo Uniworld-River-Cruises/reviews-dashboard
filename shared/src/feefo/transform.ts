@@ -1,10 +1,25 @@
-import { FeefoReview, Brand } from "./types";
+import { FeefoReview, Brand, FeefoMedia } from "./types";
 import { ReviewDocument } from "../types/review";
 import { parseTags } from "./parse-tags";
 
 const VALID_BRANDS: Set<string> = new Set(["uniworld", "luxury-gold"]);
 
-export function transformReview(raw: FeefoReview): ReviewDocument {
+/** What `transformReview` actually consumes from each media item. The full
+ * `FeefoMedia` type also has an `id` (which we drop on the way to Firestore),
+ * so the override accepts either a slim object or a full FeefoMedia. */
+export type MediaOverrideItem = Pick<FeefoMedia, "type" | "url">;
+
+/**
+ * @param mediaOverride - When provided, replaces whatever (if anything) is on
+ *   `raw.products[0].media`. Use this when fetching reviews from an endpoint
+ *   that omits the media field (the default `/reviews/all` response no longer
+ *   includes media; the sync now does a separate `media=ONLY` pass and feeds
+ *   the result back in here).
+ */
+export function transformReview(
+  raw: FeefoReview,
+  mediaOverride?: MediaOverrideItem[]
+): ReviewDocument {
   const product = raw.products[0];
   const tags = parseTags(raw.tags, product?.product?.tags);
 
@@ -66,7 +81,10 @@ export function transformReview(raw: FeefoReview): ReviewDocument {
       negative: [],
       classifiedAt: null,
     },
-    media: (product?.media ?? []).map((m) => ({ type: m.type, url: m.url })),
+    media: (mediaOverride ?? product?.media ?? []).map((m) => ({
+      type: m.type,
+      url: m.url,
+    })),
     dates: {
       created:
         product?.created_at ?? raw.service?.created_at ?? raw.last_updated_date,

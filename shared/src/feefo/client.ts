@@ -99,6 +99,15 @@ export async function fetchReviews(
     pageSize?: number;
     sincePeriod?: "month" | "year" | "all";
     sinceUpdatedPeriod?: "month" | "year" | "all";
+    /**
+     * When true, sets `media=ONLY` on the request. Feefo returns the `media`
+     * field on `products[]` only when this filter is active — the default
+     * `/reviews/all` response strips media entirely. Note that ONLY is also
+     * a *filter*: the response is limited to reviews that have media
+     * (currently around 7% of reviews). Use this for the media-enrichment
+     * sync pass, not the main sync.
+     */
+    mediaOnly?: boolean;
   } = {}
 ): Promise<FeefoReviewsResponse> {
   const token = await getAccessToken(brand);
@@ -112,6 +121,7 @@ export async function fetchReviews(
 
   if (params.sincePeriod) searchParams.set("since_period", params.sincePeriod);
   if (params.sinceUpdatedPeriod) searchParams.set("since_updated_period", params.sinceUpdatedPeriod);
+  if (params.mediaOnly) searchParams.set("media", "ONLY");
 
   const url = `${FEEFO_BASE_URL}/20/reviews/all?${searchParams}`;
   const res = await fetchWithRetry(url, {
@@ -139,6 +149,41 @@ export async function fetchAllReviews(
   }
 
   return allReviews;
+}
+
+/**
+ * Paginate through every review that has media (using `media=ONLY`) and
+ * return a `feedbackUrl → flattened media array` map. Aggregates media
+ * across all products on a single review into one array per URL, since
+ * our review document collapses both products into one `media` field.
+ *
+ * The map's key (`feedbackUrl`) matches `ReviewDocument.feedbackUrl`, which
+ * is the stable identifier the sync uses for review re-targeting after
+ * the URL-based ID fix in PR #44.
+ */
+export async function fetchMediaByUrl(
+  brand: Brand,
+  sincePeriod: "month" | "year" | "all" = "all"
+): Promise<Map<string, { type: "PHOTO" | "VIDEO"; url: string }[]>> {
+  const map = new Map<string, { type: "PHOTO" | "VIDEO"; url: string }[]>();
+  let page = 1;
+  while (true) {
+    const response = await fetchReviews(brand, { page, sincePeriod, mediaOnly: true });
+    for (const review of response.reviews) {
+      const merged: { type: "PHOTO" | "VIDEO"; url: string }[] = [];
+      for (const product of review.products ?? []) {
+        for (const m of product.media ?? []) {
+          merged.push({ type: m.type, url: m.url });
+        }
+      }
+      if (merged.length > 0 && review.url) {
+        map.set(review.url, merged);
+      }
+    }
+    if (page >= response.summary.meta.pages) break;
+    page++;
+  }
+  return map;
 }
 
 export async function fetchSummary(brand: Brand): Promise<FeefoSummaryResponse> {
