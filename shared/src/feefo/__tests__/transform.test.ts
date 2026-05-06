@@ -103,4 +103,40 @@ describe("transformReview", () => {
     const result = transformReview(ratingOnly);
     expect(result.hasComment).toBe(false);
   });
+
+  // Media handling — Feefo's default `/reviews/all` response no longer
+  // includes the `media` field. The sync now fetches a separate `media=ONLY`
+  // pass and passes the resulting array in via `mediaOverride`.
+  describe("media override", () => {
+    it("falls back to product.media when no override is given", () => {
+      const result = transformReview(sampleReview);
+      expect(result.media).toEqual([{ type: "PHOTO", url: "https://img.com/1.jpg" }]);
+    });
+
+    it("uses mediaOverride when provided, ignoring product.media", () => {
+      const override = [
+        { type: "PHOTO" as const, url: "https://feefo.com/api/feedback-image/abc" },
+        { type: "VIDEO" as const, url: "https://feefo.com/api/feedback-video/xyz" },
+      ];
+      const result = transformReview(sampleReview, override);
+      expect(result.media).toEqual(override);
+    });
+
+    it("uses mediaOverride even when product.media is undefined", () => {
+      const noProductMedia: FeefoReview = {
+        ...sampleReview,
+        products: [{ ...sampleReview.products[0], media: undefined }],
+      };
+      const override = [
+        { type: "PHOTO" as const, url: "https://feefo.com/api/feedback-image/abc" },
+      ];
+      const result = transformReview(noProductMedia, override);
+      expect(result.media).toEqual(override);
+    });
+
+    it("writes an empty array when override is empty (lets us positively assert no-media)", () => {
+      const result = transformReview(sampleReview, []);
+      expect(result.media).toEqual([]);
+    });
+  });
 });

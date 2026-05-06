@@ -8,6 +8,7 @@ import { syncAll } from "./sync/sync-reviews";
 import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
 import { backfillMissingThemes } from "./sync/backfill-themes";
+import { backfillMissingMedia } from "./sync/backfill-media";
 import {
   deleteAdminUser,
   getAdminUserByEmail,
@@ -496,6 +497,43 @@ export const backfillThemes = onRequest(
       actorUid: caller.uid,
     });
     console.log(`backfillThemes by ${caller.source}:${caller.email ?? caller.uid}`, result);
+    res.json(result);
+  }
+);
+
+// One-shot repair: re-assert the `media` array on Firestore review docs by
+// fetching all media-bearing reviews from Feefo with `media=ONLY` and
+// patching matching docs (keyed by feedbackUrl). Run once after deploying
+// the sync's media-enrichment pass; subsequent syncs keep media correct on
+// their own. Pass `brand` (uniworld | luxury-gold) and optional
+// `sincePeriod` (month | year | all, default all).
+export const backfillMedia = onRequest(
+  { timeoutSeconds: 540, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "sync");
+    if (!caller) return;
+
+    const brand = req.body?.brand;
+    if (!isValidBrand(brand)) {
+      res.status(400).json({ error: "brand must be 'uniworld' or 'luxury-gold'." });
+      return;
+    }
+
+    const rawPeriod = req.body?.sincePeriod;
+    const sincePeriod: "month" | "year" | "all" =
+      rawPeriod === "month" || rawPeriod === "year" || rawPeriod === "all"
+        ? rawPeriod
+        : "all";
+
+    const result = await backfillMissingMedia({
+      brand,
+      sincePeriod,
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+    });
+    console.log(`backfillMedia by ${caller.source}:${caller.email ?? caller.uid}`, result);
     res.json(result);
   }
 );

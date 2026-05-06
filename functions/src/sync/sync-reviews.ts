@@ -1,5 +1,11 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { fetchReviews, transformReview, Brand, ReviewDocument } from "@feefo/shared";
+import {
+  fetchReviews,
+  fetchMediaByUrl,
+  transformReview,
+  Brand,
+  ReviewDocument,
+} from "@feefo/shared";
 import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
 
 interface SyncResult {
@@ -69,6 +75,16 @@ export async function syncBrand(
   }
 
   try {
+    // 1.5. Build the media-by-URL map up front from a single `media=ONLY`
+    // pass. The default `/reviews/all` response no longer includes the
+    // `media` field (Feefo behavior change), so without this enrichment
+    // every transformed review would write `media: []` and overwrite any
+    // existing media on the Firestore doc thanks to merge:true. The pass
+    // is small — currently around 7% of reviews have media — so it adds a
+    // few extra paginated requests, not a meaningful cost.
+    const mediaSincePeriod = fullSync ? "all" : "month";
+    const mediaByUrl = await fetchMediaByUrl(brand, mediaSincePeriod);
+
     // 2. Paginate through Feefo reviews — fetch, transform, write per page
     let page = 1;
     let maxUpdated = "";
@@ -85,7 +101,9 @@ export async function syncBrand(
       const pageReviews: ReviewDocument[] = [];
       for (const raw of response.reviews) {
         try {
-          const doc = transformReview(raw);
+          // Inject media from the media=ONLY pass; reviews not in the map
+          // get an empty array (correct — they have no media).
+          const doc = transformReview(raw, mediaByUrl.get(raw.url) ?? []);
           pageReviews.push(doc);
           if (doc.dates.lastUpdated > maxUpdated) {
             maxUpdated = doc.dates.lastUpdated;
