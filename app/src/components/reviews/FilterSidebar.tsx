@@ -106,16 +106,23 @@ function FilterSection({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const contentId = React.useId();
+
   return (
     <div className="border-b border-border-light last:border-0">
       <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={contentId}
         onClick={onToggle}
         className="flex w-full items-center justify-between py-3 text-sm font-medium text-text-primary hover:text-text-primary/80"
       >
         {title}
         <ChevronIcon open={open} />
       </button>
-      {open && <div className="pb-3 space-y-1.5">{children}</div>}
+      <div id={contentId} hidden={!open} className="pb-3 space-y-1.5">
+        {children}
+      </div>
     </div>
   );
 }
