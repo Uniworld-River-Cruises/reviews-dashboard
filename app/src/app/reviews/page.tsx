@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, Suspense } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useDashboard, type DateField } from "@/contexts/DashboardContext";
 import { useBrand } from "@/contexts/BrandContext";
@@ -302,6 +302,7 @@ function ReviewsContent() {
   const searchParams = useSearchParams();
   const { merchantQueryId: brand } = useBrand();
   const { dateRange, dateField, dataVersion } = useDashboard();
+  const filterPanelRef = useRef<HTMLDivElement>(null);
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
@@ -309,6 +310,7 @@ function ReviewsContent() {
   const [filters, setFilters] = useState<Filters>(initial.filters);
   const [sort, setSort] = useState<SortOption>(initial.sort);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [filterPanelStickyTop, setFilterPanelStickyTop] = useState(16);
 
   // Firestore data
   const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
@@ -333,6 +335,29 @@ function ReviewsContent() {
   const dateStart = dateRange.start.toISOString();
   const dateEnd = dateRange.end.toISOString();
   const srvFilterKey = serverFilterKey(filters);
+
+  useEffect(() => {
+    const panel = filterPanelRef.current;
+    if (!panel) return;
+
+    const stickyGutter = 16;
+    const updateStickyTop = () => {
+      const panelHeight = panel.getBoundingClientRect().height;
+      const nextTop = Math.min(stickyGutter, window.innerHeight - panelHeight - stickyGutter);
+      setFilterPanelStickyTop(Math.round(nextTop));
+    };
+
+    updateStickyTop();
+
+    const resizeObserver = new ResizeObserver(updateStickyTop);
+    resizeObserver.observe(panel);
+    window.addEventListener("resize", updateStickyTop);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", updateStickyTop);
+    };
+  }, [loading, error]);
 
   // Load filter options scoped to the selected date range
   useEffect(() => {
@@ -586,7 +611,11 @@ function ReviewsContent() {
               : "hidden"
           } lg:block lg:w-64 shrink-0`}
         >
-          <div className="rounded-lg border border-border bg-surface p-4 shadow-sm sticky top-4">
+          <div
+            ref={filterPanelRef}
+            className="rounded-lg border border-border bg-surface p-4 shadow-sm lg:sticky"
+            style={{ top: `${filterPanelStickyTop}px` }}
+          >
             <div className="flex items-center justify-between lg:hidden mb-3">
               <span className="text-sm font-semibold text-text-primary">Filters</span>
               <button
