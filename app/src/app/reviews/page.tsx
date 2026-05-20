@@ -26,6 +26,8 @@ import {
 } from "@/lib/firestore/queries";
 import FilterSidebar, {
   type Filters,
+  type FilterSectionKey,
+  defaultOpenFilterSections,
   emptyFilters,
 } from "@/components/reviews/FilterSidebar";
 import ReviewCard, { type ReviewData } from "@/components/reviews/ReviewCard";
@@ -303,6 +305,7 @@ function ReviewsContent() {
   const { merchantQueryId: brand } = useBrand();
   const { dateRange, dateField, dataVersion } = useDashboard();
   const filterPanelRef = useRef<HTMLDivElement>(null);
+  const hasLoadedReviewsRef = useRef(false);
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
@@ -311,10 +314,12 @@ function ReviewsContent() {
   const [sort, setSort] = useState<SortOption>(initial.sort);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [filterPanelStickyTop, setFilterPanelStickyTop] = useState(16);
+  const [openFilterSections, setOpenFilterSections] = useState(defaultOpenFilterSections);
 
   // Firestore data
   const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedReviews, setHasLoadedReviews] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreFirestore, setHasMoreFirestore] = useState(true);
@@ -369,9 +374,12 @@ function ReviewsContent() {
   // Main query — re-fetch when brand, date range, or server-side filters change
   useEffect(() => {
     let cancelled = false;
+    const isInitialLoad = !hasLoadedReviewsRef.current;
     setLoading(true);
     setError(null);
-    setAllReviews([]);
+    if (isInitialLoad) {
+      setAllReviews([]);
+    }
     setLastDoc(null);
     setHasMoreFirestore(true);
     setTotalMatching(null);
@@ -395,6 +403,8 @@ function ReviewsContent() {
       setAllReviews(reviews);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
+      hasLoadedReviewsRef.current = true;
+      setHasLoadedReviews(true);
       setLoading(false);
     }).catch((err) => {
       if (cancelled) return;
@@ -461,7 +471,7 @@ function ReviewsContent() {
   // takes 6 clicks (PAGE_SIZE chunks) instead of 30 with the previous
   // 10-at-a-time display pagination.
   const visible = sorted;
-  const hasMore = hasMoreFirestore;
+  const hasMore = hasMoreFirestore && !loading;
 
   const handleLoadMore = useCallback(() => {
     if (hasMoreFirestore) loadMoreFromFirestore();
@@ -478,12 +488,20 @@ function ReviewsContent() {
     [filters]
   );
 
-  const activeFilterCount = Object.values(filters).reduce(
-    (sum, arr) => sum + arr.length,
-    0
-  );
+  const handleToggleFilterSection = useCallback((section: FilterSectionKey) => {
+    setOpenFilterSections((current) => ({
+      ...current,
+      [section]: !current[section],
+    }));
+  }, []);
 
-  if (loading) {
+  const activeFilterCount = Object.entries(filters).reduce((sum, [key, val]) => {
+    if (key === "hasMedia") return sum + (val ? 1 : 0);
+    if (key === "reviewType") return sum + (val !== "all" ? 1 : 0);
+    return sum + (val as unknown[]).length;
+  }, 0);
+
+  if (loading && !hasLoadedReviews) {
     return (
       <div className="flex items-center justify-center py-24">
         <div
@@ -493,7 +511,7 @@ function ReviewsContent() {
     );
   }
 
-  if (error) {
+  if (error && !hasLoadedReviews) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-5 text-sm text-red-900">
         {error}
@@ -537,7 +555,13 @@ function ReviewsContent() {
         </div>
         <div className="flex items-center gap-3">
           <ExportButton reviews={sorted} />
-          <span className="text-sm text-text-secondary whitespace-nowrap">
+          {loading && hasLoadedReviews && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-secondary">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-spinner-track border-t-spinner-accent" />
+              Updating
+            </span>
+          )}
+          <span className="text-sm text-text-secondary whitespace-nowrap" aria-live="polite">
             {/* Total comes from a getCountFromServer aggregate on the same
              * server-side constraints, so it reflects every match in the
              * collection — not just the docs we've paged in. Falls back to
@@ -631,6 +655,8 @@ function ReviewsContent() {
             <FilterSidebar
               filters={filters}
               onChange={setFilters}
+              openSections={openFilterSections}
+              onToggleSection={handleToggleFilterSection}
               options={options}
             />
           </div>
@@ -638,7 +664,12 @@ function ReviewsContent() {
 
         {/* Results */}
         <div className="flex-1 min-w-0">
-          {sorted.length === 0 ? (
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+              {error}
+            </div>
+          )}
+          {sorted.length === 0 && !loading ? (
             <div className="rounded-lg border border-border bg-surface p-12 text-center">
               <p className="text-text-secondary">
                 No reviews match your search and filters.
@@ -655,7 +686,7 @@ function ReviewsContent() {
             </div>
           ) : (
             <>
-              <div className="space-y-4">
+              <div className={`space-y-4 transition-opacity ${loading ? "opacity-60" : ""}`}>
                 {visible.map((review) => (
                   <ReviewCard
                     key={review.id}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 
 /** Mirrors Feefo's All / Service reviews / Product reviews tabs on their
  * public review pages. "Service" = customer-service / booking-experience
@@ -22,6 +22,31 @@ export interface Filters {
   reviewType: ReviewType;
 }
 
+export type FilterSectionKey =
+  | "brand"
+  | "rating"
+  | "ship"
+  | "itinerary"
+  | "positiveThemes"
+  | "negativeThemes"
+  | "bookingType"
+  | "region"
+  | "loyalty";
+
+export type OpenFilterSections = Record<FilterSectionKey, boolean>;
+
+export const defaultOpenFilterSections: OpenFilterSections = {
+  brand: true,
+  rating: true,
+  ship: false,
+  itinerary: false,
+  positiveThemes: false,
+  negativeThemes: false,
+  bookingType: false,
+  region: false,
+  loyalty: false,
+};
+
 export const emptyFilters: Filters = {
   brand: [],
   rating: [],
@@ -39,6 +64,8 @@ export const emptyFilters: Filters = {
 interface FilterSidebarProps {
   filters: Filters;
   onChange: (filters: Filters) => void;
+  openSections: OpenFilterSections;
+  onToggleSection: (section: FilterSectionKey) => void;
   options: {
     brands: string[];
     ratings: number[];
@@ -70,19 +97,19 @@ function ChevronIcon({ open }: { open: boolean }) {
 
 function FilterSection({
   title,
-  defaultOpen = false,
+  open,
+  onToggle,
   children,
 }: {
   title: string;
-  defaultOpen?: boolean;
+  open: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
     <div className="border-b border-border-light last:border-0">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={onToggle}
         className="flex w-full items-center justify-between py-3 text-sm font-medium text-text-primary hover:text-text-primary/80"
       >
         {title}
@@ -122,7 +149,13 @@ function formatBrandName(slug: string): string {
     .join(" ");
 }
 
-export default function FilterSidebar({ filters, onChange, options }: FilterSidebarProps) {
+export default function FilterSidebar({
+  filters,
+  onChange,
+  openSections,
+  onToggleSection,
+  options,
+}: FilterSidebarProps) {
   const activeFilterCount = Object.entries(filters).reduce((sum, [key, val]) => {
     if (key === "hasMedia") return sum + (val ? 1 : 0);
     if (key === "reviewType") return sum + (val !== "all" ? 1 : 0);
@@ -261,7 +294,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </div>
 
       {/* Brand */}
-      <FilterSection title="Brand" defaultOpen>
+      <FilterSection
+        title="Brand"
+        open={openSections.brand}
+        onToggle={() => onToggleSection("brand")}
+      >
         {options.brands.map((brand) => (
           <CheckboxItem
             key={brand}
@@ -273,7 +310,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Star Rating */}
-      <FilterSection title="Star Rating" defaultOpen>
+      <FilterSection
+        title="Star Rating"
+        open={openSections.rating}
+        onToggle={() => onToggleSection("rating")}
+      >
         {(options.ratings.length > 0 ? options.ratings : [5, 4, 3, 2, 1]).map((star) => {
           const count = options.ratingCounts?.[star];
           return (
@@ -304,7 +345,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Ship */}
-      <FilterSection title="Ship">
+      <FilterSection
+        title="Ship"
+        open={openSections.ship}
+        onToggle={() => onToggleSection("ship")}
+      >
         {options.ships.map((ship) => (
           <CheckboxItem
             key={ship}
@@ -316,7 +361,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Itinerary */}
-      <FilterSection title="Itinerary">
+      <FilterSection
+        title="Itinerary"
+        open={openSections.itinerary}
+        onToggle={() => onToggleSection("itinerary")}
+      >
         {options.itineraries.map((itin) => (
           <CheckboxItem
             key={itin}
@@ -328,7 +377,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Positive Themes */}
-      <FilterSection title="Positive Themes">
+      <FilterSection
+        title="Positive Themes"
+        open={openSections.positiveThemes}
+        onToggle={() => onToggleSection("positiveThemes")}
+      >
         {options.positiveThemes.map((theme) => (
           <CheckboxItem
             key={theme}
@@ -340,7 +393,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Negative Themes */}
-      <FilterSection title="Negative Themes">
+      <FilterSection
+        title="Negative Themes"
+        open={openSections.negativeThemes}
+        onToggle={() => onToggleSection("negativeThemes")}
+      >
         {options.negativeThemes.map((theme) => (
           <CheckboxItem
             key={theme}
@@ -352,7 +409,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Booking Type */}
-      <FilterSection title="Booking Type">
+      <FilterSection
+        title="Booking Type"
+        open={openSections.bookingType}
+        onToggle={() => onToggleSection("bookingType")}
+      >
         {options.bookingTypes.map((bt) => (
           <CheckboxItem
             key={bt}
@@ -364,7 +425,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Region */}
-      <FilterSection title="Region">
+      <FilterSection
+        title="Region"
+        open={openSections.region}
+        onToggle={() => onToggleSection("region")}
+      >
         {options.regions.map((region) => (
           <CheckboxItem
             key={region}
@@ -376,7 +441,11 @@ export default function FilterSidebar({ filters, onChange, options }: FilterSide
       </FilterSection>
 
       {/* Loyalty */}
-      <FilterSection title="Loyalty">
+      <FilterSection
+        title="Loyalty"
+        open={openSections.loyalty}
+        onToggle={() => onToggleSection("loyalty")}
+      >
         {options.loyaltyLevels.map((level) => (
           <CheckboxItem
             key={level}
