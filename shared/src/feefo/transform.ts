@@ -1,8 +1,7 @@
-import { FeefoReview, Brand, FeefoMedia } from "./types";
+import { FeefoReview, FeefoMedia } from "./types";
 import { ReviewDocument } from "../types/review";
 import { parseTags } from "./parse-tags";
-
-const VALID_BRANDS: Set<string> = new Set(["uniworld", "luxury-gold"]);
+import { isMerchantIdentifier } from "./brands";
 
 /** What `transformReview` actually consumes from each media item. The full
  * `FeefoMedia` type also has an `id` (which we drop on the way to Firestore),
@@ -35,10 +34,10 @@ export function transformReview(
     `url-${Date.now()}`;
 
   const merchantId = raw.merchant.identifier;
-  if (!VALID_BRANDS.has(merchantId)) {
+  if (!isMerchantIdentifier(merchantId)) {
     throw new Error(`Unknown merchant identifier: ${merchantId}`);
   }
-  const brand = merchantId as Brand;
+  const brand = merchantId;
 
   const serviceText = raw.service?.review ?? null;
   const productText = product?.review ?? null;
