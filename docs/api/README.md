@@ -33,9 +33,14 @@ When you get a `401`, the token expired (default 1h) — re-run **Get access tok
 | `accessToken` | Filled automatically by the token request | — |
 | `merchantIdentifier` | Brand selector | `uniworld`, `luxury-gold`, `all` |
 
-For local development against the Firebase emulator, set `baseUrl` to the
-Hosting emulator (e.g. `http://127.0.0.1:5000/api`) so the `/api` rewrite
-resolves to the `reviewsApi` function.
+For local development against the Firebase emulators, point `baseUrl`
+directly at the functions emulator — no Hosting emulator needed:
+`http://127.0.0.1:5001/feefo-reviews/us-central1/reviewsApi`
+(the router accepts paths with or without the `/api` prefix). Start the
+emulators with `firebase emulators:start --only functions,firestore`, seed
+data + test credentials with `node scripts/seed-emulator.js`
+(`FIRESTORE_EMULATOR_HOST=127.0.0.1:8080`), and optionally run the full
+contract check with `bash scripts/smoke-api.sh`.
 
 ---
 

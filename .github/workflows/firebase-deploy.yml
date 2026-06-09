@@ -78,6 +78,7 @@ jobs:
           V_REQUIRE_ADMIN_CLAIM: ${{ secrets.REQUIRE_ADMIN_CLAIM }}
           V_SYNC_API_TOKEN: ${{ secrets.SYNC_API_TOKEN }}
           V_CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          V_REVIEWS_API_SECRET_PEPPER: ${{ secrets.REVIEWS_API_SECRET_PEPPER }}
         run: |
           {
             echo "FEEFO_UNIWORLD_CLIENT_ID=${FEEFO_UNI_ID}"
@@ -92,6 +93,7 @@ jobs:
           [ -n "${V_REQUIRE_ADMIN_CLAIM}" ] && echo "REQUIRE_ADMIN_CLAIM=${V_REQUIRE_ADMIN_CLAIM}" >> functions/.env.feefo-reviews || true
           [ -n "${V_SYNC_API_TOKEN}" ] && echo "SYNC_API_TOKEN=${V_SYNC_API_TOKEN}" >> functions/.env.feefo-reviews || true
           [ -n "${V_CORS_ALLOWED_ORIGINS}" ] && echo "CORS_ALLOWED_ORIGINS=${V_CORS_ALLOWED_ORIGINS}" >> functions/.env.feefo-reviews || true
+          [ -n "${V_REVIEWS_API_SECRET_PEPPER}" ] && echo "REVIEWS_API_SECRET_PEPPER=${V_REVIEWS_API_SECRET_PEPPER}" >> functions/.env.feefo-reviews || true
 
       - name: Build frontend
         run: npm --prefix app run build

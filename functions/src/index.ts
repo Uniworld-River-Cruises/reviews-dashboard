@@ -32,6 +32,15 @@ import {
   writeOperationLog,
   type OperationLogSource,
 } from "./ops/operation-logs";
+import { isMerchantIdentifier } from "@feefo/shared";
+import { handleApiRequest } from "./api/reviews-api";
+import {
+  createApiClient,
+  listApiClients,
+  revokeApiClient,
+  rotateApiClient,
+} from "./api/api-clients";
+import { ApiError } from "./api/http";
 
 initializeApp();
 
@@ -46,11 +55,8 @@ const ALLOWED_ORIGINS = process.env.CORS_ALLOWED_ORIGINS
     ? true // allow all origins in the local emulator
     : DEFAULT_ORIGINS; // restrict to known Firebase Hosting domains
 
-const VALID_BRANDS = new Set(["uniworld", "luxury-gold"]);
-
-function isValidBrand(value: unknown): value is "uniworld" | "luxury-gold" {
-  return typeof value === "string" && VALID_BRANDS.has(value);
-}
+// Single source of truth for merchant identifiers lives in @feefo/shared.
+const isValidBrand = isMerchantIdentifier;
 
 interface AuthorizedCaller {
   uid: string;
@@ -154,6 +160,8 @@ function getEffectivePermissions(
       allowedByLegacyEmailList || hasPermission(adminUser, "manageMappings"),
     manageUsers:
       allowedByLegacyEmailList || hasPermission(adminUser, "manageUsers"),
+    manageApiClients:
+      allowedByLegacyEmailList || hasPermission(adminUser, "manageApiClients"),
   };
 }
 
@@ -800,5 +808,104 @@ export const adminUsers = onRequest(
       .json({
         error: "Invalid action. Use 'current', 'list', 'known', 'upsert', or 'remove'.",
       });
+  }
+);
+
+// Public reviews API — Feefo-emulating, read-only, bearer-token auth.
+// Routed via the Firebase Hosting rewrite /api/** so consumers see a stable
+// same-domain base URL. Design: docs/plans/2026-06-09-public-reviews-api.md.
+export const reviewsApi = onRequest(
+  { timeoutSeconds: 60, memory: "512MiB", invoker: "public" },
+  handleApiRequest
+);
+
+// Manage API credentials for the public reviews API (dashboard admin action).
+export const apiClients = onRequest(
+  { timeoutSeconds: 60, memory: "512MiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "manageApiClients");
+    if (!caller) return;
+
+    const action = req.body?.action ?? "list";
+
+    try {
+      if (action === "list") {
+        res.json({ clients: await listApiClients() });
+        return;
+      }
+
+      if (action === "create") {
+        const result = await createApiClient({
+          label: req.body?.label,
+          merchants: req.body?.merchants,
+          scopes: req.body?.scopes,
+          createdBy: caller.email ?? caller.uid,
+        });
+        await writeOperationLog({
+          type: "apiClient",
+          level: "success",
+          action: "client_created",
+          message: `API client created: ${result.client.label}`,
+          source: "manual",
+          actorEmail: caller.email,
+          actorUid: caller.uid,
+          details: {
+            clientId: result.client.clientId,
+            merchants: result.client.merchants,
+            scopes: result.client.scopes,
+          },
+        });
+        console.log(`apiClients create by ${caller.source}:${caller.email ?? caller.uid}`);
+        // The plain secret appears in this response ONLY — never persisted.
+        res.json({ success: true, client: result.client, clientSecret: result.clientSecret });
+        return;
+      }
+
+      if (action === "revoke") {
+        const client = await revokeApiClient(req.body?.clientId);
+        await writeOperationLog({
+          type: "apiClient",
+          level: "warning",
+          action: "client_revoked",
+          message: `API client revoked: ${client.label}`,
+          source: "manual",
+          actorEmail: caller.email,
+          actorUid: caller.uid,
+          details: { clientId: client.clientId },
+        });
+        console.log(`apiClients revoke by ${caller.source}:${caller.email ?? caller.uid}`);
+        res.json({ success: true, client });
+        return;
+      }
+
+      if (action === "rotate") {
+        const result = await rotateApiClient(req.body?.clientId);
+        await writeOperationLog({
+          type: "apiClient",
+          level: "success",
+          action: "client_rotated",
+          message: `API client secret rotated: ${result.client.label}`,
+          source: "manual",
+          actorEmail: caller.email,
+          actorUid: caller.uid,
+          details: { clientId: result.client.clientId },
+        });
+        console.log(`apiClients rotate by ${caller.source}:${caller.email ?? caller.uid}`);
+        res.json({ success: true, client: result.client, clientSecret: result.clientSecret });
+        return;
+      }
+
+      res
+        .status(400)
+        .json({ error: "Invalid action. Use 'create', 'list', 'revoke', or 'rotate'." });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      console.error("apiClients error:", error);
+      res.status(500).json({ error: "Internal error." });
+    }
   }
 );
