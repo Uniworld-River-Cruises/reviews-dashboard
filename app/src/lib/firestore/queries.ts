@@ -2,6 +2,7 @@
 
 import { format } from "date-fns";
 import { getClientDb } from "@/lib/firebase";
+import { resolveDisplayName } from "@/lib/format/customer";
 import type { DateField } from "@/contexts/DashboardContext";
 import {
   collection,
@@ -727,7 +728,7 @@ function mapReviewDoc(
   const data = review.data;
   return {
     id: review.id,
-    guestName: data.customer?.displayName || "Trusted Customer",
+    guestName: resolveDisplayName(data.customer),
     rating: data.ratings?.product ?? data.ratings?.service ?? 0,
     itinerary: data.tags?.tour || data.product?.title || "",
     ship: data.tags?.ship || "",
