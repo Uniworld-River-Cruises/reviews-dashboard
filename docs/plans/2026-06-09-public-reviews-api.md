@@ -4,7 +4,7 @@
 **Status:** Proposed (recommendation) · revised after code review (Codex, PR #61)
 **Owner:** TBD
 
-> **Dependency / status:** the customer-name rule this design reuses (`resolveDisplayName()`) is introduced on the website in **PR #60**, which is **still open**. This branch (`reviews-public-api`) does **not** contain those `app/` changes. The name-rule items below are therefore *pending #60* — the "same as the website" guarantee holds once #60 merges.
+> **Dependency / status:** the customer-name rule this design reuses (`resolveDisplayName()`) was added to the website in **PR #60**, now **merged** — `app/src/lib/format/customer.ts` is on `main`, so the base dependency is satisfied. (This `reviews-public-api` branch was cut before #60, so it won't contain that file until it's synced with `main`; that doesn't affect the design.)
 
 **Goal:** Expose Uniworld's synced, AI-enriched reviews through a read-only HTTP API so the company marketing website (and partners) can render reviews, ratings, and aggregates — **without** leaking customer PII, **without** coupling consumers to Firestore internals, and using a **Feefo-style credential model** that anyone who has integrated Feefo will recognize.
 
@@ -27,7 +27,7 @@ Stand up a single, versioned, read-only Cloud Function (`reviewsApi`) plus a sma
 2. **Select brand via `merchant_identifier`** (`uniworld` | `luxury-gold` | `all`), matching Feefo's parameter exactly.
 3. **Add an `enrichment` block to every review** carrying AI themes + derived metadata, namespaced so it never collides with Feefo's schema.
 4. **Authenticate Feefo-style, server-side only:** dashboard users self-mint `client_id` + `client_secret`; consumers exchange them at `POST /v1/oauth/token` for a bearer token. (See [Authentication](#authentication--api-credentials).)
-5. **Enforce the *site's own* customer-name rule** via one shared `resolveDisplayName()` rule — added to the website in PR #60 (open) and reused by the API — so what the API returns is byte-for-byte what the site shows, and the raw `name`/email/refs never escape. (See [PII firewall](#pii-firewall--name-display-parity).)
+5. **Enforce the *site's own* customer-name rule** via one shared `resolveDisplayName()` rule — added to the website in PR #60 (merged) and reused by the API — so what the API returns is byte-for-byte what the site shows, and the raw `name`/email/refs never escape. (See [PII firewall](#pii-firewall--name-display-parity).)
 6. **Read Firestore via the Admin SDK**, which lets us simultaneously **close the currently world-open Firestore read rules**.
 7. **Cache on the consumer side** — the calling backend caches the token and payloads, and aggregates come from precomputed summaries — since the API is server-to-server and data changes only every ~2 hours.
 
@@ -49,10 +49,10 @@ The sync pipeline ([`functions/src/sync/sync-reviews.ts`](../../functions/src/sy
 
 ### The rule we must match
 
-The API enforces the **exact** name rules the website uses: show the customer's name when the site shows it, show "Trusted Customer" when the site does. The canonical rule (`displayName || "Trusted Customer"`, never the raw `name`) is introduced on the website in **PR #60** — currently **open / in review** — via `resolveDisplayName()`:
+The API enforces the **exact** name rules the website uses: show the customer's name when the site shows it, show "Trusted Customer" when the site does. The canonical rule (`displayName || "Trusted Customer"`, never the raw `name`) was introduced on the website in **PR #60** (now **merged** to `main`) via `resolveDisplayName()`:
 
 ```ts
-// app/src/lib/format/customer.ts  (added in PR #60, still open; the API mirrors it)
+// app/src/lib/format/customer.ts  (added in PR #60, merged; the API mirrors it)
 export function resolveDisplayName(
   customer: { displayName?: string | null } | null | undefined,
   fallback = "Trusted Customer"
@@ -383,7 +383,7 @@ For **star ratings in Google results**, the site must server-render review conte
 
 | Phase | Scope | Effort |
 |---|---|---|
-| **1 — Name rule + firewall + contract** | `resolveDisplayName()` (added to the app in **PR #60**, open) promoted to `shared/`; `PublicReview`/`PublicSummary` types + `toPublicReview()`/`toPublicSummary()` allowlist mappers (omit `display_location`/`tour_director`); unit test asserting the exact public key set. **Depends on #60 merging.** | S–M |
+| **1 — Name rule + firewall + contract** | `resolveDisplayName()` (added to the app in **PR #60**, merged) promoted to `shared/` as the single source of truth; `PublicReview`/`PublicSummary` types + `toPublicReview()`/`toPublicSummary()` allowlist mappers (omit `display_location`/`tour_director`); unit test asserting the exact public key set. | S–M |
 | **2 — Core endpoints** | `reviewsApi`: `/v1/reviews/summary/all`, `/v1/reviews/all`, `/v1/reviews/{id}` (scope-checked, uniform 404); Hosting rewrite; cache/ETag; pagination; uniform error envelope + request ids. | M |
 | **3 — Auth & credentials** | `POST /v1/oauth/token`; `api_clients` model with server-generated secrets + `argon2id`/peppered-HMAC verifier; opaque-or-JWT tokens with revocation (`tokenVersion`); `apiClients` management function; `manageApiClients` permission; dashboard "API Access" UI; per-client merchant scoping, **rate-limit enforcement**, revoke/rotate. | M–L |
 | **4 — Hardening + extensions** | Tighten **all five** public collections' rules; shared brand constant; `merchant_registry`; `/v1/meta/*`; `merchant_identifier=all` fan-out; **service** star distribution in sync. | M |
@@ -433,7 +433,7 @@ For **star ratings in Google results**, the site must server-render review conte
 
 ## Open decisions
 
-1. **Customer-name rule:** 🔄 **In review (PR #60, open)** — canonical `displayName || "Trusted Customer"` with the `|| customer.name` fallback removed; merges independently of this API and counts as settled once #60 lands.
+1. **Customer-name rule:** ✅ **Resolved (PR #60, merged)** — canonical `displayName || "Trusted Customer"` with the `|| customer.name` fallback removed; the rule now lives on `main` for the website, and the API reuses it.
 2. **Auth surface:** ✅ **Resolved — server-side only.** Feefo-style `client_id`/`client_secret` → bearer token; no browser-embeddable key. Remaining sub-decision: token format — **opaque (recommended) vs JWT** — and TTL (default 1h).
 3. **`display_location`:** ✅ default **omit** in v1 (the dashboard never displays customer location, so omitting matches the site rule). Open: expose later with product sign-off?
 4. **`tour_director` (staff name):** ✅ default **omit** in v1 (it's a person's name). Open: expose as public metadata, or keep internal-only?
@@ -453,7 +453,7 @@ For **star ratings in Google results**, the site must server-render review conte
 | `feedbackUrl` | `url` | |
 | `customer.displayName` | `customer.display_name` | via `resolveDisplayName()`; empty ⇒ `"Trusted Customer"` |
 | `customer.location` | — (default) | **Omitted in v1** — the site never shows location; opt-in open decision |
-| `customer.name` / `email` / `orderRef` / `customerRef` | — | **Dropped (PII).** (`name` was the value some site pages leaked as a fallback; removal proposed in **PR #60**, open) |
+| `customer.name` / `email` / `orderRef` / `customerRef` | — | **Dropped (PII).** (`name` was the value some site pages leaked as a fallback; removed in **PR #60**, merged) |
 | `ratings.service` / `ratings.product` | `service.rating.rating` / `products[0].rating.rating` | wrapped `{min:1,max:5,rating}` |
 | `reviews.serviceTitle` / `serviceText` / `productText` | `service.title` / `service.review` / `products[0].review` | |
 | `product.{title,sku,parentSku,url,imageUrl}` | `products[0].product.{title,sku,parent_sku,url,image_url}` | |
