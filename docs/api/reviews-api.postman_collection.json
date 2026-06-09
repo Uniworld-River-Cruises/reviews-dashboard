@@ -86,6 +86,13 @@
                 { "key": "region", "value": "", "disabled": true },
                 { "key": "positive_theme", "value": "Staff", "disabled": true },
                 { "key": "negative_theme", "value": "Value", "disabled": true },
+                { "key": "date_time_from", "value": "", "disabled": true, "description": "ISO created-date window start" },
+                { "key": "date_time_to", "value": "", "disabled": true, "description": "ISO created-date window end" },
+                { "key": "product_sku", "value": "", "disabled": true },
+                { "key": "parent_product_sku", "value": "", "disabled": true },
+                { "key": "booking_type", "value": "", "disabled": true },
+                { "key": "loyalty", "value": "", "disabled": true },
+                { "key": "search", "value": "", "disabled": true, "description": "free-text (Phase 5)" },
                 { "key": "sort", "value": "newest", "disabled": true, "description": "newest|oldest" }
               ]
             },

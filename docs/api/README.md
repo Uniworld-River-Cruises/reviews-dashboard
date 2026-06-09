@@ -67,37 +67,31 @@ CDN-cached**, so you lose the cheap/fast edge cache.
 So: never put the `client_secret` (or a long-lived token derived from it) in a
 public web page.
 
-### Calling from the browser — three safe patterns
+### Calling from the browser
 
-1. **Publishable key (recommended for on-page widgets).** Issue a *separate*,
-   restricted key that is safe to embed because it is **origin-locked**
-   (only works from your domains, checked via the `Origin`/`Referer` header),
-   **read-only**, tightly rate-limited, and cacheable. Even if copied, it only
-   works from your site. This is the Stripe *publishable key* / Algolia
-   *search-only key* / Google Maps *API key* model — and Feefo's own *public
-   widgets* vs its OAuth Reviews API.
+The decision for this project is **server-side only** — we do **not** issue a
+browser-embeddable key. Front-end review data is served by **your own backend**,
+not by calling this API directly from the browser:
 
-2. **Backend proxy (most control, best for SEO).** Your server exposes a thin
-   *same-origin* endpoint (e.g. `/api/reviews`) that calls the real API with the
-   secret server-side and returns sanitized JSON. The browser never sees a
-   credential; you also get server-side caching and can server-render review
-   content + schema.org JSON-LD for rich snippets.
+- **Backend proxy (the pattern we use).** Your server exposes a thin
+  *same-origin* endpoint (e.g. `/api/reviews`) that calls this API with the
+  `client_secret` server-side and returns JSON to your front end. The browser
+  never sees a credential, you get server-side caching, and it's the right place
+  to server-render review content + schema.org JSON-LD for SEO.
 
-3. **Token broker.** Your server mints a short-lived, scope-limited token on
-   demand and hands it to the browser. More moving parts; usually unnecessary
-   when (1) or (2) suffice.
+A publishable, origin-locked key for direct browser calls (the Stripe /
+Algolia / Google Maps model) is intentionally **out of scope for v1**. It could
+be added later if a true on-page widget is ever needed — see the plan's
+[open decisions](../plans/2026-06-09-public-reviews-api.md#open-decisions).
 
 ### Recommendation for this project
 
-> Mostly server-to-server, with some client-side JS.
+> Mostly server-to-server, with front-end needs served by your own backend.
 
-- **Server-to-server** → confidential client (`client_id` + `client_secret`).
-  Use it from your site's backend and for partners.
-- **Client-side JS / widgets / SEO** → a **publishable, origin-locked key** on
-  the cached public path, *or* a **backend proxy** when you want to server-render
-  for SEO.
+- **Server-to-server** (your site's backend, partners, pipelines) → confidential
+  client (`client_id` + `client_secret`), exactly as in this Postman collection.
+- **Anything the front end needs** → route it through your backend's own
+  same-origin endpoints (backend proxy), which call this API server-side.
 
-This mirrors Feefo (OAuth API for servers + public widgets for pages) and keeps
-the `client_secret` off every public surface. The publishable-key path is an
-[open decision](../plans/2026-06-09-public-reviews-api.md#open-decisions) — flag
-whether you want it and we'll include it in the build.
+This mirrors Feefo's own split (a server-side OAuth API; public widgets are a
+separate concern) and keeps the `client_secret` off every public surface.
