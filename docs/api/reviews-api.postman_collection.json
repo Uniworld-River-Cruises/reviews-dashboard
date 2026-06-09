@@ -1,0 +1,168 @@
+{
+  "info": {
+    "_postman_id": "b3f1c0de-1a2b-4c3d-8e9f-0a1b2c3d4e5f",
+    "name": "Uniworld Reviews API (v1)",
+    "description": "Public, read-only reviews API for Uniworld brands. Emulates the Feefo NativeReviews API (merchant_identifier selection, OAuth client-credentials token exchange, reviews/all + reviews/summary/all envelopes) and adds AI enrichment (themes, normalized attributes, itinerary grouping, media/comment flags).\n\nAUTH: run **Auth > Get access token** first. Its test script saves `access_token` into the `accessToken` collection variable, and every other request inherits Bearer auth from the collection. Tokens are short-lived (default 1h) — re-run when you get a 401.\n\nSet `baseUrl`, `clientId`, and `clientSecret` (collection variables, or import the bundled environment). The API is being built against this contract — see docs/plans/2026-06-09-public-reviews-api.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://feefo-reviews.web.app/api", "type": "string" },
+    { "key": "clientId", "value": "", "type": "string" },
+    { "key": "clientSecret", "value": "", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "merchantIdentifier", "value": "uniworld", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Get access token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && body.access_token) {",
+                  "  pm.collectionVariables.set('accessToken', body.access_token);",
+                  "  console.log('Saved accessToken; expires_in=' + body.expires_in + 's');",
+                  "} else {",
+                  "  console.warn('No access_token in response — check client_id / client_secret');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"{{clientId}}\",\n  \"client_secret\": \"{{clientSecret}}\",\n  \"grant_type\": \"client_credentials\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/oauth/token",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "oauth", "token"]
+            },
+            "description": "Exchange client_id + client_secret for a short-lived bearer token. Mirrors Feefo's POST /oauth/v2/token. The test script stores access_token in the `accessToken` collection variable so the rest of the collection authenticates automatically."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "List reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reviews/all?merchant_identifier={{merchantIdentifier}}&page_size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "reviews", "all"],
+              "query": [
+                { "key": "merchant_identifier", "value": "{{merchantIdentifier}}", "description": "uniworld | luxury-gold | all" },
+                { "key": "page_size", "value": "20", "description": "max 100" },
+                { "key": "page", "value": "1", "disabled": true },
+                { "key": "cursor", "value": "", "disabled": true, "description": "opaque token for deep pagination (preferred over page)" },
+                { "key": "since_period", "value": "year", "disabled": true, "description": "week|month|quarter|half_year|year|all (created date)" },
+                { "key": "since_updated_period", "value": "month", "disabled": true },
+                { "key": "rating", "value": "5", "disabled": true, "description": "minimum headline star 1-5" },
+                { "key": "has_media", "value": "true", "disabled": true },
+                { "key": "review_type", "value": "product", "disabled": true, "description": "all|service|product" },
+                { "key": "ship", "value": "", "disabled": true },
+                { "key": "tour", "value": "", "disabled": true },
+                { "key": "region", "value": "", "disabled": true },
+                { "key": "positive_theme", "value": "Staff", "disabled": true },
+                { "key": "negative_theme", "value": "Value", "disabled": true },
+                { "key": "date_time_from", "value": "", "disabled": true, "description": "ISO created-date window start" },
+                { "key": "date_time_to", "value": "", "disabled": true, "description": "ISO created-date window end" },
+                { "key": "product_sku", "value": "", "disabled": true },
+                { "key": "parent_product_sku", "value": "", "disabled": true },
+                { "key": "booking_type", "value": "", "disabled": true },
+                { "key": "loyalty", "value": "", "disabled": true },
+                { "key": "search", "value": "", "disabled": true, "description": "free-text (Phase 5)" },
+                { "key": "sort", "value": "newest", "disabled": true, "description": "newest|oldest" }
+              ]
+            },
+            "description": "Paginated, filtered review list (Feefo /reviews/all envelope + per-review `enrichment`). `merchant_identifier` selects the brand; results are also constrained to the credential's merchant scope."
+          }
+        },
+        {
+          "name": "Get review by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reviews/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "reviews", ":id"],
+              "variable": [{ "key": "id", "value": "REPLACE_WITH_REVIEW_ID", "description": "stable review id from a list response" }]
+            },
+            "description": "Single review by its stable id — for permalinks / SEO pages."
+          }
+        },
+        {
+          "name": "Get summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/reviews/summary/all?merchant_identifier={{merchantIdentifier}}&scope=fleet",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "reviews", "summary", "all"],
+              "query": [
+                { "key": "merchant_identifier", "value": "{{merchantIdentifier}}" },
+                { "key": "scope", "value": "fleet", "description": "fleet | ship | itinerary" },
+                { "key": "scope_value", "value": "", "disabled": true, "description": "ship or itinerary name when scope != fleet" }
+              ]
+            },
+            "description": "Aggregate ratings, star distribution, and top themes (served from the precomputed summaries collection — one cheap read)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Meta",
+      "item": [
+        {
+          "name": "List themes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/meta/themes",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "meta", "themes"]
+            },
+            "description": "The AI theme taxonomy (positive/negative names + descriptions) for building filter UIs."
+          }
+        },
+        {
+          "name": "List merchants",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/meta/merchants",
+              "host": ["{{baseUrl}}"],
+              "path": ["v1", "meta", "merchants"]
+            },
+            "description": "Available merchant_identifiers + display labels for this org."
+          }
+        }
+      ]
+    }
+  ]
+}
