@@ -141,6 +141,87 @@ check "meta/themes: 200 with 10+10" "200:10:10" "$code:$(json "$T/r" 'b.themes.p
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${LGAUTH[@]}" "$BASE/v1/meta/merchants")
 check "meta/merchants: scoped to credential" "200:luxury-gold" "$code:$(json "$T/r" 'b.merchants.map(m=>m.merchant_identifier).join()')"
 
+# ── Input hardening (untrusted values must never reach Firestore paths) ────
+code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "$BASE/v1/oauth/token" -H "Content-Type: application/json" \
+  -d '{"client_id":"evil/../../path","client_secret":"x","grant_type":"client_credentials"}')
+check "hardening: client_id with slash -> 400 (not 500)" "400:invalid_request" "$code:$(json "$T/r" 'b.error.code')"
+
+# Tamper a REAL cursor (valid query hash) so validation must fail on the
+# position value itself, not just the hash binding.
+TAMPERED=$("$NODE" -e "
+const c=JSON.parse(require('fs').readFileSync('$T/p1','utf8')).summary.next_cursor;
+const p=JSON.parse(Buffer.from(c,'base64url').toString('utf8'));
+for (const k of Object.keys(p.m)) p.m[k]='a/b/../c';
+console.log(Buffer.from(JSON.stringify(p)).toString('base64url'))")
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?page_size=2&cursor=$TAMPERED")
+check "hardening: tampered cursor position -> 400 invalid_cursor" "400:invalid_cursor" "$code:$(json "$T/r" 'b.error.code')"
+
+ARRCUR=$("$NODE" -e "
+const c=JSON.parse(require('fs').readFileSync('$T/p1','utf8')).summary.next_cursor;
+const p=JSON.parse(Buffer.from(c,'base64url').toString('utf8'));
+p.m=[];
+console.log(Buffer.from(JSON.stringify(p)).toString('base64url'))")
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?page_size=2&cursor=$ARRCUR")
+check "hardening: array cursor map -> 400 invalid_cursor" "400:invalid_cursor" "$code:$(json "$T/r" 'b.error.code')"
+
+LONGCUR=$("$NODE" -e "console.log('A'.repeat(3000))")
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?cursor=$LONGCUR")
+check "hardening: oversized cursor -> 400 invalid_cursor" "400:invalid_cursor" "$code:$(json "$T/r" 'b.error.code')"
+
+# ── sort=oldest ─────────────────────────────────────────────────────────────
+curl -s -o "$T/old" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=oldest" >/dev/null
+check "sort=oldest: ascending order, exact reverse of newest" "true" "$("$NODE" -e "
+const n=JSON.parse(require('fs').readFileSync('$T/all','utf8')).reviews.map(r=>r.id);
+const o=JSON.parse(require('fs').readFileSync('$T/old','utf8')).reviews.map(r=>r.id);
+console.log(String(JSON.stringify(o)===JSON.stringify([...n].reverse())))")"
+
+# ── Multi-page post-filter cursor walk ──────────────────────────────────────
+curl -s -o "$T/r1" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&page_size=1" >/dev/null
+RC1=$(json "$T/r1" 'b.summary.next_cursor')
+curl -s -o "$T/r2" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&page_size=1&cursor=$RC1" >/dev/null
+check "post-filter walk: 2 pages, distinct ids, both rating 5" "1:1:true:true" \
+  "$(json "$T/r1" 'b.reviews.length')":"$(json "$T/r2" 'b.reviews.length')":"$("$NODE" -e "
+const a=JSON.parse(require('fs').readFileSync('$T/r1','utf8')).reviews[0];
+const b=JSON.parse(require('fs').readFileSync('$T/r2','utf8')).reviews[0];
+console.log(String(a.id!==b.id))")":"$("$NODE" -e "
+const head=r=>r.products[0].rating.rating ?? (r.service&&r.service.rating.rating);
+const a=JSON.parse(require('fs').readFileSync('$T/r1','utf8')).reviews[0];
+const b=JSON.parse(require('fs').readFileSync('$T/r2','utf8')).reviews[0];
+console.log(String(Math.round(head(a))===5&&Math.round(head(b))===5))")"
+
+# ── Credential lifecycle (requires apiClients mgmt endpoint + sync token) ───
+MGMT="${MGMT:-${BASE%/*}/apiClients}"
+SYNC_TOKEN="${SYNC_TOKEN:-local-test-sync-token}"
+code=$(curl -s -o "$T/lc" -w "%{http_code}" -X POST "$MGMT" -H "Content-Type: application/json" \
+  -H "x-sync-token: $SYNC_TOKEN" -d '{"action":"create","label":"Smoke lifecycle","merchants":["uniworld"]}')
+if [ "$code" = "200" ]; then
+  LCID=$(json "$T/lc" 'b.client.clientId'); LCSEC=$(json "$T/lc" 'b.clientSecret')
+  curl -s -o "$T/lct" -X POST "$BASE/v1/oauth/token" -H "Content-Type: application/json" \
+    -d "{\"client_id\":\"$LCID\",\"client_secret\":\"$LCSEC\",\"grant_type\":\"client_credentials\"}" >/dev/null
+  LCTOK=$(json "$T/lct" 'b.access_token')
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $LCTOK" "$BASE/v1/reviews/all?merchant_identifier=uniworld")
+  check "lifecycle: fresh client token reads its merchant" "200" "$code"
+  curl -s -o "$T/lcr" -X POST "$MGMT" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+    -d "{\"action\":\"rotate\",\"clientId\":\"$LCID\"}" >/dev/null
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $LCTOK" "$BASE/v1/reviews/all")
+  check "lifecycle: old token 401s IMMEDIATELY after rotate" "401" "$code"
+  NEWSEC=$(json "$T/lcr" 'b.clientSecret')
+  curl -s -o "$T/lct2" -X POST "$BASE/v1/oauth/token" -H "Content-Type: application/json" \
+    -d "{\"client_id\":\"$LCID\",\"client_secret\":\"$NEWSEC\",\"grant_type\":\"client_credentials\"}" >/dev/null
+  LCTOK2=$(json "$T/lct2" 'b.access_token')
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $LCTOK2" "$BASE/v1/reviews/all")
+  check "lifecycle: rotated secret's token works" "200" "$code"
+  curl -s -o /dev/null -X POST "$MGMT" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+    -d "{\"action\":\"revoke\",\"clientId\":\"$LCID\"}"
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $LCTOK2" "$BASE/v1/reviews/all")
+  check "lifecycle: token 401s IMMEDIATELY after revoke" "401" "$code"
+  code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "$BASE/v1/oauth/token" -H "Content-Type: application/json" \
+    -d "{\"client_id\":\"$LCID\",\"client_secret\":\"$NEWSEC\",\"grant_type\":\"client_credentials\"}")
+  check "lifecycle: exchange after revoke -> 401 invalid_client" "401:invalid_client" "$code:$(json "$T/r" 'b.error.code')"
+else
+  echo "SKIP  lifecycle checks (apiClients mgmt endpoint unavailable: $code — set SYNC_TOKEN/MGMT)"
+fi
+
 # ── Misc behaviour ─────────────────────────────────────────────────────────
 code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "${AUTH[@]}" "$BASE/v1/reviews/all")
 check "method: POST reviews/all -> 405" "405" "$code"

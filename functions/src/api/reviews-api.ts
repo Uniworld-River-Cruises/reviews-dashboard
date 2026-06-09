@@ -387,15 +387,37 @@ const INVALID_CURSOR = new ApiError(
   "The cursor is invalid, expired, or was issued for a different query."
 );
 
+const MAX_CURSOR_LENGTH = 2048;
+const DOC_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/** Decode and STRICTLY validate an attacker-suppliable cursor: bounded
+ * length, bound to the query hash, `m` a plain non-null object, and every
+ * position either null, "done", or a doc-id-safe string — nothing else may
+ * ever reach a Firestore document path. */
 function decodeCursor(raw: string, expectedKey: string): Record<string, string | null> {
+  if (raw.length > MAX_CURSOR_LENGTH) throw INVALID_CURSOR;
   let payload: CursorPayload;
   try {
     payload = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as CursorPayload;
   } catch {
     throw INVALID_CURSOR;
   }
-  if (payload?.v !== 1 || payload.q !== expectedKey || typeof payload.m !== "object") {
+  if (
+    payload === null ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    payload.v !== 1 ||
+    payload.q !== expectedKey ||
+    payload.m === null ||
+    typeof payload.m !== "object" ||
+    Array.isArray(payload.m)
+  ) {
     throw INVALID_CURSOR;
+  }
+  for (const value of Object.values(payload.m)) {
+    if (value !== null && value !== "done" && !(typeof value === "string" && DOC_ID_PATTERN.test(value))) {
+      throw INVALID_CURSOR;
+    }
   }
   return payload.m;
 }
@@ -769,10 +791,17 @@ async function handleToken(
   if (!clientId || !clientSecret) {
     throw new ApiError(400, "invalid_request", "client_id and client_secret are required.");
   }
+  // Reject malformed ids BEFORE any Firestore access: untrusted strings must
+  // never reach a document path (a "/" would address a nested path or throw).
+  if (!/^[A-Za-z0-9_-]{4,80}$/.test(clientId) || clientSecret.length > 200) {
+    throw new ApiError(400, "invalid_request", "client_id or client_secret is malformed.");
+  }
 
   // Brute-force guard: failed and successful exchanges both count against a
-  // per-client_id budget, checked before any secret verification.
-  await enforceRateLimit(`token:${clientId.slice(0, 80)}`, TOKEN_RATE_LIMIT_PER_MINUTE);
+  // per-client_id budget, checked before any secret verification. The key is
+  // hashed so the rate-limit doc id never embeds caller-controlled bytes.
+  const rateKey = `token_${createHash("sha256").update(clientId).digest("hex").slice(0, 40)}`;
+  await enforceRateLimit(rateKey, TOKEN_RATE_LIMIT_PER_MINUTE);
 
   const invalidClient = new ApiError(401, "invalid_client", "Invalid client credentials.");
   const client = await loadApiClient(clientId);

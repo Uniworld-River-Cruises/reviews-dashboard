@@ -152,20 +152,46 @@ export function invalidateClientCache(clientId: string): void {
   clientCache.delete(clientId);
 }
 
+/**
+ * Mint an access token for a client whose secret has just been verified.
+ *
+ * The token document is written inside a TRANSACTION that re-reads the
+ * client and aborts if its status, tokenVersion, or secretVerifier changed
+ * since verification. This closes the race where an admin revokes/rotates
+ * between the secret check and the token write: either the mint commits
+ * first (and the admin's outstanding-token sweep deletes it), or the
+ * transaction observes the change and refuses — a stale-version token can
+ * never be created after the sweep ran.
+ */
 export async function mintAccessToken(
   client: ApiClientRecord
 ): Promise<{ accessToken: string; expiresIn: number }> {
   const db = getFirestore();
   const token = generateAccessToken();
-  await db.collection(API_TOKENS_COLLECTION).doc(hashAccessToken(token)).set({
-    clientId: client.clientId,
-    merchants: client.merchants,
-    scopes: client.scopes,
-    tokenVersion: client.tokenVersion,
-    createdAt: new Date().toISOString(),
-    // Stored as a Timestamp so a Firestore TTL policy on `expiresAt` can
-    // garbage-collect expired tokens.
-    expiresAt: Timestamp.fromMillis(Date.now() + TOKEN_TTL_SECONDS * 1000),
+  const tokenRef = db.collection(API_TOKENS_COLLECTION).doc(hashAccessToken(token));
+  const clientRef = db.collection(API_CLIENTS_COLLECTION).doc(client.clientId);
+
+  await db.runTransaction(async (txn) => {
+    const snap = await txn.get(clientRef);
+    const current = snap.exists ? recordFromSnapshot(snap.id, snap.data() ?? {}) : null;
+    if (
+      !current ||
+      current.status !== "active" ||
+      current.tokenVersion !== client.tokenVersion ||
+      current.secretVerifier !== client.secretVerifier
+    ) {
+      throw new ApiError(401, "invalid_client", "Invalid client credentials.");
+    }
+    txn.create(tokenRef, {
+      clientId: current.clientId,
+      merchants: current.merchants,
+      scopes: current.scopes,
+      tokenVersion: current.tokenVersion,
+      createdAt: new Date().toISOString(),
+      // Stored as a Timestamp so a Firestore TTL policy on `expiresAt` can
+      // garbage-collect expired tokens.
+      expiresAt: Timestamp.fromMillis(Date.now() + TOKEN_TTL_SECONDS * 1000),
+    });
   });
 
   db.collection(API_CLIENTS_COLLECTION)
@@ -211,13 +237,25 @@ export async function authenticateRequest(req: any): Promise<AuthContext> {
   }
 
   const clientId = typeof data.clientId === "string" ? data.clientId : "";
-  const client = await loadApiClientCached(clientId);
+  let client = await loadApiClientCached(clientId);
   if (
     !client ||
     client.status !== "active" ||
     client.tokenVersion !== data.tokenVersion
   ) {
-    throw INVALID_TOKEN;
+    // The cached record may be stale in EITHER direction (e.g. a token
+    // minted right after a rotate, validated on an instance still caching
+    // the pre-rotate record). Re-read once before rejecting so freshly
+    // minted tokens never 401 on instances with a stale cache.
+    client = await loadApiClient(clientId);
+    clientCache.set(clientId, { record: client, fetchedAt: Date.now() });
+    if (
+      !client ||
+      client.status !== "active" ||
+      client.tokenVersion !== data.tokenVersion
+    ) {
+      throw INVALID_TOKEN;
+    }
   }
 
   return {
