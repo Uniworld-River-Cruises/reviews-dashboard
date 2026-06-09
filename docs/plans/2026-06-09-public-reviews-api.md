@@ -1,7 +1,7 @@
 # Public Reviews API — Recommendation & Design
 
 **Date:** 2026-06-09
-**Status:** Proposed (recommendation) · revised after code review (Codex, PR #61)
+**Status:** Phases 1–3 implemented & emulator-verified (`reviews-api-implementation` branch) · remaining: Phase 4 hardening (Firestore rules tightening, service star distribution), the dashboard "API Access" UI, and Phase 5 search · design revised after code review (Codex, PR #61)
 **Owner:** TBD
 
 > **Dependency / status:** the customer-name rule this design reuses (`resolveDisplayName()`) was added to the website in **PR #60**, now **merged** — `app/src/lib/format/customer.ts` is on `main`, so the base dependency is satisfied. (This `reviews-public-api` branch was cut before #60, so it won't contain that file until it's synced with `main`; that doesn't affect the design.)
