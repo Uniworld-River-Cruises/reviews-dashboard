@@ -18,11 +18,18 @@ A Postman collection for the public, read-only **Reviews API** described in
 
 1. In Postman: **Import** → drop both files in.
 2. Select the **Uniworld Reviews API** environment (top-right).
-3. Set `clientId` and `clientSecret` (from the dashboard's **API Access** page).
+3. Get credentials, either:
+   - **Create them in Postman** (owners/admins): set the `syncToken` variable to
+     the `SYNC_API_TOKEN` value, then run **Admin → Create API client**. Its test
+     script auto-saves `clientId`/`clientSecret` into the collection — **copy the
+     secret from the response to a password manager; it is shown exactly once.**
+   - Or paste an existing `clientId`/`clientSecret` into the variables.
 4. Run **Auth → Get access token**. Its test script saves `accessToken` automatically.
 5. Run anything under **Reviews** / **Meta** — they inherit the bearer token.
 
 When you get a `401`, the token expired (default 1h) — re-run **Get access token**.
+**Admin** also has List / Rotate / Revoke; rotate and revoke kill the client's
+outstanding tokens immediately.
 
 ### Variables
 

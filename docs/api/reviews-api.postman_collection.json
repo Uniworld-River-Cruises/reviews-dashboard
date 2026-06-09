@@ -14,9 +14,124 @@
     { "key": "clientId", "value": "", "type": "string" },
     { "key": "clientSecret", "value": "", "type": "string" },
     { "key": "accessToken", "value": "", "type": "string" },
-    { "key": "merchantIdentifier", "value": "uniworld", "type": "string" }
+    { "key": "merchantIdentifier", "value": "uniworld", "type": "string" },
+    { "key": "managementUrl", "value": "https://us-central1-feefo-reviews.cloudfunctions.net/apiClients", "type": "string" },
+    { "key": "syncToken", "value": "", "type": "string" }
   ],
   "item": [
+    {
+      "name": "Admin — manage API clients",
+      "description": "Credential management (create / list / rotate / revoke), for dashboard owners/admins. These hit the `apiClients` admin function directly (set `managementUrl`), NOT the public /v1 API, and authenticate with the `x-sync-token` header — set the `syncToken` variable to your SYNC_API_TOKEN value. (A Firebase ID bearer token from a signed-in admin works too.)\n\n'Create API client' auto-saves the returned clientId/clientSecret into the collection variables, so you can run Auth > Get access token immediately after. THE SECRET IS SHOWN ONCE — copy it to a password manager.",
+      "item": [
+        {
+          "name": "Create API client",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && body.client && body.clientSecret) {",
+                  "  pm.collectionVariables.set('clientId', body.client.clientId);",
+                  "  pm.collectionVariables.set('clientSecret', body.clientSecret);",
+                  "  console.log('Saved clientId=' + body.client.clientId);",
+                  "  console.warn('clientSecret saved to collection vars AND shown in this response ONLY — copy it to a password manager now; it cannot be retrieved again.');",
+                  "} else {",
+                  "  console.warn('No client/clientSecret in response — check syncToken and request body.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-sync-token", "value": "{{syncToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"create\",\n  \"label\": \"Marketing website (prod)\",\n  \"merchants\": [\"*\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{managementUrl}}", "host": ["{{managementUrl}}"] },
+            "description": "Creates a credential. `merchants`: [\"*\"] for all, or e.g. [\"uniworld\"] to scope it. Optional `scopes` (defaults to all of reviews:read, summary:read, meta:read). The response's clientSecret appears ONCE."
+          }
+        },
+        {
+          "name": "List API clients",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-sync-token", "value": "{{syncToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"list\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{managementUrl}}", "host": ["{{managementUrl}}"] },
+            "description": "All clients with label, merchants, scopes, status, lastUsedAt. Secrets/verifiers are never returned."
+          }
+        },
+        {
+          "name": "Rotate client secret",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body && body.clientSecret) {",
+                  "  pm.collectionVariables.set('clientSecret', body.clientSecret);",
+                  "  console.warn('New clientSecret saved — the old secret and ALL outstanding tokens are dead. Copy the new secret now; it is shown once.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-sync-token", "value": "{{syncToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"rotate\",\n  \"clientId\": \"{{clientId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{managementUrl}}", "host": ["{{managementUrl}}"] },
+            "description": "Issues a new secret and immediately invalidates the old secret AND every outstanding access token for this client."
+          }
+        },
+        {
+          "name": "Revoke API client",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-sync-token", "value": "{{syncToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"revoke\",\n  \"clientId\": \"{{clientId}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{managementUrl}}", "host": ["{{managementUrl}}"] },
+            "description": "Permanently disables the client: token exchanges fail and every outstanding access token dies immediately."
+          }
+        }
+      ]
+    },
     {
       "name": "Auth",
       "item": [
