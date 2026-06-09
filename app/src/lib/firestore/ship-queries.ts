@@ -1,6 +1,7 @@
 "use client";
 
 import { getClientDb } from "@/lib/firebase";
+import { resolveDisplayName } from "@/lib/format/customer";
 import type { DateField, DateRange } from "@/contexts/DashboardContext";
 import {
   dateFieldPath,
@@ -388,7 +389,7 @@ function mapShipReviewDoc(
 
   return {
     id,
-    guestName: data.customer?.displayName || data.customer?.name || "Trusted Customer",
+    guestName: resolveDisplayName(data.customer),
     rating: data.ratings?.product ?? data.ratings?.service ?? 0,
     itinerary: data.tags?.tour || data.product?.title || "",
     ship: data.tags?.ship || "",
@@ -559,7 +560,7 @@ export async function getShipQuotes(
 
     const quote: Quote = {
       id: d.id,
-      guestName: data.customer?.displayName || data.customer?.name || "Guest",
+      guestName: resolveDisplayName(data.customer, "Guest"),
       rating,
       ship: data.tags?.ship || shipName,
       itinerary: data.tags?.tour || data.product?.title || "",

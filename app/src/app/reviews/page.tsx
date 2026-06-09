@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useDashboard, type DateField } from "@/contexts/DashboardContext";
 import { useBrand } from "@/contexts/BrandContext";
 import { getClientDb } from "@/lib/firebase";
+import { resolveDisplayName } from "@/lib/format/customer";
 import {
   collection,
   query,
@@ -55,7 +56,7 @@ function mapReviewDoc(
         : "";
   return {
     id: doc.id,
-    customerName: d.customer?.displayName || "Trusted Customer",
+    customerName: resolveDisplayName(d.customer),
     serviceRating: typeof d.ratings?.service === "number" ? d.ratings.service : null,
     productRating: typeof d.ratings?.product === "number" ? d.ratings.product : null,
     ship: d.tags?.ship || "",
