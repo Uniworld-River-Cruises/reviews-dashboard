@@ -104,6 +104,11 @@ Optional GitHub Actions secrets:
 - `ALGOLIA_APP_ID`
 - `ALGOLIA_ADMIN_KEY`
 - `REQUIRE_ADMIN_CLAIM`
+- `REVIEWS_API_SECRET_PEPPER`
+  Required for the public reviews API (`reviewsApi` / `apiClients` functions):
+  a long random value (32+ chars) used to HMAC API client secret verifiers.
+  Without it the token endpoint returns 500 `not_configured`. Rotating it
+  invalidates every existing API client secret.
 
 The workflow writes:
 
