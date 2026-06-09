@@ -3,6 +3,7 @@ import { isMerchantIdentifier } from "@feefo/shared";
 import {
   ALL_SCOPES,
   API_CLIENTS_COLLECTION,
+  API_TOKENS_COLLECTION,
   ApiClientRecord,
   computeSecretVerifier,
   generateClientId,
@@ -12,6 +13,28 @@ import {
   loadApiClient,
 } from "./auth";
 import { ApiError } from "./http";
+
+/**
+ * Delete every outstanding access token for a client. Revocation must be
+ * immediate, and the in-memory client cache in auth.ts is per-instance —
+ * invalidating it here cannot reach the reviewsApi instances. Removing the
+ * token documents makes the per-request token lookup fail everywhere at
+ * once, regardless of any instance's cache.
+ */
+async function deleteOutstandingTokens(clientId: string): Promise<number> {
+  const db = getFirestore();
+  const snapshot = await db
+    .collection(API_TOKENS_COLLECTION)
+    .where("clientId", "==", clientId)
+    .get();
+  if (snapshot.empty) return 0;
+  const writer = db.bulkWriter();
+  for (const doc of snapshot.docs) {
+    writer.delete(doc.ref);
+  }
+  await writer.close();
+  return snapshot.size;
+}
 
 /**
  * Management operations for API credentials, called by the authenticated
@@ -144,8 +167,9 @@ async function requireClient(clientId: unknown): Promise<ApiClientRecord> {
   return record;
 }
 
-/** Revoke a client: blocks new tokens AND invalidates every outstanding
- * token immediately (the per-request check sees status/tokenVersion). */
+/** Revoke a client: blocks new token exchanges AND kills every outstanding
+ * token immediately (their api_tokens docs are deleted, so validation fails
+ * on the next request from any instance). */
 export async function revokeApiClient(clientId: unknown): Promise<PublicApiClient> {
   const record = await requireClient(clientId);
   const db = getFirestore();
@@ -155,12 +179,14 @@ export async function revokeApiClient(clientId: unknown): Promise<PublicApiClien
     tokenVersion: record.tokenVersion + 1,
     updatedAt: now,
   });
+  await deleteOutstandingTokens(record.clientId);
   invalidateClientCache(record.clientId);
   return sanitize({ ...record, status: "revoked", tokenVersion: record.tokenVersion + 1, updatedAt: now });
 }
 
-/** Rotate a client's secret. Outstanding tokens are invalidated via the
- * tokenVersion bump; the new secret is returned exactly once. */
+/** Rotate a client's secret. Outstanding tokens are killed immediately
+ * (token docs deleted + tokenVersion bump); the new secret is returned
+ * exactly once. */
 export async function rotateApiClient(
   clientId: unknown
 ): Promise<{ client: PublicApiClient; clientSecret: string }> {
@@ -178,6 +204,7 @@ export async function rotateApiClient(
     tokenVersion: record.tokenVersion + 1,
     updatedAt: now,
   });
+  await deleteOutstandingTokens(record.clientId);
   invalidateClientCache(record.clientId);
 
   return {

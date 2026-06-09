@@ -129,8 +129,11 @@ export async function loadApiClient(clientId: string): Promise<ApiClientRecord |
 }
 
 /** Per-instance cache so token validation doesn't read the client document
- * on every request. 60s staleness bound on revocation is acceptable; rotate
- * + revoke also delete the token docs' validity via tokenVersion. */
+ * on every request. This cache is NOT the revocation mechanism — it is
+ * per-instance, so other instances never see invalidateClientCache().
+ * Revoke/rotate are immediate because they DELETE the client's outstanding
+ * api_tokens docs (see api-clients.ts); the cached client record only
+ * backs the status/tokenVersion sanity check. */
 const clientCache = new Map<string, { record: ApiClientRecord | null; fetchedAt: number }>();
 const CLIENT_CACHE_TTL_MS = 60_000;
 
