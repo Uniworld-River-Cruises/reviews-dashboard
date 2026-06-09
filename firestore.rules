@@ -21,6 +21,18 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    // Public reviews API credential store — Admin SDK only. The catch-all
+    // below already denies these; the explicit blocks make the intent
+    // auditable and survive future rule refactors.
+    match /api_clients/{clientId} {
+      allow read, write: if false;
+    }
+    match /api_tokens/{tokenHash} {
+      allow read, write: if false;
+    }
+    match /api_rate_limits/{key} {
+      allow read, write: if false;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

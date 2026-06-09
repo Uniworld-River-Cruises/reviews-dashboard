@@ -1,6 +1,6 @@
 import { getFirestore, type Query } from "firebase-admin/firestore";
 
-export type OperationLogType = "sync" | "classification" | "summary";
+export type OperationLogType = "sync" | "classification" | "summary" | "apiClient";
 export type OperationLogLevel = "info" | "success" | "warning" | "error";
 export type OperationLogSource = "scheduled" | "manual" | "system";
 
@@ -75,7 +75,10 @@ export async function listOperationLogs(options?: {
     const data = doc.data() ?? {};
     return {
       id: doc.id,
-      type: data.type === "classification" || data.type === "summary" ? data.type : "sync",
+      type:
+        data.type === "classification" || data.type === "summary" || data.type === "apiClient"
+          ? data.type
+          : "sync",
       level:
         data.level === "success" ||
         data.level === "warning" ||
