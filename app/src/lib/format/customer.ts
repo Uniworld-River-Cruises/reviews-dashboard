@@ -1,8 +1,8 @@
 /**
  * Resolve the customer name we are allowed to display publicly.
  *
- * The ONLY name we ever surface is Feefo's `display_name` — the value the
- * reviewer consented to show publicly. We deliberately do NOT fall back to
+ * The ONLY name we ever surface is the consented display name
+ * (`customer.displayName`, sourced from Feefo's `display_name`). We deliberately do NOT fall back to
  * `customer.name` (the unmasked full name), which is PII and must never reach
  * a rendered surface or the public API.
  *
