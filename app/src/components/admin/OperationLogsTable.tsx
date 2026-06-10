@@ -258,8 +258,18 @@ function getDetailRows(log: OperationLogEntry): DetailRow[] {
   return rows.concat(fallbackRows);
 }
 
+function typeLabel(type: string): string {
+  return type === "apiClient" ? "API client" : type;
+}
+
 function actionLabel(action: string): string {
   switch (action) {
+    case "client_created":
+      return "API client created";
+    case "client_rotated":
+      return "API client secret rotated";
+    case "client_revoked":
+      return "API client revoked";
     case "cycle_started":
       return "Sync run started";
     case "cycle_complete":
@@ -339,7 +349,7 @@ export default function OperationLogsTable({
                 </td>
                 <td className="px-4 py-3">
                   <span className="inline-flex rounded-full bg-brand-primary-light px-2 py-0.5 text-xs font-medium capitalize text-text-primary">
-                    {log.type}
+                    {typeLabel(log.type)}
                   </span>
                 </td>
                 <td className="px-4 py-3">

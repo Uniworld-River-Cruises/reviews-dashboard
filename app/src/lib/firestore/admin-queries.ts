@@ -52,7 +52,7 @@ export interface KnownUser {
   active: boolean | null;
 }
 
-export type OperationLogType = "sync" | "classification" | "summary";
+export type OperationLogType = "sync" | "classification" | "summary" | "apiClient";
 export type OperationLogLevel = "info" | "success" | "warning" | "error";
 export type OperationLogSource = "scheduled" | "manual" | "system";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useBrand } from "@/contexts/BrandContext";
 import {
   createApiClient,
@@ -28,7 +28,15 @@ interface SecretReveal {
 
 type MerchantMode = "all" | "selected";
 
-function CopyButton({ value, what }: { value: string; what: string }) {
+function CopyButton({
+  value,
+  what,
+  autoFocus,
+}: {
+  value: string;
+  what: string;
+  autoFocus?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -46,6 +54,7 @@ function CopyButton({ value, what }: { value: string; what: string }) {
     <button
       type="button"
       onClick={copy}
+      autoFocus={autoFocus}
       className="inline-flex shrink-0 items-center rounded-lg border border-input-border bg-surface px-3 py-1.5 text-xs font-medium text-text-primary shadow-sm hover:bg-surface-hover"
       aria-label={`Copy ${what}`}
     >
@@ -119,14 +128,28 @@ export default function ApiClientsManager({
   // One-time secret reveal
   const [reveal, setReveal] = useState<SecretReveal | null>(null);
 
+  // Guard async state updates against unmount (route change / permission
+  // redirect mid-request). Set true inside the effect so StrictMode's
+  // dev-time remount doesn't leave it permanently false.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const loadClients = useCallback(async () => {
     setLoading(true);
     try {
-      setClients(await listApiClients());
+      const next = await listApiClients();
+      if (!mountedRef.current) return;
+      setClients(next);
     } catch (err) {
+      if (!mountedRef.current) return;
       onToast(err instanceof Error ? err.message : "Failed to load API clients");
     }
-    setLoading(false);
+    if (mountedRef.current) setLoading(false);
   }, [onToast]);
 
   useEffect(() => {
@@ -154,6 +177,7 @@ export default function ApiClientsManager({
     setCreating(true);
     try {
       const { client, clientSecret } = await createApiClient(trimmed, merchants);
+      if (!mountedRef.current) return;
       setReveal({
         kind: "created",
         label: client.label,
@@ -165,15 +189,17 @@ export default function ApiClientsManager({
       setSelectedMerchants([]);
       await loadClients();
     } catch (err) {
+      if (!mountedRef.current) return;
       onToast(err instanceof Error ? err.message : "Failed to create API client");
     }
-    setCreating(false);
+    if (mountedRef.current) setCreating(false);
   }
 
   async function handleRotate(client: ApiClient) {
     setBusyClientId(client.clientId);
     try {
       const { clientSecret } = await rotateApiClient(client.clientId);
+      if (!mountedRef.current) return;
       setReveal({
         kind: "rotated",
         label: client.label,
@@ -182,21 +208,24 @@ export default function ApiClientsManager({
       });
       await loadClients();
     } catch (err) {
+      if (!mountedRef.current) return;
       onToast(err instanceof Error ? err.message : "Failed to rotate secret");
     }
-    setBusyClientId(null);
+    if (mountedRef.current) setBusyClientId(null);
   }
 
   async function handleRevoke(client: ApiClient) {
     setBusyClientId(client.clientId);
     try {
       await revokeApiClient(client.clientId);
+      if (!mountedRef.current) return;
       onToast(`Revoked “${client.label}” — its tokens are dead immediately`);
       await loadClients();
     } catch (err) {
+      if (!mountedRef.current) return;
       onToast(err instanceof Error ? err.message : "Failed to revoke API client");
     }
-    setBusyClientId(null);
+    if (mountedRef.current) setBusyClientId(null);
   }
 
   return (
@@ -382,8 +411,13 @@ export default function ApiClientsManager({
       {/* Confirm rotate / revoke */}
       {confirmAction ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-text-primary">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-action-title"
+            className="w-full max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl"
+          >
+            <h3 id="confirm-action-title" className="text-lg font-semibold text-text-primary">
               {confirmAction.kind === "rotate" ? "Rotate secret?" : "Revoke client?"}
             </h3>
             <p className="mt-2 text-sm text-text-secondary">
@@ -406,6 +440,7 @@ export default function ApiClientsManager({
             <div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setConfirmAction(null)}
+                autoFocus
                 className="rounded-lg border border-input-border bg-surface px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-hover"
               >
                 Cancel
@@ -431,8 +466,13 @@ export default function ApiClientsManager({
       {/* One-time secret reveal */}
       {reveal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-text-primary">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="secret-reveal-title"
+            className="w-full max-w-lg rounded-xl border border-border bg-surface p-6 shadow-xl"
+          >
+            <h3 id="secret-reveal-title" className="text-lg font-semibold text-text-primary">
               {reveal.kind === "created" ? "API client created" : "Secret rotated"}
             </h3>
             <p className="mt-1 text-sm text-text-secondary">
@@ -452,7 +492,10 @@ export default function ApiClientsManager({
                   <code className="min-w-0 flex-1 overflow-x-auto rounded-lg bg-surface-alt px-3 py-2 text-xs text-text-primary">
                     {reveal.clientId}
                   </code>
-                  <CopyButton value={reveal.clientId} what="client id" />
+                  {/* Initial focus lands on a safe action — copying — rather
+                   * than the close button, so Enter can't dismiss an
+                   * unstored secret. */}
+                  <CopyButton value={reveal.clientId} what="client id" autoFocus />
                 </div>
               </div>
               <div>
