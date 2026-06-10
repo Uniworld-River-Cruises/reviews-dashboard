@@ -123,6 +123,7 @@ export default function AdminPage() {
   const canManageUsers = Boolean(currentAccess?.permissions.manageUsers);
   const canManageMappings = Boolean(currentAccess?.permissions.manageMappings);
   const canViewLogs = Boolean(currentAccess?.permissions.sync);
+  const canManageApiClients = Boolean(currentAccess?.permissions.manageApiClients);
 
   const loadAdminAccess = useCallback(async () => {
     setAdminUsersLoading(true);
@@ -236,7 +237,8 @@ export default function AdminPage() {
         const canUseAdminPage =
           access.permissions.sync ||
           access.permissions.manageMappings ||
-          access.permissions.manageUsers;
+          access.permissions.manageUsers ||
+          access.permissions.manageApiClients;
         if (!canUseAdminPage) {
           router.replace("/");
         }
@@ -726,6 +728,25 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+      ) : null}
+
+      {canManageApiClients ? (
+        <div className="mb-8 rounded-xl border border-border bg-surface shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-5">
+            <div>
+              <h2 className="text-xl font-semibold text-text-primary">API Access</h2>
+              <p className="mt-1 text-sm text-text-secondary">
+                Create and manage server-to-server credentials for the public reviews API.
+              </p>
+            </div>
+            <Link
+              href="/admin/api-access"
+              className="inline-flex items-center rounded-lg bg-header-bg px-4 py-2 text-sm font-medium text-header-text shadow-sm hover:opacity-90"
+            >
+              Manage API Clients
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       {canViewLogs ? (
