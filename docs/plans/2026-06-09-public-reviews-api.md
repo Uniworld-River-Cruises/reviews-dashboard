@@ -1,7 +1,7 @@
 # Public Reviews API — Recommendation & Design
 
 **Date:** 2026-06-09
-**Status:** Phases 1–3 implemented & emulator-verified (`reviews-api-implementation` branch) · remaining: Phase 4 hardening (Firestore rules tightening, service star distribution), the dashboard "API Access" UI, and Phase 5 search · design revised after code review (Codex, PR #61)
+**Status:** Phases 1–4 shipped — API live in prod (#62), dashboard "API Access" UI (#64), Phase 4 hardening (Firestore rules tightened to authenticated reads, CI deploys rules, service star distribution in summaries) · remaining: `merchant_registry` Firestore collection (deferred to the multi-tenant migration; the in-code registry exposes the same interface) and optional Phase 5 search (Algolia, needs its privacy pass first) · design revised after code review (Codex, PR #61)
 **Owner:** TBD
 
 > **Dependency / status:** the customer-name rule this design reuses (`resolveDisplayName()`) was added to the website in **PR #60**, now **merged** — `app/src/lib/format/customer.ts` is on `main`, so the base dependency is satisfied. (This `reviews-public-api` branch was cut before #60, so it won't contain that file until it's synced with `main`; that doesn't affect the design.)

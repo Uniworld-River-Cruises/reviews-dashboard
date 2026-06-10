@@ -127,9 +127,12 @@ check "scope: LG client fetching uniworld review id -> uniform 404" "404:review_
 # ── Summary ────────────────────────────────────────────────────────────────
 code=$(curl -s -o "$T/sum" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld")
 check "summary: uniworld fleet 200" "200:uniworld:3" "$code:$(json "$T/sum" 'b.merchant.identifier')":"$(json "$T/sum" 'b.meta.count')"
-check "summary: service distribution is null (product-only caveat)" "null" "$(json "$T/sum" 'String(b.rating.service)')"
+check "summary: service distribution populated (3 service ratings)" "3" "$(json "$T/sum" 'b.rating.service && b.rating.service.count')"
+curl -s -o "$T/sumlg" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=luxury-gold" >/dev/null
+check "summary: pre-Phase-4 doc (no service dist) -> service null" "null" "$(json "$T/sumlg" 'String(b.rating.service)')"
 code=$(curl -s -o "$T/suma" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all")
 check "summary: all -> merged across merchants" "200:all:5" "$code:$(json "$T/suma" 'b.merchant.identifier')":"$(json "$T/suma" 'b.meta.count')"
+check "summary: mixed merge (one doc lacks service) -> service null" "null" "$(json "$T/suma" 'String(b.rating.service)')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld&scope=ship&scope_value=S.S.%20Beatrice")
 check "summary: ship scope 200" "200:ship" "$code:$(json "$T/r" 'b.enrichment.scope')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld&scope=ship")
