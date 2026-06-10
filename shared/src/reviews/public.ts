@@ -192,6 +192,10 @@ export interface SummaryDocLike {
   reviewsWithComments: number;
   avgRating: number;
   starDistribution: Record<string, number>;
+  /** Present on summaries computed since the sync started tracking service
+   * ratings separately; older documents lack it (and the API emits
+   * rating.service: null for them rather than faking a distribution). */
+  serviceStarDistribution?: Record<string, number>;
   topPositiveThemes: { theme: string; count: number }[];
   topNegativeThemes: { theme: string; count: number }[];
   ships: string[];
@@ -216,10 +220,10 @@ export interface PublicSummary {
     max: number;
     rating: number;
     product: PublicStarDistribution;
-    /** Always null until the sync computes a service-rating distribution —
-     * compute-summaries.ts currently builds starDistribution from the
-     * product rating only. Never faked. */
-    service: null;
+    /** Service-rating distribution when the summary document carries one
+     * (serviceStarDistribution, computed by the sync since Phase 4); null
+     * for older documents — never faked. */
+    service: PublicStarDistribution | null;
   };
   enrichment: {
     scope: "fleet" | "ship" | "itinerary";
@@ -233,14 +237,34 @@ export interface PublicSummary {
   };
 }
 
+function toStarDistribution(
+  dist: Record<string, number> | undefined
+): PublicStarDistribution | null {
+  if (!dist || typeof dist !== "object") return null;
+  const star = (key: string): number =>
+    typeof dist[key] === "number" ? dist[key] : 0;
+  return {
+    count: star("1") + star("2") + star("3") + star("4") + star("5"),
+    "5_star": star("5"),
+    "4_star": star("4"),
+    "3_star": star("3"),
+    "2_star": star("2"),
+    "1_star": star("1"),
+  };
+}
+
 export function toPublicSummary(
   doc: SummaryDocLike,
   merchant: { identifier: string; name: string }
 ): PublicSummary {
-  const dist = doc.starDistribution ?? {};
-  const star = (key: string): number =>
-    typeof dist[key] === "number" ? dist[key] : 0;
-  const ratedCount = star("1") + star("2") + star("3") + star("4") + star("5");
+  const product = toStarDistribution(doc.starDistribution) ?? {
+    count: 0,
+    "5_star": 0,
+    "4_star": 0,
+    "3_star": 0,
+    "2_star": 0,
+    "1_star": 0,
+  };
 
   return {
     merchant: { identifier: merchant.identifier, name: merchant.name },
@@ -249,15 +273,8 @@ export function toPublicSummary(
       min: 1,
       max: 5,
       rating: doc.avgRating ?? 0,
-      product: {
-        count: ratedCount,
-        "5_star": star("5"),
-        "4_star": star("4"),
-        "3_star": star("3"),
-        "2_star": star("2"),
-        "1_star": star("1"),
-      },
-      service: null,
+      product,
+      service: toStarDistribution(doc.serviceStarDistribution),
     },
     enrichment: {
       scope: doc.scope,

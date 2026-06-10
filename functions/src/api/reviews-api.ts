@@ -655,6 +655,10 @@ function asSummaryDoc(data: FirebaseFirestore.DocumentData): SummaryDocLike {
       typeof data.starDistribution === "object" && data.starDistribution !== null
         ? (data.starDistribution as Record<string, number>)
         : {},
+    serviceStarDistribution:
+      typeof data.serviceStarDistribution === "object" && data.serviceStarDistribution !== null
+        ? (data.serviceStarDistribution as Record<string, number>)
+        : undefined,
     topPositiveThemes: Array.isArray(data.topPositiveThemes) ? data.topPositiveThemes : [],
     topNegativeThemes: Array.isArray(data.topNegativeThemes) ? data.topNegativeThemes : [],
     ships: Array.isArray(data.ships) ? data.ships : [],
@@ -684,6 +688,11 @@ function mergeSummaries(docs: SummaryDocLike[]): SummaryDocLike {
   const ships = new Set<string>();
   const itineraries = new Set<string>();
 
+  // Service distributions merge only when EVERY doc has one — a partial
+  // merge would silently undercount, so mixed inputs yield service: null.
+  const allHaveService = docs.every((doc) => doc.serviceStarDistribution);
+  const mergedService: Record<string, number> = {};
+
   for (const doc of docs) {
     merged.totalReviews += doc.totalReviews;
     merged.reviewsWithComments += doc.reviewsWithComments;
@@ -691,6 +700,13 @@ function mergeSummaries(docs: SummaryDocLike[]): SummaryDocLike {
     for (const [star, value] of Object.entries(doc.starDistribution)) {
       if (typeof value === "number") {
         merged.starDistribution[star] = (merged.starDistribution[star] ?? 0) + value;
+      }
+    }
+    if (allHaveService && doc.serviceStarDistribution) {
+      for (const [star, value] of Object.entries(doc.serviceStarDistribution)) {
+        if (typeof value === "number") {
+          mergedService[star] = (mergedService[star] ?? 0) + value;
+        }
       }
     }
     for (const t of doc.topPositiveThemes) positive[t.theme] = (positive[t.theme] ?? 0) + t.count;
@@ -704,6 +720,9 @@ function mergeSummaries(docs: SummaryDocLike[]): SummaryDocLike {
 
   merged.avgRating =
     merged.totalReviews > 0 ? Math.round((ratingWeight / merged.totalReviews) * 100) / 100 : 0;
+  if (allHaveService) {
+    merged.serviceStarDistribution = mergedService;
+  }
   merged.topPositiveThemes = Object.entries(positive)
     .map(([theme, count]) => ({ theme, count }))
     .sort((a, b) => b.count - a.count)
