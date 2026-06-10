@@ -189,6 +189,15 @@ async function main() {
     await db.collection("summaries").doc(s.id).set(s);
   }
 
+  await db.collection("monthly_summaries").doc("uniworld_2026-06").set({
+    id: "uniworld_2026-06",
+    brand: "uniworld",
+    month: "2026-06",
+    totalReviews: 2,
+    avgRating: 4.5,
+    starDistribution: { 1: 0, 2: 0, 3: 0, 4: 1, 5: 1 },
+  });
+
   await db.collection("sync_meta").doc("uniworld").set({
     status: "success",
     lastSyncAt: new Date().toISOString(),

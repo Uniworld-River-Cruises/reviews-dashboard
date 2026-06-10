@@ -30,6 +30,7 @@ status() { # status <url> [extra curl args...]
 # ── Unauthenticated reads must be denied on every dashboard collection ──────
 check "unauth read reviews -> 403"            "403" "$(status "$DOCS/reviews/aaaaaaaaaaaaaaaaaaaaaa01")"
 check "unauth read summaries -> 403"          "403" "$(status "$DOCS/summaries/uniworld")"
+check "unauth read monthly_summaries -> 403"  "403" "$(status "$DOCS/monthly_summaries/uniworld_2026-06")"
 check "unauth read sync_meta -> 403"          "403" "$(status "$DOCS/sync_meta/uniworld")"
 check "unauth read itinerary_mappings -> 403" "403" "$(status "$DOCS/itinerary_mappings/uniworld_enchanting-danube-8-days")"
 check "unauth list reviews -> 403"            "403" "$(status "$DOCS/reviews")"
@@ -45,7 +46,9 @@ fi
 
 check "authed read reviews -> 200"            "200" "$(status "$DOCS/reviews/aaaaaaaaaaaaaaaaaaaaaa01" -H "Authorization: Bearer $TOKEN")"
 check "authed read summaries -> 200"          "200" "$(status "$DOCS/summaries/uniworld" -H "Authorization: Bearer $TOKEN")"
+check "authed read monthly_summaries -> 200"  "200" "$(status "$DOCS/monthly_summaries/uniworld_2026-06" -H "Authorization: Bearer $TOKEN")"
 check "authed read sync_meta -> 200"          "200" "$(status "$DOCS/sync_meta/uniworld" -H "Authorization: Bearer $TOKEN")"
+check "authed read itinerary_mappings -> 200" "200" "$(status "$DOCS/itinerary_mappings/uniworld_enchanting-danube-8-days" -H "Authorization: Bearer $TOKEN")"
 
 # ── Credential store stays sealed even for signed-in users ──────────────────
 check "authed read api_clients -> 403"        "403" "$(status "$DOCS/api_clients/uw_live_local0test01" -H "Authorization: Bearer $TOKEN")"

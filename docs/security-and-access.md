@@ -60,6 +60,21 @@ All Firestore writes occur via the Admin SDK in Cloud Functions, which bypasses
 these rules; the dashboard only reads after `AuthGate` completes sign-in
 (verified: no client Firestore read exists outside the authenticated subtree).
 
+### Sign-in providers are part of the PII boundary
+
+`request.auth != null` admits **any** authenticated Firebase user in this
+project, and the Firebase web API key is public by design. The dashboard UI
+only offers tenant-pinned Microsoft SSO, but that is a UI choice — if a
+self-service provider (email/password, anonymous, etc.) were enabled in the
+Firebase console, an outsider could mint an account via the Auth REST API and
+read review PII directly.
+
+**Operational requirement:** in Firebase Console → Authentication →
+Sign-in method, ONLY the tenant-restricted Microsoft provider may be enabled.
+Verify this whenever auth configuration changes, and after any project
+recreation. A rules-level backstop (custom-claim or domain check) is the
+natural next hardening step if provider config cannot be guaranteed.
+
 CI deploys rules and indexes together with functions/hosting
 (`firebase deploy --only functions,hosting,firestore`).
 
