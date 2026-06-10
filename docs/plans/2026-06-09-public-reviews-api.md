@@ -1,7 +1,7 @@
 # Public Reviews API — Recommendation & Design
 
 **Date:** 2026-06-09
-**Status:** Phases 1–3 implemented & emulator-verified (`reviews-api-implementation` branch) · remaining: Phase 4 hardening (Firestore rules tightening, service star distribution), the dashboard "API Access" UI, and Phase 5 search · design revised after code review (Codex, PR #61)
+**Status:** Phases 1–4 shipped — API live in prod (#62), dashboard "API Access" UI (#64), Phase 4 hardening (Firestore rules tightened to authenticated reads, CI deploys rules, service star distribution in summaries) · remaining: `merchant_registry` Firestore collection (deferred to the multi-tenant migration; the in-code registry exposes the same interface) and optional Phase 5 search (Algolia, needs its privacy pass first) · design revised after code review (Codex, PR #61)
 **Owner:** TBD
 
 > **Dependency / status:** the customer-name rule this design reuses (`resolveDisplayName()`) was added to the website in **PR #60**, now **merged** — `app/src/lib/format/customer.ts` is on `main`, so the base dependency is satisfied. (This `reviews-public-api` branch was cut before #60, so it won't contain that file until it's synced with `main`; that doesn't affect the design.)
@@ -211,7 +211,7 @@ Feefo-shaped summary served from the precomputed [`summaries`](../../functions/s
   "rating": {
     "min": 1, "max": 5, "rating": 4.81,
     "product": { "count": 1790, "5_star": 1500, "4_star": 210, "3_star": 50, "2_star": 20, "1_star": 10 },
-    "service": null
+    "service": { "count": 1760, "5_star": 1480, "4_star": 200, "3_star": 50, "2_star": 18, "1_star": 12 }
   },
   "enrichment": {
     "scope": "fleet", "reviews_with_comments": 1203,
@@ -222,7 +222,7 @@ Feefo-shaped summary served from the precomputed [`summaries`](../../functions/s
 }
 ```
 
-> **Star-distribution caveat:** `compute-summaries.ts` builds `starDistribution` and `avgRating` from the **product** rating only (for fleet, ship, itinerary, and monthly summaries). So `rating.service` is emitted as **`null`** (shown above) until a sync change computes the service distribution — never faked. Adding `service` is part of Phase 4.
+> **`rating.service` semantics (Phase 4):** `rating.service` is `PublicStarDistribution | null`. It is populated from `serviceStarDistribution`, which `compute-summaries.ts` has written since Phase 4 — so it is **null for summary documents computed before Phase 4** (until the next recompute) and **null for `merchant_identifier=all` merges where any merchant's document lacks it** (a partial merge would undercount). It is never faked. `rating.rating` / `product` remain product-based, matching the dashboard.
 
 ---
 

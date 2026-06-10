@@ -1,24 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Dashboard collections require a signed-in user. Review documents carry
+    // customer PII (name/email/order refs), so they must never be world-
+    // readable; the dashboard only ever reads after AuthGate completes
+    // sign-in, and the public reviews API serves a sanitized projection via
+    // the Admin SDK (which bypasses these rules). All writes go through the
+    // Admin SDK in Cloud Functions.
     match /reviews/{reviewId} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
     match /summaries/{summaryId} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
     match /monthly_summaries/{docId} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
     match /sync_meta/{brandId} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
     match /itinerary_mappings/{mappingId} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
     // Public reviews API credential store — Admin SDK only. The catch-all

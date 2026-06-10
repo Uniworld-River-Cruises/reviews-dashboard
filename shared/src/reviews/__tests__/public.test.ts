@@ -219,7 +219,7 @@ describe("toPublicSummary", () => {
     lastUpdated: "2026-06-09T00:00:00Z",
   };
 
-  it("maps the Feefo-shaped envelope with service: null", () => {
+  it("maps the Feefo-shaped envelope; service is null when the doc lacks a service distribution", () => {
     const pub = toPublicSummary(summaryDoc, {
       identifier: "uniworld",
       name: "Uniworld",
@@ -236,6 +236,24 @@ describe("toPublicSummary", () => {
       "1_star": 10,
     });
     expect(pub.rating.service).toBeNull();
+  });
+
+  it("emits the service distribution when the doc carries one", () => {
+    const pub = toPublicSummary(
+      {
+        ...summaryDoc,
+        serviceStarDistribution: { "1": 12, "2": 18, "3": 50, "4": 200, "5": 1480 },
+      },
+      { identifier: "uniworld", name: "Uniworld" }
+    );
+    expect(pub.rating.service).toEqual({
+      count: 1760,
+      "5_star": 1480,
+      "4_star": 200,
+      "3_star": 50,
+      "2_star": 18,
+      "1_star": 12,
+    });
   });
 
   it("carries scope and enrichment fields", () => {

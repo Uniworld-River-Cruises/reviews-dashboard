@@ -10,8 +10,14 @@ interface Summary {
   scopeValue: string | null;
   totalReviews: number;
   reviewsWithComments: number;
+  /** Average and distribution of PRODUCT ratings (the dashboard's headline). */
   avgRating: number;
   starDistribution: Record<string, number>;
+  /** Average and distribution of SERVICE ratings — Feefo splits the two, and
+   * the public API's summary endpoint mirrors that split. Reviews without a
+   * service rating are simply absent from this distribution. */
+  serviceAvgRating: number;
+  serviceStarDistribution: Record<string, number>;
   topPositiveThemes: { theme: string; count: number }[];
   topNegativeThemes: { theme: string; count: number }[];
   ships: string[];
@@ -203,6 +209,17 @@ function buildSummary(
     ratingSum += r;
   }
 
+  const serviceRatings = reviews
+    .map((r) => r.ratings.service)
+    .filter((r): r is number => r !== null);
+  const serviceStarDist: Record<string, number> = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
+  let serviceRatingSum = 0;
+
+  for (const r of serviceRatings) {
+    serviceStarDist[String(Math.round(r))] = (serviceStarDist[String(Math.round(r))] || 0) + 1;
+    serviceRatingSum += r;
+  }
+
   const positiveCounts: Record<string, number> = {};
   const negativeCounts: Record<string, number> = {};
 
@@ -225,6 +242,11 @@ function buildSummary(
     reviewsWithComments: reviews.filter((r) => r.hasComment).length,
     avgRating: ratings.length > 0 ? Math.round((ratingSum / ratings.length) * 100) / 100 : 0,
     starDistribution: starDist,
+    serviceAvgRating:
+      serviceRatings.length > 0
+        ? Math.round((serviceRatingSum / serviceRatings.length) * 100) / 100
+        : 0,
+    serviceStarDistribution: serviceStarDist,
     topPositiveThemes: Object.entries(positiveCounts)
       .map(([theme, count]) => ({ theme, count }))
       .sort((a, b) => b.count - a.count)

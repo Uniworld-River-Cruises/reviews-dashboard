@@ -132,10 +132,15 @@ const REVIEWS = [
   }),
 ];
 
-function summary({ brand, scope, scopeValue, reviews }) {
+function summary({ brand, scope, scopeValue, reviews, includeService = true }) {
   const ratings = reviews.map((r) => r.ratings.product).filter((r) => typeof r === "number");
   const dist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   for (const r of ratings) dist[Math.round(r)] += 1;
+  const serviceRatings = reviews
+    .map((r) => r.ratings.service)
+    .filter((r) => typeof r === "number");
+  const serviceDist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const r of serviceRatings) serviceDist[Math.round(r)] += 1;
   const positive = {};
   const negative = {};
   for (const r of reviews) {
@@ -153,6 +158,11 @@ function summary({ brand, scope, scopeValue, reviews }) {
     reviewsWithComments: reviews.filter((r) => r.hasComment).length,
     avgRating: ratings.length ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 100) / 100 : 0,
     starDistribution: { 1: dist[1], 2: dist[2], 3: dist[3], 4: dist[4], 5: dist[5] },
+    // includeService=false simulates a pre-Phase-4 summary doc, so the API's
+    // rating.service: null fallback stays exercised.
+    ...(includeService
+      ? { serviceStarDistribution: { 1: serviceDist[1], 2: serviceDist[2], 3: serviceDist[3], 4: serviceDist[4], 5: serviceDist[5] } }
+      : {}),
     topPositiveThemes: top(positive),
     topNegativeThemes: top(negative),
     ships: [...new Set(reviews.map((r) => r.tags.ship).filter(Boolean))],
@@ -171,12 +181,30 @@ async function main() {
   const luxuryGold = REVIEWS.filter((r) => r.brand === "luxury-gold");
   const summaries = [
     summary({ brand: "uniworld", scope: "fleet", scopeValue: null, reviews: uniworld }),
-    summary({ brand: "luxury-gold", scope: "fleet", scopeValue: null, reviews: luxuryGold }),
+    // No service distribution: simulates a summary written before Phase 4.
+    summary({ brand: "luxury-gold", scope: "fleet", scopeValue: null, reviews: luxuryGold, includeService: false }),
     summary({ brand: "uniworld", scope: "ship", scopeValue: "S.S. Beatrice", reviews: uniworld.filter((r) => r.tags.ship === "S.S. Beatrice") }),
   ];
   for (const s of summaries) {
     await db.collection("summaries").doc(s.id).set(s);
   }
+
+  await db.collection("monthly_summaries").doc("uniworld_2026-06").set({
+    id: "uniworld_2026-06",
+    brand: "uniworld",
+    month: "2026-06",
+    totalReviews: 2,
+    avgRating: 4.5,
+    starDistribution: { 1: 0, 2: 0, 3: 0, 4: 1, 5: 1 },
+  });
+
+  await db.collection("sync_meta").doc("uniworld").set({
+    status: "success",
+    lastSyncAt: new Date().toISOString(),
+    lastSyncReviewCount: uniworld.length,
+    maxSourceUpdatedAt: isoDaysAgo(1),
+    errorMessage: null,
+  });
 
   await db.collection("itinerary_mappings").doc("uniworld_enchanting-danube-8-days").set({
     rawName: "Enchanting Danube (8 Days)",
