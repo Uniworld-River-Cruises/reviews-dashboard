@@ -103,9 +103,29 @@ export default function ApiAccessPage() {
         <p className="mt-1 text-sm text-text-secondary">
           Credentials for the public reviews API — server-to-server only. Consumers
           exchange their client ID + secret for a bearer token, exactly like the Feefo
-          API. See the Postman collection in{" "}
-          <code className="rounded bg-surface-alt px-1 py-0.5 text-xs">docs/api/</code> for
-          the full contract.
+          API.
+        </p>
+        <p className="mt-2 text-sm text-text-secondary">
+          Explore every endpoint and try live calls in the{" "}
+          <a
+            href="/api/docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-text-primary underline hover:no-underline"
+          >
+            interactive API reference
+          </a>
+          . The raw{" "}
+          <a
+            href="/api/v1/openapi.json"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-text-primary underline hover:no-underline"
+          >
+            OpenAPI spec
+          </a>{" "}
+          imports into Postman/Insomnia, and there&rsquo;s a Postman collection in{" "}
+          <code className="rounded bg-surface-alt px-1 py-0.5 text-xs">docs/api/</code>.
         </p>
       </div>
 

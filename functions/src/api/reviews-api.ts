@@ -12,7 +12,8 @@ import {
   toPublicReview,
   toPublicSummary,
 } from "@feefo/shared";
-import { ApiError, newRequestId, sendError, sendJson } from "./http";
+import { ApiError, newRequestId, sendDoc, sendError, sendJson } from "./http";
+import { openApiDocument, renderDocsHtml } from "./openapi";
 import {
   AuthContext,
   authenticateRequest,
@@ -789,6 +790,40 @@ async function handleSummary(
   sendJson(res, requestId, 200, body, { req, cacheSeconds: 600 });
 }
 
+/**
+ * Extract client credentials from a token request, accepting all three
+ * shapes OAuth2 tooling uses: a JSON body, a form-encoded body (both parsed
+ * into req.body by the functions runtime), and HTTP Basic
+ * (`Authorization: Basic base64(client_id:client_secret)`, RFC 6749
+ * client_secret_basic). Body values win; Basic fills any gap. This is what
+ * lets the docs page's Authorize button drive the flow natively.
+ */
+function extractClientCredentials(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  req: any
+): { clientId: string; clientSecret: string; grantType: string } {
+  const body = typeof req.body === "object" && req.body !== null ? req.body : {};
+  let clientId = typeof body.client_id === "string" ? body.client_id.trim() : "";
+  let clientSecret = typeof body.client_secret === "string" ? body.client_secret : "";
+  const grantType = typeof body.grant_type === "string" ? body.grant_type : "";
+
+  const authHeader = req.headers?.authorization;
+  if ((!clientId || !clientSecret) && typeof authHeader === "string" && authHeader.startsWith("Basic ")) {
+    try {
+      const decoded = Buffer.from(authHeader.slice(6).trim(), "base64").toString("utf8");
+      const sep = decoded.indexOf(":");
+      if (sep >= 0) {
+        if (!clientId) clientId = decoded.slice(0, sep).trim();
+        if (!clientSecret) clientSecret = decoded.slice(sep + 1);
+      }
+    } catch {
+      // Malformed Basic header — fall through to the missing-credential error.
+    }
+  }
+
+  return { clientId, clientSecret, grantType };
+}
+
 async function handleToken(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   req: any,
@@ -799,10 +834,7 @@ async function handleToken(
 ): Promise<void> {
   const pepper = getSecretPepper();
 
-  const body = typeof req.body === "object" && req.body !== null ? req.body : {};
-  const clientId = typeof body.client_id === "string" ? body.client_id.trim() : "";
-  const clientSecret = typeof body.client_secret === "string" ? body.client_secret : "";
-  const grantType = typeof body.grant_type === "string" ? body.grant_type : "";
+  const { clientId, clientSecret, grantType } = extractClientCredentials(req);
 
   if (grantType !== "client_credentials") {
     throw new ApiError(400, "unsupported_grant_type", "grant_type must be client_credentials.");
@@ -862,6 +894,27 @@ export async function handleApiRequest(req: any, res: any): Promise<void> {
         throw new ApiError(405, "method_not_allowed", "Use POST for the token endpoint.");
       }
       await handleToken(req, res, requestId, log);
+      return;
+    }
+
+    // Public, unauthenticated developer documentation. The contract is not
+    // sensitive (it describes the sanitized public API), so the spec and the
+    // reference page are served to anyone — like Feefo's own public docs.
+    if (path === "/v1/openapi.json") {
+      if (req.method !== "GET") throw new ApiError(405, "method_not_allowed", "Use GET.");
+      sendDoc(res, requestId, JSON.stringify(openApiDocument), "application/json; charset=utf-8", {
+        req,
+        cacheSeconds: 3600,
+      });
+      return;
+    }
+
+    if (path === "/docs" || path === "/v1/docs") {
+      if (req.method !== "GET") throw new ApiError(405, "method_not_allowed", "Use GET.");
+      sendDoc(res, requestId, renderDocsHtml(), "text/html; charset=utf-8", {
+        req,
+        cacheSeconds: 3600,
+      });
       return;
     }
 
