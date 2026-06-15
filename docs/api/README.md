@@ -1,11 +1,25 @@
-# Reviews API — Postman & developer guide
+# Reviews API — developer guide
 
-A Postman collection for the public, read-only **Reviews API** described in
+The public, read-only **Reviews API** is live in production. Design:
 [docs/plans/2026-06-09-public-reviews-api.md](../plans/2026-06-09-public-reviews-api.md).
 
-> **Status:** the API is being built against this contract. The collection
-> targets the planned `/v1` endpoints so it's ready to point at the
-> Functions emulator (during development) or production (once deployed).
+## Interactive reference (start here)
+
+- **Docs / playground:** <https://feefo-reviews.web.app/api/docs> — every
+  endpoint, schemas, and live *Try it out*. Click **Authorize**, enter your
+  client ID + secret, and run calls right in the browser.
+- **OpenAPI spec:** <https://feefo-reviews.web.app/api/v1/openapi.json> — import
+  into Postman/Insomnia, or feed to `openapi-generator` for a typed client SDK.
+
+The Postman collection below is an equivalent hand-built starting point; the
+OpenAPI spec is the source of truth.
+
+## Postman
+
+| File | Import as |
+|---|---|
+| `reviews-api.postman_collection.json` | Collection |
+| `reviews-api.postman_environment.json` | Environment |
 
 ## Files
 

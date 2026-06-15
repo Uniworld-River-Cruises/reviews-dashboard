@@ -67,6 +67,10 @@ check "reviews/all: uniworld merchant field" "uniworld" "$(json "$T/uw" '[...new
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?has_media=true")
 check "reviews/all: has_media=true -> 2" "200:2" "$code:$(json "$T/r" 'b.summary.meta.count')"
 
+code=$(curl -s -o "$T/rnm" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?has_media=false")
+check "reviews/all: has_media=false -> 3 (real negative filter)" "200:3" "$code:$(json "$T/rnm" 'b.summary.meta.count')"
+check "reviews/all: has_media=false rows have no media" "true" "$(json "$T/rnm" 'String(b.reviews.every(r=>r.products[0].media.length===0))')"
+
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?positive_theme=Staff")
 check "reviews/all: positive_theme=Staff -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
 
@@ -224,6 +228,31 @@ if [ "$code" = "200" ]; then
 else
   echo "SKIP  lifecycle checks (apiClients mgmt endpoint unavailable: $code — set SYNC_TOKEN/MGMT)"
 fi
+
+# ── Developer docs (public, no auth) ───────────────────────────────────────
+code=$(curl -s -o "$T/spec" -w "%{http_code}" "$BASE/v1/openapi.json")
+check "openapi.json: 200 without auth" "200" "$code"
+check "openapi.json: valid 3.1 spec with paths" "3.1.0:present" \
+  "$(json "$T/spec" 'b.openapi')":"$(json "$T/spec" 'b.paths["/v1/reviews/all"]?"present":"missing"')"
+check "openapi.json: oauth2 token URL points at /v1/oauth/token" "true" \
+  "$(json "$T/spec" 'String(b.components.securitySchemes.oauth2.flows.clientCredentials.tokenUrl.endsWith("/v1/oauth/token"))')"
+ctype=$(curl -s -o "$T/docs" -D - "$BASE/docs" | grep -i "^content-type:" | tr -d '\r' | tr 'A-Z' 'a-z')
+check "docs: HTML content-type" "true" "$(echo "$ctype" | grep -q "text/html" && echo true || echo false)"
+check "docs: embeds Scalar + the spec" "true" \
+  "$(grep -q "@scalar/api-reference" "$T/docs" && grep -q '/v1/reviews/all' "$T/docs" && echo true || echo false)"
+
+# ── Token endpoint accepts form-encoded body and HTTP Basic ─────────────────
+code=$(curl -s -o "$T/tf" -w "%{http_code}" -X POST "$BASE/v1/oauth/token" \
+  -d "client_id=uw_live_local0test01&client_secret=local-test-secret-not-for-production-1234&grant_type=client_credentials")
+check "token: form-encoded body -> 200 Bearer" "200:Bearer" "$code:$(json "$T/tf" 'b.token_type')"
+code=$(curl -s -o "$T/tb" -w "%{http_code}" -X POST "$BASE/v1/oauth/token" \
+  -u "uw_live_local0test01:local-test-secret-not-for-production-1234" \
+  -d "grant_type=client_credentials")
+check "token: HTTP Basic creds -> 200 Bearer" "200:Bearer" "$code:$(json "$T/tb" 'b.token_type')"
+# A token obtained via the form/basic path must actually work.
+FTOKEN=$(json "$T/tf" 'b.access_token')
+code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $FTOKEN" "$BASE/v1/reviews/all?merchant_identifier=uniworld")
+check "token: form-obtained token authorizes a read" "200" "$code"
 
 # ── Misc behaviour ─────────────────────────────────────────────────────────
 code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "${AUTH[@]}" "$BASE/v1/reviews/all")
