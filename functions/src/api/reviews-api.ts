@@ -208,9 +208,16 @@ function parseListParams(req: any): ListParams {
     if (hasMediaRaw !== "true" && hasMediaRaw !== "false") {
       throw new ApiError(400, "invalid_parameter", "has_media must be 'true' or 'false'.");
     }
-    if (hasMediaRaw === "true") {
-      attributeCandidates.push({ param: "has_media", field: "hasMedia", op: "==", value: true });
-    }
+    // Equality on the persisted `hasMedia` boolean uses the same composite
+    // index for either value, so `has_media=false` is a real "no media"
+    // filter — matching the boolean documented in the OpenAPI spec rather
+    // than being a silent no-op.
+    attributeCandidates.push({
+      param: "has_media",
+      field: "hasMedia",
+      op: "==",
+      value: hasMediaRaw === "true",
+    });
   }
 
   if (attributeCandidates.length > 1) {

@@ -67,6 +67,10 @@ check "reviews/all: uniworld merchant field" "uniworld" "$(json "$T/uw" '[...new
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?has_media=true")
 check "reviews/all: has_media=true -> 2" "200:2" "$code:$(json "$T/r" 'b.summary.meta.count')"
 
+code=$(curl -s -o "$T/rnm" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?has_media=false")
+check "reviews/all: has_media=false -> 3 (real negative filter)" "200:3" "$code:$(json "$T/rnm" 'b.summary.meta.count')"
+check "reviews/all: has_media=false rows have no media" "true" "$(json "$T/rnm" 'String(b.reviews.every(r=>r.products[0].media.length===0))')"
+
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?positive_theme=Staff")
 check "reviews/all: positive_theme=Staff -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
 
