@@ -170,7 +170,8 @@ function buildServerConstraints(
   dateStart: string,
   dateEnd: string,
   filters: Filters,
-  dateField: DateField
+  dateField: DateField,
+  sort: SortOption = "newest"
 ): QueryConstraint[] {
   const constraints: QueryConstraint[] = [];
   const path = dateFieldPath(dateField);
@@ -227,7 +228,11 @@ function buildServerConstraints(
     constraints.push(where("hasMedia", "==", true));
   }
 
-  constraints.push(orderBy(path, "desc"));
+  // Sort direction lives on the Firestore query so picking "Oldest" reorders
+  // the *whole* match set (refetching from the beginning), not just the page
+  // that's already in memory. Indexes on (dates.created, dates.lastUpdated)
+  // are direction-agnostic, so this needs no new index work.
+  constraints.push(orderBy(path, sort === "oldest" ? "asc" : "desc"));
 
   return constraints;
 }
@@ -387,7 +392,7 @@ function ReviewsContent() {
 
     const db = getClientDb();
     const ref = collection(db, "reviews");
-    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField);
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField, sort);
     const countQuery = query(ref, ...constraints);
     const pagedQuery = query(ref, ...constraints, limit(PAGE_SIZE));
 
@@ -420,7 +425,7 @@ function ReviewsContent() {
 
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brand, dateStart, dateEnd, dateField, srvFilterKey, dataVersion]);
+  }, [brand, dateStart, dateEnd, dateField, srvFilterKey, sort, dataVersion]);
 
   // Load more from Firestore
   const loadMoreFromFirestore = useCallback(async () => {
@@ -429,7 +434,7 @@ function ReviewsContent() {
 
     const db = getClientDb();
     const ref = collection(db, "reviews");
-    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField);
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField, sort);
     constraints.push(startAfter(lastDoc), limit(PAGE_SIZE));
     const q = query(ref, ...constraints);
     try {
@@ -450,7 +455,7 @@ function ReviewsContent() {
       setLoadingMore(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastDoc, hasMoreFirestore, loadingMore, brand, dateStart, dateEnd, dateField, srvFilterKey]);
+  }, [lastDoc, hasMoreFirestore, loadingMore, brand, dateStart, dateEnd, dateField, srvFilterKey, sort]);
 
   // Sync state to URL using history API directly to avoid Next.js router re-render cycles
   useEffect(() => {
@@ -477,6 +482,50 @@ function ReviewsContent() {
   const handleLoadMore = useCallback(() => {
     if (hasMoreFirestore) loadMoreFromFirestore();
   }, [hasMoreFirestore, loadMoreFromFirestore]);
+
+  /**
+   * Paginate through every review matching the current server-side filters
+   * (date range + brand + ship/region/etc + hasMedia, in the active sort
+   * direction) and return the full list — for the "Export CSV" button.
+   * The page render only ever holds the loaded slice; this runs on demand
+   * so the CSV reflects every match, not just whatever's in memory.
+   *
+   * Stops at MAX_EXPORT_ROWS as a safety net against accidentally pulling
+   * tens of thousands of docs into one CSV download.
+   */
+  const MAX_EXPORT_ROWS = 10000;
+  const EXPORT_PAGE_SIZE = 500;
+  const fetchAllForExport = useCallback(async (): Promise<ReviewData[]> => {
+    const db = getClientDb();
+    const ref = collection(db, "reviews");
+    const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField, sort);
+    const parentLookup = await getParentNameLookup(brand);
+    const collected: ReviewData[] = [];
+    let cursor: QueryDocumentSnapshot<DocumentData> | null = null;
+
+    while (collected.length < MAX_EXPORT_ROWS) {
+      const pageConstraints: QueryConstraint[] = [...constraints];
+      if (cursor) pageConstraints.push(startAfter(cursor));
+      pageConstraints.push(limit(EXPORT_PAGE_SIZE));
+      const snap = await getDocs(query(ref, ...pageConstraints));
+      if (snap.empty) break;
+
+      for (const d of snap.docs) {
+        collected.push(mapReviewDoc(d, dateField, parentLookup));
+        if (collected.length >= MAX_EXPORT_ROWS) break;
+      }
+
+      if (snap.docs.length < EXPORT_PAGE_SIZE) break;
+      cursor = snap.docs[snap.docs.length - 1];
+    }
+
+    // The page applies brand sub-filter, ratings, themes, and free-text
+    // search on the client. The export should respect those too — if the
+    // user filtered to "5 stars" on the page, they expect the CSV to
+    // contain only 5-star reviews. Sort runs server-side so the array is
+    // already in the right order.
+    return applyClientFilters(collected, filters, search);
+  }, [brand, dateStart, dateEnd, dateField, sort, filters, search]);
 
   const handleThemeClick = useCallback(
     (theme: string, type: "positive" | "negative") => {
@@ -555,7 +604,7 @@ function ReviewsContent() {
           />
         </div>
         <div className="flex items-center gap-3">
-          <ExportButton reviews={sorted} />
+          <ExportButton fetchAll={fetchAllForExport} totalCount={totalMatching} />
           {loading && hasLoadedReviews && (
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-secondary">
               <span className="h-3 w-3 animate-spin rounded-full border-2 border-spinner-track border-t-spinner-accent" />
