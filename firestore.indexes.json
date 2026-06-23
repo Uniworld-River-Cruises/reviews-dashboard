@@ -1071,6 +1071,102 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.ship", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.tour", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.tour", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.region", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.region", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.bookingType", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.bookingType", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.loyalty", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tags.loyalty", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "hasMedia", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "hasMedia", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -32,7 +32,7 @@ import FilterSidebar, {
   emptyFilters,
 } from "@/components/reviews/FilterSidebar";
 import ReviewCard, { type ReviewData } from "@/components/reviews/ReviewCard";
-import ExportButton from "@/components/reviews/ExportButton";
+import ExportButton, { type ExportFetchResult } from "@/components/reviews/ExportButton";
 
 // ---------------------------------------------------------------------------
 // Firestore → ReviewData mapper
@@ -312,6 +312,12 @@ function ReviewsContent() {
   const { dateRange, dateField, dataVersion } = useDashboard();
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const hasLoadedReviewsRef = useRef(false);
+  /** Monotonically incremented on every server-filter / sort change so an
+   * in-flight `loadMoreFromFirestore` can detect that its result is stale
+   * and refuse to append. Without this, picking a new sort or filter
+   * while a Load more was already running would splice the old page on
+   * top of the freshly-refetched first page. */
+  const queryGenerationRef = useRef(0);
 
   // Parse initial state from URL
   const initial = paramsToFilters(searchParams);
@@ -380,6 +386,9 @@ function ReviewsContent() {
   // Main query — re-fetch when brand, date range, or server-side filters change
   useEffect(() => {
     let cancelled = false;
+    // Bump the generation so any in-flight loadMoreFromFirestore knows its
+    // result belongs to a stale query and won't append to the new first page.
+    queryGenerationRef.current += 1;
     const isInitialLoad = !hasLoadedReviewsRef.current;
     setLoading(true);
     setError(null);
@@ -432,6 +441,12 @@ function ReviewsContent() {
     if (!lastDoc || !hasMoreFirestore || loadingMore) return;
     setLoadingMore(true);
 
+    // Snapshot the generation at request time. If the user changes a
+    // server filter or sort before this resolves, the main useEffect
+    // bumps the generation and the comparison below stops us appending
+    // a stale page on top of the freshly-refetched first page.
+    const startedAt = queryGenerationRef.current;
+
     const db = getClientDb();
     const ref = collection(db, "reviews");
     const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField, sort);
@@ -439,13 +454,21 @@ function ReviewsContent() {
     const q = query(ref, ...constraints);
     try {
       const snap = await getDocs(q);
+      if (queryGenerationRef.current !== startedAt) {
+        // Filters/sort changed mid-flight. The main effect already
+        // reset allReviews / lastDoc / hasMoreFirestore; this page
+        // belongs to the previous query and must be discarded.
+        return;
+      }
 
       const parentLookup = await getParentNameLookup(brand);
+      if (queryGenerationRef.current !== startedAt) return;
       const newReviews = snap.docs.map((d) => mapReviewDoc(d, dateField, parentLookup));
       setAllReviews((prev) => [...prev, ...newReviews]);
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMoreFirestore(snap.docs.length === PAGE_SIZE);
     } catch (err) {
+      if (queryGenerationRef.current !== startedAt) return;
       console.error("Failed to load more reviews", err);
       setError(
         err instanceof Error ? err.message : "Unable to load more reviews right now."
@@ -491,17 +514,20 @@ function ReviewsContent() {
    * so the CSV reflects every match, not just whatever's in memory.
    *
    * Stops at MAX_EXPORT_ROWS as a safety net against accidentally pulling
-   * tens of thousands of docs into one CSV download.
+   * tens of thousands of docs into one CSV download. When the cap is hit,
+   * the returned envelope carries `truncated: true` so the button can
+   * warn the user instead of silently delivering a partial CSV.
    */
   const MAX_EXPORT_ROWS = 10000;
   const EXPORT_PAGE_SIZE = 500;
-  const fetchAllForExport = useCallback(async (): Promise<ReviewData[]> => {
+  const fetchAllForExport = useCallback(async (): Promise<ExportFetchResult> => {
     const db = getClientDb();
     const ref = collection(db, "reviews");
     const constraints = buildServerConstraints(brand, dateStart, dateEnd, filters, dateField, sort);
     const parentLookup = await getParentNameLookup(brand);
     const collected: ReviewData[] = [];
     let cursor: QueryDocumentSnapshot<DocumentData> | null = null;
+    let truncated = false;
 
     while (collected.length < MAX_EXPORT_ROWS) {
       const pageConstraints: QueryConstraint[] = [...constraints];
@@ -511,10 +537,14 @@ function ReviewsContent() {
       if (snap.empty) break;
 
       for (const d of snap.docs) {
+        if (collected.length >= MAX_EXPORT_ROWS) {
+          truncated = true;
+          break;
+        }
         collected.push(mapReviewDoc(d, dateField, parentLookup));
-        if (collected.length >= MAX_EXPORT_ROWS) break;
       }
 
+      if (truncated) break;
       if (snap.docs.length < EXPORT_PAGE_SIZE) break;
       cursor = snap.docs[snap.docs.length - 1];
     }
@@ -524,7 +554,8 @@ function ReviewsContent() {
     // user filtered to "5 stars" on the page, they expect the CSV to
     // contain only 5-star reviews. Sort runs server-side so the array is
     // already in the right order.
-    return applyClientFilters(collected, filters, search);
+    const filtered = applyClientFilters(collected, filters, search);
+    return { reviews: filtered, truncated, scannedCount: collected.length, cap: MAX_EXPORT_ROWS };
   }, [brand, dateStart, dateEnd, dateField, sort, filters, search]);
 
   const handleThemeClick = useCallback(
