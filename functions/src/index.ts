@@ -8,6 +8,7 @@ import { syncAll } from "./sync/sync-reviews";
 import { computeSummaries } from "./sync/compute-summaries";
 import { submitClassificationBatch, processBatchResults } from "./sync/batch-classify";
 import { backfillMissingThemes } from "./sync/backfill-themes";
+import { reclassifyThemes } from "./sync/reclassify-themes";
 import { backfillMissingMedia } from "./sync/backfill-media";
 import { backfillHasMedia } from "./sync/backfill-has-media";
 import {
@@ -506,6 +507,35 @@ export const backfillThemes = onRequest(
       actorUid: caller.uid,
     });
     console.log(`backfillThemes by ${caller.source}:${caller.email ?? caller.uid}`, result);
+    res.json(result);
+  }
+);
+
+// One-shot: after a classifier model change, queue every commented review not
+// yet tagged by the current model. Themes stay visible until the scheduled
+// classification cycle replaces them. Pass `dryRun: true` to count only;
+// resume with `startAfterId` (the previous `lastScannedId`) while `done` is false.
+export const reclassifyThemesForModel = onRequest(
+  { timeoutSeconds: 540, memory: "1GiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "batchClassify");
+    if (!caller) return;
+
+    const startAfterId = req.body?.startAfterId;
+    if (startAfterId !== undefined && (typeof startAfterId !== "string" || !/^[^/]{1,1500}$/.test(startAfterId))) {
+      res.status(400).json({ error: "Invalid startAfterId." });
+      return;
+    }
+
+    const result = await reclassifyThemes({
+      dryRun: req.body?.dryRun === true,
+      startAfterId: startAfterId ?? null,
+      source: "manual",
+      actorEmail: caller.email,
+      actorUid: caller.uid,
+    });
+    console.log(`reclassifyThemesForModel by ${caller.source}:${caller.email ?? caller.uid}`, result);
     res.json(result);
   }
 );
