@@ -11,3 +11,10 @@ node_modules/
 app/out/
 app/.next/
 gha-creds-*.json
+
+# Local emulator tooling and output (scripts/dev-reset.sh)
+.tools/
+emulator.log
+*-debug.log
+shared/dist/
+functions/dist/

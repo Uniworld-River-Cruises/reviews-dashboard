@@ -7,8 +7,8 @@ When in doubt, copy Feefo. Filter names, date presets, sort defaults, terminolog
 
 ## Environment
 - Node 20 (root `.nvmrc` = 20.20.0). The machine's default node is v14, so use `nvm use 20` or call `C:\Users\matt.urbano\AppData\Local\nvm\v20.20.0\node.exe` directly.
-- Firebase emulators need Java: `JAVA_HOME` points at the repo-local `.tools\jre`.
-- Restart/reset the local stack with `scripts/dev-reset.sh` (kills stray java processes, restarts emulators, waits for "All emulators ready"). Smoke tests: `scripts/smoke-api.sh`, `scripts/smoke-rules.sh`. Seed data: `scripts/seed-emulator.js`.
+- Firebase emulators need Java 21 and firebase-tools, both repo-local and gitignored under `.tools/` (JRE at `.tools/jre/<jdk-dir>`, CLI at `.tools/node_modules/firebase-tools`; reinstall the CLI with `npm install --prefix .tools`).
+- Restart/reset the local stack with `bash scripts/dev-reset.sh [--seed] [--no-build]` (rebuilds shared/functions, stops the previous stack, starts emulators, waits for "All emulators ready"; it sets the JVM temp-dir and discovery-timeout workarounds this machine needs). Stop with `bash scripts/dev-reset.sh --stop`. `smoke-rules.sh` also needs the auth emulator: `EMULATORS=functions,firestore,auth bash scripts/dev-reset.sh --seed`. Smoke tests: `scripts/smoke-api.sh`, `scripts/smoke-rules.sh`. Seed data: `scripts/seed-emulator.js`.
 - Format-on-save is active in this workspace: after editing, expect files to be reformatted underneath you; re-read before further edits instead of fighting stale content.
 
 ## Credentials
