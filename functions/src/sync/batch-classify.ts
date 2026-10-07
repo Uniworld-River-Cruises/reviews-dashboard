@@ -1,5 +1,12 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { POSITIVE_THEMES, NEGATIVE_THEMES, VALID_POSITIVE_NAMES, VALID_NEGATIVE_NAMES } from "@feefo/shared";
+import {
+  VALID_POSITIVE_NAMES,
+  VALID_NEGATIVE_NAMES,
+  classifierPrompt,
+  classifierRequestParams,
+  extractResponseText,
+  isMerchantIdentifier,
+} from "@feefo/shared";
 import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
 
 const BATCH_SIZE = 10000; // Max requests per Anthropic batch
@@ -126,8 +133,7 @@ export async function submitClassificationBatch(
   console.log(`Found ${snapshot.size} unclassified reviews`);
 
   // 2. Build batch requests
-  const positiveList = POSITIVE_THEMES.map((t) => t.name).join(", ");
-  const negativeList = NEGATIVE_THEMES.map((t) => t.name).join(", ");
+  const requestParams = classifierRequestParams();
 
   const requests = snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -138,21 +144,14 @@ export async function submitClassificationBatch(
     return {
       custom_id: doc.id,
       params: {
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 256,
+        ...requestParams,
         messages: [
           {
             role: "user" as const,
-            content: `Classify the following guest review into themes. Return ONLY valid JSON with no markdown formatting, no explanation.
-
-Positive themes: ${positiveList}
-Negative themes: ${negativeList}
-
-Review:
-${reviewText}
-
-Return JSON: {"positive": ["Theme1"], "negative": ["Theme2"]}
-Return empty arrays if no themes match. Only use themes from the lists above.`,
+            content: classifierPrompt(
+              reviewText,
+              isMerchantIdentifier(data.brand) ? data.brand : null
+            ),
           },
         ],
       },
@@ -182,10 +181,11 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
     const batch = await response.json() as { id: string; processing_status: string };
     console.log(`Batch submitted: ${batch.id} (${batch.processing_status}), ${requests.length} requests`);
 
-    // Store batch ID in Firestore for polling
+    // Store batch ID (and the model it ran on) in Firestore for polling
     await batchMetaRef.set(
       {
         batchId: batch.id,
+        model: requestParams.model,
         submittedAt: new Date().toISOString(),
         totalRequests: requests.length,
         status: batch.processing_status,
@@ -204,6 +204,7 @@ Return empty arrays if no themes match. Only use themes from the lists above.`,
       actorUid: logContext.actorUid ?? null,
       details: {
         batchId: batch.id,
+        model: requestParams.model,
         totalRequests: requests.length,
         status: batch.processing_status,
       },
@@ -331,6 +332,8 @@ export async function processBatchResults(
   // 3. Parse and write to Firestore
   const writer = db.bulkWriter();
   let processed = 0;
+  let refused = 0;
+  let unparsed = 0;
 
   for (const line of lines) {
     try {
@@ -338,7 +341,12 @@ export async function processBatchResults(
         custom_id: string;
         result: {
           type: string;
-          message?: { content: Array<{ type: string; text: string }> };
+          message?: {
+            model: string;
+            stop_reason: string | null;
+            stop_details?: { category?: string | null } | null;
+            content: Array<{ type: string; text?: string }>;
+          };
           error?: { message: string };
         };
       };
@@ -348,16 +356,40 @@ export async function processBatchResults(
         continue;
       }
 
-      const text = result.result.message.content[0]?.text ?? "";
+      const message = result.result.message;
+      const reviewRef = db.collection("reviews").doc(result.custom_id);
+
+      // A declined request would be resubmitted on every run if left
+      // unclassified, so record it as classified with no themes.
+      if (message.stop_reason === "refusal") {
+        const category = message.stop_details?.category ?? "unknown";
+        console.warn(`Classifier declined ${result.custom_id} (${category})`);
+        writer.update(reviewRef, {
+          "themes.positive": [],
+          "themes.negative": [],
+          "themes.classifiedAt": new Date().toISOString(),
+          "themes.model": message.model,
+          "themes.refusal": category,
+        });
+        refused++;
+        continue;
+      }
+
+      const text = extractResponseText(message.content);
       const classification = parseClassification(text);
 
       if (!classification) {
-        console.warn(`Could not parse classification for ${result.custom_id} (response length: ${text.length})`);
+        console.warn(
+          `Could not parse classification for ${result.custom_id} ` +
+            `(stop_reason: ${message.stop_reason}, response length: ${text.length})`
+        );
+        unparsed++;
       } else {
-        writer.update(db.collection("reviews").doc(result.custom_id), {
+        writer.update(reviewRef, {
           "themes.positive": classification.positive,
           "themes.negative": classification.negative,
           "themes.classifiedAt": new Date().toISOString(),
+          "themes.model": message.model,
         });
         processed++;
       }
@@ -374,6 +406,8 @@ export async function processBatchResults(
     status: "complete",
     completedAt: new Date().toISOString(),
     processed,
+    refused,
+    unparsed,
     total: lines.length,
   });
   await writeOperationLog({
@@ -387,6 +421,8 @@ export async function processBatchResults(
     details: {
       batchId,
       processed,
+      refused,
+      unparsed,
       total: lines.length,
     },
   });

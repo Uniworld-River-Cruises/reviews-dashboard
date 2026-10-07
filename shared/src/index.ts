@@ -6,6 +6,8 @@ export * from "./feefo/normalize-itinerary";
 export * from "./types/review";
 export * from "./feefo/transform";
 export * from "./themes/definitions";
+export * from "./themes/model";
+export * from "./themes/prompt";
 export * from "./reviews/display-name";
 export * from "./reviews/public";
 // classifier is NOT re-exported here to avoid eagerly loading @anthropic-ai/sdk

@@ -1,4 +1,7 @@
-import { POSITIVE_THEMES, NEGATIVE_THEMES, VALID_POSITIVE_NAMES, VALID_NEGATIVE_NAMES } from "./definitions";
+import type { Brand } from "../feefo/types";
+import { VALID_POSITIVE_NAMES, VALID_NEGATIVE_NAMES } from "./definitions";
+import { classifierRequestParams, extractResponseText } from "./model";
+import { classifierPrompt } from "./prompt";
 
 // Lazy-load Anthropic SDK to avoid slowing down Firebase function initialization
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,29 +19,15 @@ export interface ClassificationResult {
   negative: string[];
 }
 
-const SYSTEM_PROMPT = `You are a review theme classifier for luxury travel brands (Uniworld river cruises and Luxury Gold tours). Given a guest review, identify which themes are present.
-
-POSITIVE THEMES:
-${POSITIVE_THEMES.map((t) => `- ${t.name}: ${t.description}`).join("\n")}
-
-NEGATIVE THEMES:
-${NEGATIVE_THEMES.map((t) => `- ${t.name}: ${t.description}`).join("\n")}
-
-Rules:
-- A review can have multiple positive AND negative themes
-- Only include a theme if the review clearly mentions that topic
-- A 5-star review can still have negative themes if the guest mentions issues
-- A 1-star review can still have positive themes if the guest praises specific aspects
-- Return ONLY valid theme names from the lists above
-
-Respond with JSON only, no markdown:
-{"positive": ["Theme1", "Theme2"], "negative": ["Theme1"]}`;
-
 async function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function classifyReview(reviewText: string, retries = 3): Promise<ClassificationResult> {
+export async function classifyReview(
+  reviewText: string,
+  retries = 3,
+  brand?: Brand | null
+): Promise<ClassificationResult> {
   if (!reviewText || reviewText.trim().length < 10) {
     return { positive: [], negative: [] };
   }
@@ -47,13 +36,16 @@ export async function classifyReview(reviewText: string, retries = 3): Promise<C
     try {
       const client = await getAnthropicClient();
       const response = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 256,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: reviewText }],
+        ...classifierRequestParams(),
+        messages: [{ role: "user", content: classifierPrompt(reviewText, brand) }],
       });
 
-      const text = response.content[0].type === "text" ? response.content[0].text : "";
+      if (response.stop_reason === "refusal") {
+        console.warn("Classifier declined review:", response.stop_details?.category ?? "unknown");
+        return { positive: [], negative: [] };
+      }
+
+      const text = extractResponseText(response.content);
       try {
         const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
         const parsed = JSON.parse(cleaned);
@@ -89,7 +81,7 @@ export async function classifyReview(reviewText: string, retries = 3): Promise<C
  * Retries with backoff handle any rate limit bursts.
  */
 export async function classifyBatch(
-  reviews: { id: string; text: string }[]
+  reviews: { id: string; text: string; brand?: Brand | null }[]
 ): Promise<Map<string, ClassificationResult>> {
   const results = new Map<string, ClassificationResult>();
   const CONCURRENCY = 8;
@@ -98,7 +90,7 @@ export async function classifyBatch(
     const batch = reviews.slice(i, i + CONCURRENCY);
     const settled = await Promise.allSettled(
       batch.map(async (review) => {
-        const result = await classifyReview(review.text);
+        const result = await classifyReview(review.text, undefined, review.brand);
         return { id: review.id, result };
       })
     );
