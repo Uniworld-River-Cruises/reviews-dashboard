@@ -40,6 +40,12 @@ export interface ReviewDocument {
     positive: string[];
     negative: string[];
     classifiedAt: string | null;
+    /** Model that produced the themes. Absent on reviews classified before
+     * this field existed (those were claude-haiku-4-5-20251001). */
+    model?: string | null;
+    /** Set when the model declined to classify (stop_reason "refusal"); the
+     * review is marked classified with empty themes so it isn't resubmitted. */
+    refusal?: string | null;
   };
   media: { type: string; url: string }[];
   dates: {
