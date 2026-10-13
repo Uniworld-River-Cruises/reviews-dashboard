@@ -169,6 +169,7 @@ export default function AdminLogsPage() {
             <option value="classification">Classification</option>
             <option value="summary">Summary</option>
             <option value="apiClient">API clients</option>
+            <option value="website">Website queue</option>
           </select>
           <button
             onClick={() => loadLogs(range)}
