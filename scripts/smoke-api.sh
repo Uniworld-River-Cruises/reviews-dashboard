@@ -249,6 +249,26 @@ code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?we
 check "website=approved&positive_theme=Staff -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&parent_product_sku=UW-DAN")
 check "website=approved&parent_product_sku=UW-DAN -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=culinary&parent_product_sku=UW-DAN")
+check "website=approved&placement=culinary&parent_product_sku=UW-DAN -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=culinary&ship=S.S.%20Beatrice")
+check "website=approved&placement=culinary&ship -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=guest-stories&tour=Enchanting%20Danube%20(8%20Days)")
+check "website=approved&placement=guest-stories&tour -> 0 (aa01 is culinary)" "200:0" "$code:$(json "$T/r" 'b.summary.meta.count')"
+# The emulator doesn't enforce composite indexes, so check the file: every
+# filter website=approved combines with (except positive_theme, which can't
+# take placement) needs a placement index in both created-date directions.
+check "indexes: placement + each website filter, both directions" "ok" "$("$NODE" -e "
+const ix=JSON.parse(require('fs').readFileSync('firestore.indexes.json','utf8')).indexes.map(i=>i.fields.map(f=>f.fieldPath+':'+(f.order||f.arrayConfig)).join());
+const src=require('fs').readFileSync('functions/src/api/reviews-api.ts','utf8');
+const params=[...src.match(/WEBSITE_COMBINABLE = new Set\(\[([^\]]*)\]/)[1].matchAll(/\"([a-z_]+)\"/g)].map(m=>m[1]).filter(p=>p!=='positive_theme');
+const field={ship:'tags.ship',tour:'tags.tour',parent_product_sku:'product.parentSku',itinerary:'itineraryGroupKey'};
+const missing=[];
+for(const p of params)for(const d of ['ASCENDING','DESCENDING']){
+  const want='brand:ASCENDING,website.status:ASCENDING,website.placements:CONTAINS,'+(field[p]||p+'?')+':ASCENDING,dates.created:'+d;
+  if(!ix.includes(want))missing.push(p+'/'+d);
+}
+console.log(missing.length?missing.join(' '):'ok')")"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=culinary&positive_theme=Staff")
 check "placement + positive_theme -> 400" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?placement=culinary")
