@@ -213,6 +213,15 @@ describe("toPublicReview — shape mapping", () => {
     });
   });
 
+  it("prefers the stored itinerary group (what the itinerary filter matches)", () => {
+    const lookup = new Map([["Enchanting Danube (8 Days)", "Something Stale"]]);
+    const pub = toPublicReview(
+      { ...fixture(), itineraryGroup: "Enchanting Danube" },
+      { itineraryGroupLookup: lookup }
+    );
+    expect(pub.enrichment.itinerary.group).toBe("Enchanting Danube");
+  });
+
   it("falls back to the raw name when no mapping exists", () => {
     const pub = toPublicReview(fixture());
     expect(pub.enrichment.itinerary.group).toBe("Enchanting Danube (8 Days)");

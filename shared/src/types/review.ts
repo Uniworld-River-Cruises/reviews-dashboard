@@ -76,4 +76,11 @@ export interface ReviewDocument {
    * must not undo a decision); set by the candidate rule in the summary step
    * and by the dashboard's approval queue. */
   website?: WebsiteModeration | null;
+  /** Itinerary group (resolveItineraryGroup: mapped parent name, else the
+   * normalized tour name) and its itinerarySlug. The API's `itinerary` filter
+   * matches the slug, so it returns exactly the reviews counted by the
+   * `scope=itinerary` summary. Set by the sync and kept in step (including
+   * after a mapping edit) by the summary step; absent until then. */
+  itineraryGroup?: string | null;
+  itineraryGroupKey?: string | null;
 }

@@ -1557,6 +1557,82 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "dates.lastUpdated", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "ratings.headline", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "ratings.headline", "order": "DESCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "website.status", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "brand", "order": "ASCENDING" },
+        { "fieldPath": "website.status", "order": "ASCENDING" },
+        { "fieldPath": "itineraryGroupKey", "order": "ASCENDING" },
+        { "fieldPath": "dates.created", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

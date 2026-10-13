@@ -99,12 +99,12 @@ export const openApiDocument = {
         summary: "List reviews",
         description:
           "Paginated, filtered list. At most one of the indexed filters " +
-          "(ship/tour/region/booking_type/loyalty/product_sku/parent_product_sku/" +
+          "(ship/tour/itinerary/region/booking_type/loyalty/product_sku/parent_product_sku/" +
           "positive_theme/negative_theme/has_media) may be used per request. " +
           "`website=approved` (optionally with `placement`) may be added to one of " +
-          "ship/tour/parent_product_sku/positive_theme (but `placement` and " +
+          "ship/tour/itinerary/parent_product_sku/positive_theme (but `placement` and " +
           "`positive_theme` cannot be combined). `sort=highest|lowest` may be combined " +
-          "only with parent_product_sku, and not with date filters.",
+          "only with parent_product_sku or itinerary, and not with date filters.",
         parameters: [
           { $ref: "#/components/parameters/MerchantIdentifier" },
           { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "1-based page; `page * page_size` capped at 1000 — use `cursor` beyond that." },
@@ -119,7 +119,8 @@ export const openApiDocument = {
           { name: "review_type", in: "query", schema: { type: "string", enum: ["all", "service", "product"], default: "all" } },
           { name: "has_media", in: "query", schema: { type: "boolean" } },
           { name: "ship", in: "query", schema: { type: "string" } },
-          { name: "tour", in: "query", schema: { type: "string" } },
+          { name: "tour", in: "query", schema: { type: "string" }, description: "Exact Feefo tour tag (one raw name, e.g. one deck variant)." },
+          { name: "itinerary", in: "query", schema: { type: "string" }, description: "Itinerary group: the name a `scope=itinerary` summary uses (raw tour names rolled up by the dashboard's itinerary grouping, e.g. both decks of `Croatia and the Dalmatian Coast`). Matched like the summary's `scope_value` (case and punctuation ignored), so the list `count` equals that summary's `meta.count`. Combinable with `sort=highest|lowest`. Extension; Feefo has no equivalent." },
           { name: "region", in: "query", schema: { type: "string" } },
           { name: "booking_type", in: "query", schema: { type: "string" } },
           { name: "loyalty", in: "query", schema: { type: "string" } },
