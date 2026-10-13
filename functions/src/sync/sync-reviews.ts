@@ -3,6 +3,8 @@ import {
   fetchReviews,
   fetchMediaByUrl,
   transformReview,
+  feefoReviewKey,
+  feefoUrlLocaleVariants,
   Brand,
   ReviewDocument,
 } from "@feefo/shared";
@@ -118,11 +120,22 @@ export async function syncBrand(
       // ID has shifted since the last sync would be written to a brand-new
       // document, leaving the original behind as a duplicate. The lookup is
       // by feedbackUrl, which is stable for the lifetime of the review.
+      //
+      // Matching is on the review's 24-hex id inside the URL, and the lookup
+      // queries both locale spellings: Feefo moved from /en_US/ to /en-US/,
+      // and exact-URL matching made the 2026-10-13 full sync duplicate every
+      // review stored with the old spelling (26,538 docs, cleaned up the same
+      // day).
       const URL_CHUNK = 30; // Firestore "in" filter caps at 30 values.
-      const incomingUrls = pageReviews
-        .map((doc) => doc.feedbackUrl)
-        .filter((url): url is string => Boolean(url));
-      const urlToExistingId = new Map<string, string>();
+      const incomingUrls = [
+        ...new Set(
+          pageReviews
+            .map((doc) => doc.feedbackUrl)
+            .filter((url): url is string => Boolean(url))
+            .flatMap(feefoUrlLocaleVariants)
+        ),
+      ];
+      const keyToExistingId = new Map<string, string>();
       for (let i = 0; i < incomingUrls.length; i += URL_CHUNK) {
         const chunk = incomingUrls.slice(i, i + URL_CHUNK);
         const lookup = await db
@@ -131,16 +144,18 @@ export async function syncBrand(
           .get();
         for (const docSnap of lookup.docs) {
           const url = docSnap.get("feedbackUrl") as string | undefined;
-          // First match wins; if there are pre-existing duplicates for the
-          // same URL, the audit/cleanup tooling on the admin page handles
-          // them rather than this sync.
-          if (url && !urlToExistingId.has(url)) {
-            urlToExistingId.set(url, docSnap.id);
+          if (!url) continue;
+          const key = feefoReviewKey(url);
+          // A doc whose id IS the review id is canonical and always wins;
+          // otherwise first match wins (pre-existing duplicates are left to
+          // the cleanup tooling rather than this sync).
+          if (!keyToExistingId.has(key) || docSnap.id === key) {
+            keyToExistingId.set(key, docSnap.id);
           }
         }
       }
       for (const doc of pageReviews) {
-        const existingId = urlToExistingId.get(doc.feedbackUrl);
+        const existingId = keyToExistingId.get(feefoReviewKey(doc.feedbackUrl));
         if (existingId && existingId !== doc.id) {
           doc.id = existingId;
         }

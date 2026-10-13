@@ -21,7 +21,11 @@ export function transformReview(
   raw: FeefoReview,
   mediaOverride?: MediaOverrideItem[]
 ): ReviewDocument {
-  const product = raw.products[0];
+  // Service-only reviews arrive with no products array at all (not an empty
+  // one); before this guard they threw and were never stored, which was the
+  // whole gap between our counts and Feefo's (143 Uniworld, 165 Luxury Gold
+  // on 2026-10-13).
+  const product = raw.products?.[0];
   const tags = parseTags(raw.tags, product?.product?.tags);
 
   // Doc ID comes from the URL hash first, because the URL never changes for
