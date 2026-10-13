@@ -355,6 +355,8 @@ code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?me
 check "itinerary= + rating=4: post-filter, 1 match" "200:null:02" "$code:$(json "$T/r" 'String(b.summary.meta.count)')":"$(json "$T/r" 'b.reviews.map(r=>r.id.slice(-2)).join()')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&website=approved")
 check "itinerary= + website=approved -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&website=approved&placement=culinary")
+check "itinerary= + website=approved&placement=culinary -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?itinerary=Enchanting%20Danube&tour=Castles%20along%20the%20Rhine")
 check "itinerary= + tour -> 400 filters_not_combinable" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?itinerary=%26%26")
