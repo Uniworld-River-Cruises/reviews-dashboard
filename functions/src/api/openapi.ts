@@ -45,7 +45,12 @@ export const openApiDocument = {
       "## Notes",
       "- `merchant_identifier` selects the brand (`uniworld`, `luxury-gold`, or",
       "  `all`).",
-      "- Customer PII is never returned — only the consented display name.",
+      "- Customer PII is never returned: only the consented display name and the",
+      "  customer's display location (`customer.display_location`, as Feefo shows it).",
+      "- `reply` is the merchant's latest reply as plain text (converted from",
+      "  Feefo's HTML). Escape it when rendering.",
+      "- `website=approved` returns only reviews a person approved for the website",
+      "  in the dashboard's Website Queue; `placement` narrows to a carousel.",
       "- Deep pagination uses the opaque `cursor`; `page`/`page_size` is capped.",
     ].join("\n"),
     contact: { name: "Uniworld Reviews API" },
@@ -95,18 +100,22 @@ export const openApiDocument = {
         description:
           "Paginated, filtered list. At most one of the indexed filters " +
           "(ship/tour/region/booking_type/loyalty/product_sku/parent_product_sku/" +
-          "positive_theme/negative_theme/has_media) may be combined per request.",
+          "positive_theme/negative_theme/has_media) may be used per request. " +
+          "`website=approved` (optionally with `placement`) may be added to one of " +
+          "ship/tour/parent_product_sku/positive_theme (but `placement` and " +
+          "`positive_theme` cannot be combined). `sort=highest|lowest` may be combined " +
+          "only with parent_product_sku, and not with date filters.",
         parameters: [
           { $ref: "#/components/parameters/MerchantIdentifier" },
           { name: "page", in: "query", schema: { type: "integer", minimum: 1 }, description: "1-based page; `page * page_size` capped at 1000 — use `cursor` beyond that." },
           { name: "page_size", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
           { name: "cursor", in: "query", schema: { type: "string" }, description: "Opaque cursor from a prior response's `next_cursor`. Preferred for deep iteration." },
-          { name: "sort", in: "query", schema: { type: "string", enum: ["newest", "oldest"], default: "newest" } },
+          { name: "sort", in: "query", schema: { type: "string", enum: ["newest", "oldest", "highest", "lowest"], default: "newest" }, description: "newest/oldest: by date. highest/lowest: by headline rating (product rating, else service, rounded), then newest first. Feefo has no rating sort; this is an extension." },
           { name: "since_period", in: "query", schema: { type: "string", enum: ["week", "month", "quarter", "half_year", "year", "all"] }, description: "Filter on created date." },
           { name: "since_updated_period", in: "query", schema: { type: "string", enum: ["week", "month", "quarter", "half_year", "year", "all"] }, description: "Filter on last-updated date (mutually exclusive with created-date filters)." },
           { name: "date_time_from", in: "query", schema: { type: "string", format: "date-time" } },
           { name: "date_time_to", in: "query", schema: { type: "string", format: "date-time" } },
-          { name: "rating", in: "query", schema: { type: "integer", minimum: 1, maximum: 5 }, description: "Exact headline star (post-filter; response `count` is null when used)." },
+          { name: "rating", in: "query", schema: { type: "integer", minimum: 1, maximum: 5 }, description: "Exact headline star (product rating, else service rating, rounded). On its own (with or without date filters) it runs server-side: exact `count` and `page` work. Combined with another filter it is applied while scanning: `count` is null and pages beyond the first need `cursor`." },
           { name: "review_type", in: "query", schema: { type: "string", enum: ["all", "service", "product"], default: "all" } },
           { name: "has_media", in: "query", schema: { type: "boolean" } },
           { name: "ship", in: "query", schema: { type: "string" } },
@@ -118,6 +127,8 @@ export const openApiDocument = {
           { name: "parent_product_sku", in: "query", schema: { type: "string" } },
           { name: "positive_theme", in: "query", schema: { type: "string" }, description: "AI theme name, e.g. `Staff`." },
           { name: "negative_theme", in: "query", schema: { type: "string" } },
+          { name: "website", in: "query", schema: { type: "string", enum: ["approved"] }, description: "Only reviews approved for the website in the dashboard's Website Queue. Created-date sorting and filters only." },
+          { name: "placement", in: "query", schema: { type: "string", enum: ["guest-stories", "culinary", "ships", "travel-that-gives-back"] }, description: "Requires `website=approved`. Only approved reviews tagged for this placement." },
         ],
         responses: {
           "200": {
@@ -156,11 +167,12 @@ export const openApiDocument = {
       get: {
         tags: ["Summaries"],
         summary: "Aggregate ratings + star distribution",
-        description: "Served from precomputed summaries. `rating.service` is null for legacy summary documents and for `all` merges where any merchant lacks a service distribution.",
+        description: "Served from precomputed summaries (refreshed on every sync). `rating.rating` is the average PRODUCT rating of the stored reviews at every scope. The fleet scope for a single merchant also carries Feefo's own published merchant numbers in `rating.feefo_rating` and `meta.feefo_count` (use these for a headline that matches Feefo); they are null at other scopes and for `all` merges. `rating.service` is null for legacy summary documents and for `all` merges where any merchant lacks a service distribution.",
         parameters: [
           { $ref: "#/components/parameters/MerchantIdentifier" },
-          { name: "scope", in: "query", schema: { type: "string", enum: ["fleet", "ship", "itinerary"], default: "fleet" } },
+          { name: "scope", in: "query", schema: { type: "string", enum: ["fleet", "ship", "itinerary", "product"], default: "fleet" }, description: "`product` is one trip, identified by `parent_product_sku`." },
           { name: "scope_value", in: "query", schema: { type: "string" }, description: "Required when scope is ship or itinerary." },
+          { name: "parent_product_sku", in: "query", schema: { type: "string" }, description: "Required when scope is product: the Feefo parent product SKU (itinerary code), e.g. `176`." },
         ],
         responses: {
           "200": {
@@ -335,7 +347,10 @@ export const openApiDocument = {
           url: { type: "string", format: "uri" },
           customer: {
             type: "object",
-            properties: { display_name: { type: "string", example: "Jane D." } },
+            properties: {
+              display_name: { type: "string", example: "Jane D." },
+              display_location: { type: ["string", "null"], example: "London, United Kingdom", description: "The location the customer chose to display on Feefo; null when none." },
+            },
           },
           service: {
             oneOf: [
@@ -375,6 +390,20 @@ export const openApiDocument = {
           },
           last_updated_date: { type: "string" },
           verified: { type: "boolean" },
+          reply: {
+            description: "The merchant's latest reply, or null. Plain text converted from Feefo's HTML (line breaks kept as \\n); escape it when rendering.",
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  text: { type: "string" },
+                  author: { type: ["string", "null"], example: "Customer Service" },
+                  created_at: { type: ["string", "null"] },
+                },
+              },
+              { type: "null" },
+            ],
+          },
           enrichment: {
             type: "object",
             properties: {
@@ -425,7 +454,7 @@ export const openApiDocument = {
               meta: {
                 type: "object",
                 properties: {
-                  count: { type: ["integer", "null"], description: "Total matches; null when a post-filter (rating/review_type) is active." },
+                  count: { type: ["integer", "null"], description: "Total matches; null when a post-filter is active (review_type, or rating combined with another filter)." },
                   pages: { type: ["integer", "null"] },
                   page_size: { type: "integer" },
                   current_page: { type: ["integer", "null"] },
@@ -444,13 +473,20 @@ export const openApiDocument = {
             type: "object",
             properties: { identifier: { type: "string" }, name: { type: "string" } },
           },
-          meta: { type: "object", properties: { count: { type: "integer" } } },
+          meta: {
+            type: "object",
+            properties: {
+              count: { type: "integer" },
+              feefo_count: { type: ["integer", "null"], example: 24888, description: "Feefo's own review count for the merchant (fleet scope, single merchant)." },
+            },
+          },
           rating: {
             type: "object",
             properties: {
               min: { type: "integer", example: 1 },
               max: { type: "integer", example: 5 },
-              rating: { type: "number" },
+              rating: { type: "number", description: "Average product rating of the stored reviews." },
+              feefo_rating: { type: ["number", "null"], example: 4.8, description: "Feefo's own published merchant rating (fleet scope, single merchant)." },
               product: { $ref: "#/components/schemas/StarDistribution" },
               service: {
                 oneOf: [{ $ref: "#/components/schemas/StarDistribution" }, { type: "null" }],
@@ -460,7 +496,7 @@ export const openApiDocument = {
           enrichment: {
             type: "object",
             properties: {
-              scope: { type: "string", enum: ["fleet", "ship", "itinerary"] },
+              scope: { type: "string", enum: ["fleet", "ship", "itinerary", "product"] },
               scope_value: { type: ["string", "null"] },
               reviews_with_comments: { type: "integer" },
               top_positive_themes: { type: "array", items: { $ref: "#/components/schemas/ThemeCount" } },

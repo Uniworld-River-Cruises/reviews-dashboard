@@ -9,6 +9,9 @@ import {
   POSITIVE_THEMES,
   ReviewDocument,
   SummaryDocLike,
+  WEBSITE_PLACEMENTS,
+  WebsitePlacement,
+  isWebsitePlacement,
   toPublicReview,
   toPublicSummary,
 } from "@feefo/shared";
@@ -78,11 +81,28 @@ interface ListParams {
   dateField: "dates.created" | "dates.lastUpdated";
   dateFrom: string | null;
   dateTo: string | null;
+  /** "date": order by dateField in `direction` (newest/oldest).
+   * "rating": order by ratings.headline in `direction`, then dates.created
+   * desc (highest/lowest). */
+  sortMode: "date" | "rating";
   direction: SortDirection;
   attribute: AttributeFilter | null;
   rating: number | null;
+  /** "where": `rating` is an indexed equality on ratings.headline, so count
+   * and page numbers stay exact. "post": applied in memory while scanning
+   * (when combined with another filter, to avoid an index per combination). */
+  ratingMode: "where" | "post";
   reviewType: "service" | "product" | null;
+  /** website=approved: only reviews approved for the website. */
+  websiteApproved: boolean;
+  placement: WebsitePlacement | null;
 }
+
+/** Filters `website=approved` may be combined with (one of them), and the
+ * ones a rating sort may be combined with. Each has composite indexes in
+ * firestore.indexes.json; anything else would 500 in production. */
+const WEBSITE_COMBINABLE = new Set(["ship", "tour", "parent_product_sku", "positive_theme"]);
+const RATING_SORT_COMBINABLE = new Set(["parent_product_sku"]);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function queryParam(req: any, name: string): string | undefined {
@@ -142,8 +162,12 @@ function parseListParams(req: any): ListParams {
   }
 
   const sortRaw = queryParam(req, "sort") ?? "newest";
-  if (sortRaw !== "newest" && sortRaw !== "oldest") {
-    throw new ApiError(400, "invalid_parameter", "sort must be 'newest' or 'oldest'.");
+  if (!["newest", "oldest", "highest", "lowest"].includes(sortRaw)) {
+    throw new ApiError(
+      400,
+      "invalid_parameter",
+      "sort must be 'newest', 'oldest', 'highest' or 'lowest'."
+    );
   }
 
   // Date window. since_updated_period filters/sorts on dates.lastUpdated and
@@ -229,11 +253,92 @@ function parseListParams(req: any): ListParams {
         .join(", ")}.`
     );
   }
+  const attribute = attributeCandidates[0] ?? null;
 
-  // Post-filters (applied in memory while scanning, because Firestore can't
-  // express them alongside the indexed constraints).
+  // Website approval filters: website=approved (+ optional placement) may be
+  // combined with ONE of WEBSITE_COMBINABLE, on the created date only.
+  const websiteRaw = queryParam(req, "website");
+  if (websiteRaw !== undefined && websiteRaw !== "approved") {
+    throw new ApiError(400, "invalid_parameter", "website must be 'approved'.");
+  }
+  const websiteApproved = websiteRaw === "approved";
+  const placementRaw = queryParam(req, "placement");
+  let placement: WebsitePlacement | null = null;
+  if (placementRaw !== undefined) {
+    if (!isWebsitePlacement(placementRaw)) {
+      throw new ApiError(
+        400,
+        "invalid_parameter",
+        `placement must be one of: ${WEBSITE_PLACEMENTS.join(", ")}.`
+      );
+    }
+    if (!websiteApproved) {
+      throw new ApiError(400, "invalid_parameter", "placement requires website=approved.");
+    }
+    placement = placementRaw;
+  }
+  if (websiteApproved) {
+    if (attribute && !WEBSITE_COMBINABLE.has(attribute.param)) {
+      throw new ApiError(
+        400,
+        "filters_not_combinable",
+        `website=approved can be combined with one of: ${[...WEBSITE_COMBINABLE].join(", ")}.`
+      );
+    }
+    // Firestore allows a single array-contains per query.
+    if (placement && attribute?.param === "positive_theme") {
+      throw new ApiError(
+        400,
+        "filters_not_combinable",
+        "placement cannot be combined with positive_theme; use one or the other."
+      );
+    }
+    if (dateField === "dates.lastUpdated") {
+      throw new ApiError(
+        400,
+        "filters_not_combinable",
+        "website=approved cannot be combined with since_updated_period."
+      );
+    }
+  }
+
+  // Rating sort (highest/lowest): ratings.headline, then newest first.
+  let sortMode: ListParams["sortMode"] = "date";
+  let direction: SortDirection = sortRaw === "oldest" ? "asc" : "desc";
+
   const ratingRaw = queryParam(req, "rating");
   const rating = ratingRaw === undefined ? null : parsePositiveInt(ratingRaw, "rating", 5);
+
+  if (sortRaw === "highest" || sortRaw === "lowest") {
+    if (websiteApproved || (attribute && !RATING_SORT_COMBINABLE.has(attribute.param))) {
+      throw new ApiError(
+        400,
+        "filters_not_combinable",
+        `sort=${sortRaw} can be combined only with ${[...RATING_SORT_COMBINABLE].join(", ")}.`
+      );
+    }
+    if (dateFrom !== null || dateTo !== null || dateField !== "dates.created") {
+      throw new ApiError(
+        400,
+        "filters_not_combinable",
+        `sort=${sortRaw} cannot be combined with date filters.`
+      );
+    }
+    // With a star filter every match has the same headline rating, so the
+    // order is simply newest first (what the rating sort breaks ties by).
+    if (rating === null) {
+      sortMode = "rating";
+      direction = sortRaw === "highest" ? "desc" : "asc";
+    } else {
+      direction = "desc";
+    }
+  }
+
+  // The star filter runs in Firestore (exact count and page numbers) when it
+  // is the only filter; combined with another filter it falls back to the
+  // in-memory post-filter rather than needing an index per combination.
+  const ratingMode: ListParams["ratingMode"] =
+    rating !== null && attribute === null && !websiteApproved ? "where" : "post";
 
   const reviewTypeRaw = queryParam(req, "review_type") ?? "all";
   if (!["all", "service", "product"].includes(reviewTypeRaw)) {
@@ -241,12 +346,12 @@ function parseListParams(req: any): ListParams {
   }
   const reviewType = reviewTypeRaw === "all" ? null : (reviewTypeRaw as "service" | "product");
 
-  const hasPostFilters = rating !== null || reviewType !== null;
+  const hasPostFilters = (rating !== null && ratingMode === "post") || reviewType !== null;
   if (hasPostFilters && page !== null && page > 1) {
     throw new ApiError(
       400,
       "use_cursor",
-      "rating/review_type filters require cursor pagination beyond the first page."
+      "review_type, or rating combined with another filter, requires cursor pagination beyond the first page."
     );
   }
 
@@ -267,15 +372,19 @@ function parseListParams(req: any): ListParams {
     dateField,
     dateFrom,
     dateTo,
-    direction: sortRaw === "oldest" ? "asc" : "desc",
-    attribute: attributeCandidates[0] ?? null,
+    sortMode,
+    direction,
+    attribute,
     rating,
+    ratingMode,
     reviewType,
+    websiteApproved,
+    placement,
   };
 }
 
 function hasPostFilters(p: ListParams): boolean {
-  return p.rating !== null || p.reviewType !== null;
+  return (p.rating !== null && p.ratingMode === "post") || p.reviewType !== null;
 }
 
 // ── Query building & merge pagination ───────────────────────────────────────
@@ -285,16 +394,28 @@ function buildBaseQuery(merchant: MerchantInfo, p: ListParams): Query {
   let q: Query = db
     .collection(merchant.reviewsCollection)
     .where("brand", "==", merchant.identifier);
+  // Constraint order mirrors the field order of the composite indexes in
+  // firestore.indexes.json: brand, website.*, attribute, ratings.headline, date.
+  if (p.websiteApproved) {
+    q = q.where("website.status", "==", "approved");
+    if (p.placement) q = q.where("website.placements", "array-contains", p.placement);
+  }
   if (p.attribute) {
     q = q.where(p.attribute.field, p.attribute.op, p.attribute.value);
   }
+  if (p.rating !== null && p.ratingMode === "where") {
+    q = q.where("ratings.headline", "==", p.rating);
+  }
   if (p.dateFrom) q = q.where(p.dateField, ">=", p.dateFrom);
   if (p.dateTo) q = q.where(p.dateField, "<=", p.dateTo);
+  if (p.sortMode === "rating") {
+    return q.orderBy("ratings.headline", p.direction).orderBy("dates.created", "desc");
+  }
   return q.orderBy(p.dateField, p.direction);
 }
 
 function matchesPostFilters(snap: QueryDocumentSnapshot, p: ListParams): boolean {
-  if (p.rating !== null) {
+  if (p.rating !== null && p.ratingMode === "post") {
     const ratings = snap.get("ratings") as { product?: number; service?: number } | undefined;
     const headline = ratings?.product ?? ratings?.service ?? null;
     if (typeof headline !== "number" || Math.round(headline) !== p.rating) return false;
@@ -346,11 +467,28 @@ function streamFinished(stream: MerchantStream): boolean {
   );
 }
 
+function headlineOf(snap: QueryDocumentSnapshot): number {
+  const value = snap.get("ratings.headline");
+  // Firestore sorts null before numbers ascending; -1 reproduces that.
+  return typeof value === "number" ? value : -1;
+}
+
 function compareDocs(
   a: QueryDocumentSnapshot,
   b: QueryDocumentSnapshot,
   p: ListParams
 ): number {
+  if (p.sortMode === "rating") {
+    const byRating =
+      p.direction === "desc" ? headlineOf(b) - headlineOf(a) : headlineOf(a) - headlineOf(b);
+    if (byRating !== 0) return byRating;
+    const aCreated = (a.get("dates.created") as string | undefined) ?? "";
+    const bCreated = (b.get("dates.created") as string | undefined) ?? "";
+    const byCreated = bCreated.localeCompare(aCreated);
+    if (byCreated !== 0) return byCreated;
+    // Implicit __name__ tiebreaker follows the last orderBy (desc).
+    return b.id.localeCompare(a.id);
+  }
   const aDate = (a.get(p.dateField) as string | undefined) ?? "";
   const bDate = (b.get(p.dateField) as string | undefined) ?? "";
   const byDate = p.direction === "desc" ? bDate.localeCompare(aDate) : aDate.localeCompare(bDate);
@@ -377,10 +515,14 @@ function queryKeyHash(merchants: MerchantInfo[], p: ListParams): string {
     dateField: p.dateField,
     dateFrom: p.dateFrom,
     dateTo: p.dateTo,
+    sortMode: p.sortMode,
     direction: p.direction,
     attribute: p.attribute ? [p.attribute.field, p.attribute.op, p.attribute.value] : null,
     rating: p.rating,
+    ratingMode: p.ratingMode,
     reviewType: p.reviewType,
+    websiteApproved: p.websiteApproved,
+    placement: p.placement,
   });
   return createHash("sha1").update(canonical).digest("hex").slice(0, 16);
 }
@@ -653,7 +795,10 @@ function slugify(text: string): string {
 
 function asSummaryDoc(data: FirebaseFirestore.DocumentData): SummaryDocLike {
   return {
-    scope: data.scope === "ship" || data.scope === "itinerary" ? data.scope : "fleet",
+    scope:
+      data.scope === "ship" || data.scope === "itinerary" || data.scope === "product"
+        ? data.scope
+        : "fleet",
     scopeValue: typeof data.scopeValue === "string" ? data.scopeValue : null,
     totalReviews: typeof data.totalReviews === "number" ? data.totalReviews : 0,
     reviewsWithComments:
@@ -672,9 +817,13 @@ function asSummaryDoc(data: FirebaseFirestore.DocumentData): SummaryDocLike {
     ships: Array.isArray(data.ships) ? data.ships : [],
     itineraries: Array.isArray(data.itineraries) ? data.itineraries : [],
     lastUpdated: typeof data.lastUpdated === "string" ? data.lastUpdated : undefined,
+    feefoRating: typeof data.feefoRating === "number" ? data.feefoRating : null,
+    feefoCount: typeof data.feefoCount === "number" ? data.feefoCount : null,
   };
 }
 
+// Feefo's own merchant numbers are per merchant and can't be meaningfully
+// merged, so merged (merchant_identifier=all) summaries leave them null.
 function mergeSummaries(docs: SummaryDocLike[]): SummaryDocLike {
   const merged: SummaryDocLike = {
     scope: docs[0].scope,
@@ -754,10 +903,24 @@ async function handleSummary(
   log: Record<string, unknown>
 ): Promise<void> {
   const scope = queryParam(req, "scope") ?? "fleet";
-  if (!["fleet", "ship", "itinerary"].includes(scope)) {
-    throw new ApiError(400, "invalid_parameter", "scope must be fleet, ship, or itinerary.");
+  if (!["fleet", "ship", "itinerary", "product"].includes(scope)) {
+    throw new ApiError(
+      400,
+      "invalid_parameter",
+      "scope must be fleet, ship, itinerary, or product."
+    );
   }
-  const scopeValue = queryParam(req, "scope_value");
+  // scope=product is one trip, identified like Feefo's own product summary:
+  // by parent_product_sku (the itinerary code). Other scopes use scope_value.
+  const scopeValue =
+    scope === "product" ? queryParam(req, "parent_product_sku") : queryParam(req, "scope_value");
+  if (scope === "product" && (!scopeValue || !scopeValue.trim())) {
+    throw new ApiError(
+      400,
+      "invalid_parameter",
+      "parent_product_sku is required when scope=product."
+    );
+  }
   if (scope !== "fleet" && (!scopeValue || !scopeValue.trim())) {
     throw new ApiError(400, "invalid_parameter", `scope_value is required when scope=${scope}.`);
   }

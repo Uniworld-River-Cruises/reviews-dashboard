@@ -42,6 +42,11 @@ import {
   rotateApiClient,
 } from "./api/api-clients";
 import { ApiError } from "./api/http";
+import {
+  WebsiteModerationError,
+  moderateWebsiteReview,
+  parseModerationRequest,
+} from "./sync/website-moderation";
 
 initializeApp();
 
@@ -163,6 +168,8 @@ function getEffectivePermissions(
       allowedByLegacyEmailList || hasPermission(adminUser, "manageUsers"),
     manageApiClients:
       allowedByLegacyEmailList || hasPermission(adminUser, "manageApiClients"),
+    moderateWebsite:
+      allowedByLegacyEmailList || hasPermission(adminUser, "moderateWebsite"),
   };
 }
 
@@ -935,6 +942,49 @@ export const apiClients = onRequest(
         return;
       }
       console.error("apiClients error:", error);
+      res.status(500).json({ error: "Internal error." });
+    }
+  }
+);
+
+// Website approval queue: approve/reject/reset one review for the website
+// (dashboard action; the public API serves approved reviews via
+// website=approved).
+export const websiteModeration = onRequest(
+  { timeoutSeconds: 60, memory: "512MiB", invoker: "public", cors: ALLOWED_ORIGINS },
+  async (req, res) => {
+    if (!ensurePost(req, res)) return;
+    const caller = await authorizeRequest(req, res, "moderateWebsite");
+    if (!caller) return;
+
+    try {
+      const request = parseModerationRequest(req.body);
+      const result = await moderateWebsiteReview({ ...request, actorEmail: caller.email });
+      await writeOperationLog({
+        type: "website",
+        level: "success",
+        action: `website_${request.action}`,
+        message: `Website ${request.action}: review ${request.reviewId}`,
+        brand: result.brand,
+        source: "manual",
+        actorEmail: caller.email,
+        actorUid: caller.uid,
+        details: {
+          reviewId: request.reviewId,
+          status: result.website?.status ?? null,
+          placements: result.website?.placements ?? [],
+        },
+      });
+      console.log(
+        `websiteModeration ${request.action} ${request.reviewId} by ${caller.source}:${caller.email ?? caller.uid}`
+      );
+      res.json({ success: true, website: result.website });
+    } catch (error) {
+      if (error instanceof WebsiteModerationError) {
+        res.status(error.status).json({ error: error.message });
+        return;
+      }
+      console.error("websiteModeration error:", error);
       res.status(500).json({ error: "Internal error." });
     }
   }

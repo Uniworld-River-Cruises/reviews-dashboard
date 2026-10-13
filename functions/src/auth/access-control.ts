@@ -5,7 +5,8 @@ export type AccessPermission =
   | "batchClassify"
   | "manageMappings"
   | "manageUsers"
-  | "manageApiClients";
+  | "manageApiClients"
+  | "moderateWebsite";
 
 export type AdminRole = "owner" | "admin" | "sync";
 
@@ -100,6 +101,7 @@ export function hasPermission(
       return user.role === "admin" || user.role === "sync";
     case "manageMappings":
     case "manageApiClients":
+    case "moderateWebsite":
       return user.role === "admin";
     case "manageUsers":
       return false;

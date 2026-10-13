@@ -1,12 +1,14 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { ReviewDocument, Brand, normalizeItineraryName } from "@feefo/shared";
+import { ReviewDocument, Brand, fetchSummary, normalizeItineraryName } from "@feefo/shared";
 import { getMappingLookup } from "./itinerary-mappings";
+import { syncDerivedReviewFields } from "./derived-fields";
 import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
 
 interface Summary {
   id: string;
   brand: string;
-  scope: "fleet" | "ship" | "itinerary";
+  /** "product" = one trip, keyed by Feefo parent_product_sku. */
+  scope: "fleet" | "ship" | "itinerary" | "product";
   scopeValue: string | null;
   totalReviews: number;
   reviewsWithComments: number;
@@ -24,6 +26,11 @@ interface Summary {
   itineraries: string[];
   childItineraries: string[];
   lastUpdated: string;
+  /** Feefo's own merchant rating/count (fleet docs only). Kept from the
+   * previous doc when Feefo can't be reached, so a blip never blanks them. */
+  feefoRating?: number | null;
+  feefoCount?: number | null;
+  feefoFetchedAt?: string | null;
 }
 
 interface MonthlySummary {
@@ -54,8 +61,9 @@ export async function computeSummaries(
 
     const reviews = snapshot.docs.map((doc) => doc.data() as ReviewDocument);
 
-    // Fleet-level summary
+    // Fleet-level summary, carrying Feefo's own headline numbers.
     const fleetSummary = buildSummary(brand, "fleet", null, reviews);
+    Object.assign(fleetSummary, await getFeefoHeadline(brand));
     await db.collection("summaries").doc(brand).set(fleetSummary);
 
     // Per-ship summaries
@@ -96,8 +104,27 @@ export async function computeSummaries(
       await db.collection("summaries").doc(docId).set(summary);
     }
 
+    // Per-trip summaries, keyed by Feefo parent_product_sku (the website's
+    // itinerary code) rather than by itinerary name.
+    const byProduct = groupBy(reviews, (r) => r.product?.parentSku?.trim() || null);
+    const productWriter = db.bulkWriter();
+    for (const [parentSku, productReviews] of Object.entries(byProduct)) {
+      const summary = buildSummary(brand, "product", parentSku, productReviews);
+      summary.ships = [
+        ...new Set(productReviews.map((r) => r.tags.ship).filter(Boolean) as string[]),
+      ].sort();
+      // Trip names (product titles) that share this parent sku.
+      summary.itineraries = [
+        ...new Set(productReviews.map((r) => r.product.title).filter(Boolean)),
+      ].sort();
+      productWriter.set(db.collection("summaries").doc(summary.id), summary);
+    }
+    await productWriter.close();
+
     await computeMonthlySummaries(brand, reviews);
-    await cleanStaleSummaries(brand, byShip, byItinerary);
+    await cleanStaleSummaries(brand, byShip, byItinerary, byProduct);
+
+    const derived = await syncDerivedReviewFields(snapshot.docs);
 
     await writeOperationLog({
       type: "summary",
@@ -112,6 +139,10 @@ export async function computeSummaries(
         reviewCount: reviews.length,
         shipCount: Object.keys(byShip).length,
         itineraryCount: Object.keys(byItinerary).length,
+        productCount: Object.keys(byProduct).length,
+        feefoRating: fleetSummary.feefoRating ?? null,
+        feefoCount: fleetSummary.feefoCount ?? null,
+        ...derived,
       },
     });
   } catch (error) {
@@ -171,10 +202,37 @@ async function computeMonthlySummaries(brand: Brand, reviews: ReviewDocument[]):
   await writer.close();
 }
 
+/**
+ * Feefo's own merchant rating and count (what Feefo publishes, e.g. 4.8 from
+ * 24,888 reviews). On failure, keep the previously stored values.
+ */
+async function getFeefoHeadline(
+  brand: Brand
+): Promise<Pick<Summary, "feefoRating" | "feefoCount" | "feefoFetchedAt">> {
+  try {
+    const feefo = await fetchSummary(brand);
+    const rating = feefo.rating?.rating;
+    const count = feefo.meta?.count;
+    if (typeof rating === "number" && typeof count === "number") {
+      return { feefoRating: rating, feefoCount: count, feefoFetchedAt: new Date().toISOString() };
+    }
+    console.warn(`Feefo summary for ${brand} had no rating/count; keeping previous values`);
+  } catch (error) {
+    console.warn(`Feefo summary fetch failed for ${brand}; keeping previous values`, error);
+  }
+  const previous = (await getFirestore().collection("summaries").doc(brand).get()).data();
+  return {
+    feefoRating: typeof previous?.feefoRating === "number" ? previous.feefoRating : null,
+    feefoCount: typeof previous?.feefoCount === "number" ? previous.feefoCount : null,
+    feefoFetchedAt: typeof previous?.feefoFetchedAt === "string" ? previous.feefoFetchedAt : null,
+  };
+}
+
 async function cleanStaleSummaries(
   brand: Brand,
   byShip: Record<string, ReviewDocument[]>,
-  byItinerary: Record<string, ReviewDocument[]>
+  byItinerary: Record<string, ReviewDocument[]>,
+  byProduct: Record<string, ReviewDocument[]>
 ): Promise<void> {
   const db = getFirestore();
   const existing = await db.collection("summaries").where("brand", "==", brand).get();
@@ -187,6 +245,9 @@ async function cleanStaleSummaries(
       writer.delete(doc.ref);
     }
     if (data.scope === "itinerary" && data.scopeValue && !byItinerary[data.scopeValue]) {
+      writer.delete(doc.ref);
+    }
+    if (data.scope === "product" && data.scopeValue && !byProduct[data.scopeValue]) {
       writer.delete(doc.ref);
     }
   }
