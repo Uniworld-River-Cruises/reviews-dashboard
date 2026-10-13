@@ -78,7 +78,8 @@ export interface FeefoReview {
   url: string;
   customer: FeefoCustomer;
   service?: FeefoService;
-  products: FeefoProduct[];
+  /** Absent (not empty) on service-only reviews. */
+  products?: FeefoProduct[];
   tags?: FeefoReviewTag[];
   locale?: string;
   products_purchased?: string[];

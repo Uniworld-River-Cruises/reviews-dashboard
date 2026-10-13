@@ -5,6 +5,7 @@ export * from "./feefo/parse-tags";
 export * from "./feefo/normalize-itinerary";
 export * from "./types/review";
 export * from "./feefo/transform";
+export * from "./feefo/review-url";
 export * from "./themes/definitions";
 export * from "./themes/model";
 export * from "./themes/prompt";

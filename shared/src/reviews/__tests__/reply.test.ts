@@ -89,7 +89,7 @@ describe("extractMerchantReply", () => {
       raw({
         products: [
           {
-            ...base.products[0],
+            ...base.products![0],
             thread: [
               {
                 type: "MERCHANT_COMMENT",
@@ -126,7 +126,7 @@ describe("extractMerchantReply", () => {
         },
         products: [
           {
-            ...base.products[0],
+            ...base.products![0],
             thread: [
               {
                 type: "MERCHANT_COMMENT",

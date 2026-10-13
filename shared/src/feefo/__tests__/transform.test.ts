@@ -90,6 +90,19 @@ describe("transformReview", () => {
     expect(result.product.title).toBe("Unknown");
   });
 
+  it("handles service-only reviews where Feefo omits the products array entirely", () => {
+    // Before the guard these threw "Cannot read properties of undefined
+    // (reading '0')" and were never stored (308 reviews on 2026-10-13).
+    const { products: _omitted, ...serviceOnly } = sampleReview;
+    const result = transformReview(serviceOnly as FeefoReview);
+    expect(result.ratings.service).toBe(5);
+    expect(result.ratings.product).toBeNull();
+    expect(result.ratings.headline).toBe(5);
+    expect(result.product.title).toBe("Unknown");
+    expect(result.media).toEqual([]);
+    expect(result.reply).toBeNull();
+  });
+
   describe("reply and website fields", () => {
     it("stores reply: null when the thread has no merchant comment", () => {
       expect(transformReview(sampleReview).reply).toBeNull();
@@ -100,7 +113,7 @@ describe("transformReview", () => {
         ...sampleReview,
         products: [
           {
-            ...sampleReview.products[0],
+            ...sampleReview.products![0],
             thread: [
               {
                 type: "MERCHANT_COMMENT",
@@ -135,7 +148,7 @@ describe("transformReview", () => {
     const ratingOnly: FeefoReview = {
       ...sampleReview,
       service: { ...sampleReview.service!, review: undefined },
-      products: [{ ...sampleReview.products[0], review: undefined }],
+      products: [{ ...sampleReview.products![0], review: undefined }],
     };
     const result = transformReview(ratingOnly);
     expect(result.hasComment).toBe(false);
@@ -162,7 +175,7 @@ describe("transformReview", () => {
     it("uses mediaOverride even when product.media is undefined", () => {
       const noProductMedia: FeefoReview = {
         ...sampleReview,
-        products: [{ ...sampleReview.products[0], media: undefined }],
+        products: [{ ...sampleReview.products![0], media: undefined }],
       };
       const override = [
         { type: "PHOTO" as const, url: "https://feefo.com/api/feedback-image/abc" },
@@ -188,7 +201,7 @@ describe("transformReview", () => {
     it("is false when product.media is undefined (no override)", () => {
       const noMedia: FeefoReview = {
         ...sampleReview,
-        products: [{ ...sampleReview.products[0], media: undefined }],
+        products: [{ ...sampleReview.products![0], media: undefined }],
       };
       const result = transformReview(noMedia);
       expect(result.hasMedia).toBe(false);
@@ -200,7 +213,7 @@ describe("transformReview", () => {
       // override has items, product has none → hasMedia true
       const noProductMedia: FeefoReview = {
         ...sampleReview,
-        products: [{ ...sampleReview.products[0], media: undefined }],
+        products: [{ ...sampleReview.products![0], media: undefined }],
       };
       expect(
         transformReview(noProductMedia, [
