@@ -375,8 +375,9 @@ export default function WebsiteQueuePage() {
         </div>
         <h1 className="text-2xl font-semibold text-text-primary">Website Queue</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Reviews the rule proposes for the website (5 stars, a comment, a positive theme, and
-          60 to 600 characters of service text). Approved reviews are served by the public API
+          Reviews the rule proposes for the website (5 stars for both product and service, two
+          or more positive themes, 150 to 600 characters of service text, from the last two
+          years). Approved reviews are served by the public API
           with <code className="rounded bg-surface-alt px-1 py-0.5 text-xs">website=approved</code>
           , optionally narrowed by placement.
         </p>

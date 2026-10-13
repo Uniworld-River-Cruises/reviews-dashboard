@@ -105,9 +105,11 @@ full sync.
 
 ### Website approval queue
 
-The summary step (every sync) marks **candidates**: a 5-star product or service
-rating, a comment, at least one positive AI theme, and 60 to 600 characters of
-service text. Thresholds live in `WEBSITE_CANDIDATE_RULE`
+The summary step (every sync) marks **candidates**: 5 stars for both product
+and service, a comment, at least two positive AI themes, 150 to 600 characters
+of service text, and created within the last two years. Undecided candidates
+that stop matching (including by aging out) leave the queue on the next sync.
+Thresholds live in `WEBSITE_CANDIDATE_RULE`
 (`shared/src/reviews/website.ts`). A person approves (with optional placement
 tags) or rejects each one in **Admin → Website Queue**; only approved reviews
 are public, and a re-sync never undoes a decision. Approving needs the

@@ -6,17 +6,26 @@ import {
   WebsiteCandidateInput,
 } from "../website";
 
+const NOW = Date.parse("2026-10-13T00:00:00Z");
+const daysAgo = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
+
 function candidate(overrides: Partial<WebsiteCandidateInput> = {}): WebsiteCandidateInput {
   return {
     ratings: { service: 5, product: 5 },
     reviews: {
-      serviceText: "The crew made every day special, from the welcome to the farewell.",
+      serviceText:
+        "The crew made every day special, from the warm welcome on embarkation to the farewell " +
+        "dinner, and the excursions were organised so well that we never once felt rushed.",
     },
-    themes: { positive: ["Staff"] },
+    themes: { positive: ["Staff", "Excursions"] },
     hasComment: true,
+    dates: { created: daysAgo(30) },
     ...overrides,
   };
 }
+
+const check = (overrides: Partial<WebsiteCandidateInput> = {}) =>
+  isWebsiteCandidate(candidate(overrides), WEBSITE_CANDIDATE_RULE, NOW);
 
 describe("computeHeadlineRating", () => {
   it("prefers the product rating, else the service rating, rounded", () => {
@@ -32,34 +41,40 @@ describe("computeHeadlineRating", () => {
 });
 
 describe("isWebsiteCandidate (default rule)", () => {
-  it("accepts a 5-star commented review with a positive theme and 60-600 chars of service text", () => {
-    expect(isWebsiteCandidate(candidate())).toBe(true);
+  it("accepts a recent review with both ratings 5, two positive themes and 150-600 chars", () => {
+    expect(check()).toBe(true);
   });
 
-  it("accepts when only one of product/service is 5 stars", () => {
-    expect(isWebsiteCandidate(candidate({ ratings: { product: 4, service: 5 } }))).toBe(true);
-    expect(isWebsiteCandidate(candidate({ ratings: { product: 5, service: null } }))).toBe(true);
+  it("requires BOTH product and service to be 5 stars", () => {
+    expect(check({ ratings: { product: 4, service: 5 } })).toBe(false);
+    expect(check({ ratings: { product: 5, service: 4 } })).toBe(false);
+    expect(check({ ratings: { product: 5, service: null } })).toBe(false);
   });
 
-  it("rejects when neither rating is 5", () => {
-    expect(isWebsiteCandidate(candidate({ ratings: { product: 4, service: 4 } }))).toBe(false);
-  });
-
-  it("requires a comment and a positive theme", () => {
-    expect(isWebsiteCandidate(candidate({ hasComment: false }))).toBe(false);
-    expect(isWebsiteCandidate(candidate({ themes: { positive: [] } }))).toBe(false);
-    expect(isWebsiteCandidate(candidate({ themes: null }))).toBe(false);
+  it("requires a comment and at least two positive themes", () => {
+    expect(check({ hasComment: false })).toBe(false);
+    expect(check({ themes: { positive: ["Staff"] } })).toBe(false);
+    expect(check({ themes: { positive: [] } })).toBe(false);
+    expect(check({ themes: null })).toBe(false);
   });
 
   it("bounds the trimmed service text length inclusively", () => {
     const { minServiceTextLength: min, maxServiceTextLength: max } = WEBSITE_CANDIDATE_RULE;
-    const withText = (t: string) => candidate({ reviews: { serviceText: t } });
-    expect(isWebsiteCandidate(withText("x".repeat(min)))).toBe(true);
-    expect(isWebsiteCandidate(withText("x".repeat(min - 1)))).toBe(false);
-    expect(isWebsiteCandidate(withText(`  ${"x".repeat(min - 1)}  `))).toBe(false);
-    expect(isWebsiteCandidate(withText("x".repeat(max)))).toBe(true);
-    expect(isWebsiteCandidate(withText("x".repeat(max + 1)))).toBe(false);
-    expect(isWebsiteCandidate(candidate({ reviews: { serviceText: null } }))).toBe(false);
+    const withText = (t: string) => check({ reviews: { serviceText: t } });
+    expect(withText("x".repeat(min))).toBe(true);
+    expect(withText("x".repeat(min - 1))).toBe(false);
+    expect(withText(`  ${"x".repeat(min - 1)}  `)).toBe(false);
+    expect(withText("x".repeat(max))).toBe(true);
+    expect(withText("x".repeat(max + 1))).toBe(false);
+    expect(check({ reviews: { serviceText: null } })).toBe(false);
+  });
+
+  it("only proposes reviews created within the last two years", () => {
+    const { maxAgeDays } = WEBSITE_CANDIDATE_RULE;
+    expect(check({ dates: { created: daysAgo(maxAgeDays - 1) } })).toBe(true);
+    expect(check({ dates: { created: daysAgo(maxAgeDays + 1) } })).toBe(false);
+    expect(check({ dates: { created: null } })).toBe(false);
+    expect(check({ dates: { created: "not a date" } })).toBe(false);
   });
 });
 
