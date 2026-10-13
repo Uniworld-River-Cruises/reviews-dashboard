@@ -65,6 +65,56 @@ contract check with `bash scripts/smoke-api.sh`.
 
 ---
 
+## Website integration (added 2026-10-12)
+
+The uniworld website reads reviews from this API instead of calling Feefo
+directly. Brief: [docs/plans/2026-10-12-website-reviews-api-brief.md](../plans/2026-10-12-website-reviews-api-brief.md).
+
+### Review fields
+
+| Field | Meaning |
+|---|---|
+| `customer.display_location` | The location the customer chose to show on Feefo (e.g. `London, United Kingdom`); `null` when none. No other customer detail beyond `display_name` is ever returned. |
+| `reply` | The merchant's latest reply: `{ text, author, created_at }`, or `null`. `text` is **plain text** converted from Feefo's HTML (`<br>`, `</p>`, `</div>` become `\n`, other tags stripped, entities decoded). Render it escaped. |
+| `products[0].product.title` | Trip name. |
+
+Replies are collected by the sync (Feefo only returns them with
+`full_thread=include`). Reviews synced before 2026-10-12 get theirs after one
+full sync.
+
+### List parameters
+
+| Parameter | Behaviour |
+|---|---|
+| `rating=1..5` | Headline star (product rating, else service, rounded). **On its own** (with or without date filters) it runs server-side: `summary.meta.count` is exact and `page=N` works. Combined with another filter it is applied while scanning (`count: null`, pages beyond the first need `cursor`). |
+| `sort=highest` / `sort=lowest` | Headline rating, then newest first. Combine only with `parent_product_sku` (and `rating`, where it reduces to newest first); not with date filters. Feefo itself has no rating sort. |
+| `website=approved` | Only reviews a person approved for the website in **Admin → Website Queue**. Can be combined with **one** of `ship`, `tour`, `parent_product_sku`, `positive_theme`. Newest/oldest only. |
+| `placement=` | Requires `website=approved`. One of `guest-stories`, `culinary`, `ships`, `travel-that-gives-back`. Can't be combined with `positive_theme` (Firestore allows one array filter per query). |
+
+### Summary parameters
+
+- **One trip:** `GET /v1/reviews/summary/all?merchant_identifier=uniworld&scope=product&parent_product_sku=176`
+  returns `meta.count`, `rating.rating` (average product rating) and the
+  `rating.product` and `rating.service` star distributions for that itinerary code.
+- **Brand headline:** the fleet summary for one merchant
+  (`?merchant_identifier=uniworld`) adds Feefo's own published numbers:
+  `rating.feefo_rating` (e.g. 4.8) and `meta.feefo_count` (e.g. 24,888). Use these
+  for the headline so it matches Feefo. `rating.rating` stays the computed
+  product average (the same meaning at every scope). Both Feefo fields are `null`
+  at other scopes and for `merchant_identifier=all`.
+
+### Website approval queue
+
+The summary step (every sync) marks **candidates**: a 5-star product or service
+rating, a comment, at least one positive AI theme, and 60 to 600 characters of
+service text. Thresholds live in `WEBSITE_CANDIDATE_RULE`
+(`shared/src/reviews/website.ts`). A person approves (with optional placement
+tags) or rejects each one in **Admin → Website Queue**; only approved reviews
+are public, and a re-sync never undoes a decision. Approving needs the
+`moderateWebsite` permission (owners and admins have it by default).
+
+---
+
 ## Authentication: server-side vs client-side
 
 The API uses **OAuth 2.0 client-credentials**, exactly like Feefo: you exchange

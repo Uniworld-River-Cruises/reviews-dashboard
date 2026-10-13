@@ -75,7 +75,7 @@ code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?po
 check "reviews/all: positive_theme=Staff -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
 
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5")
-check "reviews/all: rating=5 post-filter, count null, 2 results" "200:null:2" "$code:$(json "$T/r" 'String(b.summary.meta.count)')":"$(json "$T/r" 'b.reviews.length')"
+check "reviews/all: rating=5 server-side, exact count 2, 2 results" "200:2:2" "$code:$(json "$T/r" 'String(b.summary.meta.count)')":"$(json "$T/r" 'b.reviews.length')"
 
 code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?ship=S.S.%20Beatrice&region=Alps")
 check "reviews/all: two attribute filters -> 400" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
@@ -186,7 +186,7 @@ console.log(String(JSON.stringify(o)===JSON.stringify([...n].reverse())))")"
 curl -s -o "$T/r1" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&page_size=1" >/dev/null
 RC1=$(json "$T/r1" 'b.summary.next_cursor')
 curl -s -o "$T/r2" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&page_size=1&cursor=$RC1" >/dev/null
-check "post-filter walk: 2 pages, distinct ids, both rating 5" "1:1:true:true" \
+check "rating cursor walk: 2 pages, distinct ids, both rating 5" "1:1:true:true" \
   "$(json "$T/r1" 'b.reviews.length')":"$(json "$T/r2" 'b.reviews.length')":"$("$NODE" -e "
 const a=JSON.parse(require('fs').readFileSync('$T/r1','utf8')).reviews[0];
 const b=JSON.parse(require('fs').readFileSync('$T/r2','utf8')).reviews[0];
@@ -196,9 +196,118 @@ const a=JSON.parse(require('fs').readFileSync('$T/r1','utf8')).reviews[0];
 const b=JSON.parse(require('fs').readFileSync('$T/r2','utf8')).reviews[0];
 console.log(String(Math.round(head(a))===5&&Math.round(head(b))===5))")"
 
+SYNC_TOKEN="${SYNC_TOKEN:-local-test-sync-token}"
+# ── Star filter runs server-side: exact count and page numbers ─────────────
+code=$(curl -s -o "$T/r5p2" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&page=2&page_size=1")
+check "rating=5&page=2: 200, count 2, pages 2, current_page 2, 1 result" "200:2:2:2:1" \
+  "$code:$(json "$T/r5p2" 'b.summary.meta.count')":"$(json "$T/r5p2" 'b.summary.meta.pages')":"$(json "$T/r5p2" 'b.summary.meta.current_page')":"$(json "$T/r5p2" 'b.reviews.length')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&ship=S.S.%20Beatrice")
+check "rating + another filter falls back to post-filter (count null, 1 match)" "200:null:1" \
+  "$code:$(json "$T/r" 'String(b.summary.meta.count)')":"$(json "$T/r" 'b.reviews.length')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?rating=5&ship=S.S.%20Beatrice&page=2")
+check "rating + another filter, page 2 -> 400 use_cursor" "400:use_cursor" "$code:$(json "$T/r" 'b.error.code')"
+
+# ── Location and replies ───────────────────────────────────────────────────
+check "display_location exposed where given" "London, United Kingdom" \
+  "$(json "$T/all" 'b.reviews.find(r=>r.id==="aaaaaaaaaaaaaaaaaaaaaa01").customer.display_location')"
+check "display_location null where not given" "null" \
+  "$(json "$T/all" 'String(b.reviews.find(r=>r.id==="aaaaaaaaaaaaaaaaaaaaaa02").customer.display_location)')"
+check "reply: plain text with no HTML tags" "true:Uniworld Guest Relations" \
+  "$(json "$T/all" 'String(/^Dear Robert,\n/.test(b.reviews.find(r=>r.id==="aaaaaaaaaaaaaaaaaaaaaa03").reply.text) && !/<[a-z\/]/i.test(b.reviews.find(r=>r.id==="aaaaaaaaaaaaaaaaaaaaaa03").reply.text))')":"$(json "$T/all" 'b.reviews.find(r=>r.id==="aaaaaaaaaaaaaaaaaaaaaa03").reply.author')"
+check "reply: null without one; raw HTML and website state never exposed" "null:0:0" \
+  "$(json "$T/all" 'String(b.reviews.find(r=>r.id==="aaaaaaaaaaaaaaaaaaaaaa01").reply)')":"$(grep -c 'mailto:' "$T/all")":"$(grep -c '"website"' "$T/all")"
+
+# ── Rating sort ────────────────────────────────────────────────────────────
+curl -s -o "$T/hi" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&parent_product_sku=UW-DAN&sort=highest&page_size=8" >/dev/null
+check "sort=highest + parent_product_sku: descending headline, exact count" "01,02:2" \
+  "$(json "$T/hi" 'b.reviews.map(r=>r.id.slice(-2)).join()')":"$(json "$T/hi" 'b.summary.meta.count')"
+curl -s -o "$T/lo" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&parent_product_sku=UW-DAN&sort=lowest" >/dev/null
+check "sort=lowest + parent_product_sku: ascending headline" "02,01" "$(json "$T/lo" 'b.reviews.map(r=>r.id.slice(-2)).join()')"
+curl -s -o "$T/hia" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=highest" >/dev/null
+check "sort=highest across merchants: rating desc, then newest" "aa01,bb01,aa02,aa03,bb02" \
+  "$(json "$T/hia" 'b.reviews.map(r=>r.id.slice(0,2)+r.id.slice(-2)).join()')"
+curl -s -o "$T/hp1" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=highest&page_size=2" >/dev/null
+HC=$(json "$T/hp1" 'b.summary.next_cursor')
+curl -s -o "$T/hp2" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=highest&page_size=2&cursor=$HC" >/dev/null
+check "sort=highest cursor walk continues the same order" "aa01,bb01|aa02,aa03" \
+  "$(json "$T/hp1" 'b.reviews.map(r=>r.id.slice(0,2)+r.id.slice(-2)).join()')|$(json "$T/hp2" 'b.reviews.map(r=>r.id.slice(0,2)+r.id.slice(-2)).join()')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=highest&ship=S.S.%20Beatrice")
+check "sort=highest + ship -> 400 filters_not_combinable" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=lowest&since_period=month")
+check "sort=lowest + date filter -> 400" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?sort=rating")
+check "sort=rating (unknown) -> 400" "400:invalid_parameter" "$code:$(json "$T/r" 'b.error.code')"
+
+# ── Website approval filters ───────────────────────────────────────────────
+code=$(curl -s -o "$T/wa" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved")
+check "website=approved -> 2 approved reviews, candidates excluded" "200:2:aa01,bb01" \
+  "$code:$(json "$T/wa" 'b.summary.meta.count')":"$(json "$T/wa" 'b.reviews.map(r=>r.id.slice(0,2)+r.id.slice(-2)).join()')"
+check "website=approved never leaks the moderator email" "0" "$(grep -c -E 'SEED_PII|seed-pii@' "$T/wa")"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=culinary")
+check "website=approved&placement=culinary -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&positive_theme=Staff")
+check "website=approved&positive_theme=Staff -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&parent_product_sku=UW-DAN")
+check "website=approved&parent_product_sku=UW-DAN -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=culinary&positive_theme=Staff")
+check "placement + positive_theme -> 400" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?placement=culinary")
+check "placement without website=approved -> 400" "400:invalid_parameter" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=desserts")
+check "unknown placement -> 400" "400:invalid_parameter" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=candidate")
+check "website=candidate is not public -> 400" "400:invalid_parameter" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&has_media=true")
+check "website=approved + has_media -> 400" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
+
+# ── Per-trip and Feefo headline summaries ──────────────────────────────────
+code=$(curl -s -o "$T/sp" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld&scope=product&parent_product_sku=UW-DAN")
+check "summary scope=product: count, average, both distributions" "200:2:4.5:2:2:product:UW-DAN" \
+  "$code:$(json "$T/sp" 'b.meta.count')":"$(json "$T/sp" 'b.rating.rating')":"$(json "$T/sp" 'b.rating.product.count')":"$(json "$T/sp" 'b.rating.service.count')":"$(json "$T/sp" 'b.enrichment.scope')":"$(json "$T/sp" 'b.enrichment.scope_value')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld&scope=product")
+check "summary scope=product without parent_product_sku -> 400" "400" "$code"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld&scope=product&parent_product_sku=NOPE")
+check "summary scope=product unknown sku -> 404" "404" "$code"
+curl -s -o "$T/sf" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld" >/dev/null
+check "fleet summary carries the Feefo merchant rating and count" "4.8:24888" \
+  "$(json "$T/sf" 'b.rating.feefo_rating')":"$(json "$T/sf" 'b.meta.feefo_count')"
+curl -s -o "$T/sfa" "${AUTH[@]}" "$BASE/v1/reviews/summary/all" >/dev/null
+check "merged (all merchants) summary leaves Feefo numbers null" "null:null" \
+  "$(json "$T/sfa" 'String(b.rating.feefo_rating)')":"$(json "$T/sfa" 'String(b.meta.feefo_count)')"
+
+# ── Website moderation endpoint (dashboard action; needs the sync token) ───
+MOD="${MOD:-${BASE%/*}/websiteModeration}"
+code=$(curl -s -o "$T/m" -w "%{http_code}" -X POST "$MOD" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+  -d '{"reviewId":"aaaaaaaaaaaaaaaaaaaaaa02","action":"approve","placements":["ships"]}')
+if [ "$code" = "200" ]; then
+  check "moderation: approve returns approved + placements" "approved:ships" \
+    "$(json "$T/m" 'b.website.status')":"$(json "$T/m" 'b.website.placements.join()')"
+  code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved&placement=ships")
+  check "moderation: approved review appears in website=approved&placement=ships" "200:1:02" \
+    "$code:$(json "$T/r" 'b.summary.meta.count')":"$(json "$T/r" 'b.reviews[0].id.slice(-2)')"
+  curl -s -o "$T/m" -X POST "$MOD" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+    -d '{"reviewId":"aaaaaaaaaaaaaaaaaaaaaa02","action":"reject"}' >/dev/null
+  code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?website=approved")
+  check "moderation: rejected review leaves website=approved" "rejected:2" \
+    "$(json "$T/m" 'b.website.status')":"$(json "$T/r" 'b.summary.meta.count')"
+  curl -s -o "$T/m" -X POST "$MOD" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+    -d '{"reviewId":"aaaaaaaaaaaaaaaaaaaaaa02","action":"reset"}' >/dev/null
+  check "moderation: reset of a non-matching review clears website state" "null" "$(json "$T/m" 'String(b.website)')"
+  code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "$MOD" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+    -d '{"reviewId":"aaaaaaaaaaaaaaaaaaaaaa02","action":"approve","placements":["desserts"]}')
+  check "moderation: unknown placement -> 400" "400" "$code"
+  code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "$MOD" -H "Content-Type: application/json" -H "x-sync-token: $SYNC_TOKEN" \
+    -d '{"reviewId":"doesnotexist00000000","action":"reject"}')
+  check "moderation: unknown review -> 404" "404" "$code"
+  code=$(curl -s -o "$T/r" -w "%{http_code}" -X POST "$MOD" -H "Content-Type: application/json" \
+    -d '{"reviewId":"aaaaaaaaaaaaaaaaaaaaaa02","action":"reject"}')
+  check "moderation: no credentials -> 401" "401" "$code"
+else
+  echo "SKIP  moderation checks (websiteModeration endpoint unavailable: $code; set SYNC_TOKEN/MOD)"
+fi
+
 # ── Credential lifecycle (requires apiClients mgmt endpoint + sync token) ───
 MGMT="${MGMT:-${BASE%/*}/apiClients}"
-SYNC_TOKEN="${SYNC_TOKEN:-local-test-sync-token}"
 code=$(curl -s -o "$T/lc" -w "%{http_code}" -X POST "$MGMT" -H "Content-Type: application/json" \
   -H "x-sync-token: $SYNC_TOKEN" -d '{"action":"create","label":"Smoke lifecycle","merchants":["uniworld"]}')
 if [ "$code" = "200" ]; then

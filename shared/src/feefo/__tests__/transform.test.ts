@@ -61,6 +61,7 @@ describe("transformReview", () => {
     expect(result.product.title).toBe("Rhine Holiday Markets");
     expect(result.ratings.service).toBe(5);
     expect(result.ratings.product).toBe(4);
+    expect(result.ratings.headline).toBe(4);
     expect(result.reviews.serviceText).toBe("The staff was amazing.");
     expect(result.reviews.productText).toBe(
       "Beautiful ship and great excursions."
@@ -85,7 +86,43 @@ describe("transformReview", () => {
     const result = transformReview(noProducts);
     expect(result.id).toBe("svc-001");
     expect(result.ratings.product).toBeNull();
+    expect(result.ratings.headline).toBe(5);
     expect(result.product.title).toBe("Unknown");
+  });
+
+  describe("reply and website fields", () => {
+    it("stores reply: null when the thread has no merchant comment", () => {
+      expect(transformReview(sampleReview).reply).toBeNull();
+    });
+
+    it("stores the merchant reply as plain text plus the raw HTML", () => {
+      const result = transformReview({
+        ...sampleReview,
+        products: [
+          {
+            ...sampleReview.products[0],
+            thread: [
+              {
+                type: "MERCHANT_COMMENT",
+                author: "Uniworld Guest Relations",
+                comment: "Thank you,<br>Jane&nbsp;&amp; team",
+                created_at: "2026-01-16T10:00:00Z",
+              },
+            ],
+          },
+        ],
+      });
+      expect(result.reply).toEqual({
+        text: "Thank you,\nJane & team",
+        html: "Thank you,<br>Jane&nbsp;&amp; team",
+        author: "Uniworld Guest Relations",
+        createdAt: "2026-01-16T10:00:00Z",
+      });
+    });
+
+    it("never writes a website field (a re-sync must not undo a moderation decision)", () => {
+      expect("website" in transformReview(sampleReview)).toBe(false);
+    });
   });
 
   it("handles reviews with no tags", () => {

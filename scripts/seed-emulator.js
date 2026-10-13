@@ -33,7 +33,8 @@ function isoDaysAgo(days) {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
-function review({ id, brand, displayName, ship, tour, region, serviceRating, productRating, serviceText, productText, positive, negative, media, daysAgo, sku, parentSku }) {
+function review({ id, brand, displayName, location, ship, tour, region, serviceRating, productRating, serviceText, productText, positive, negative, media, daysAgo, sku, parentSku, reply, website }) {
+  const headline = productRating ?? serviceRating ?? null;
   return {
     id,
     feedbackUrl: `https://www.feefo.com/en-US/reviews/${brand}/${id}`,
@@ -41,7 +42,8 @@ function review({ id, brand, displayName, ship, tour, region, serviceRating, pro
     customer: {
       name: "SEED_PII_FULL_NAME",
       displayName: displayName ?? null,
-      location: "SEED_PII_LOCATION",
+      // display_location is public (not PII); null when the customer gave none.
+      location: location ?? null,
       email: "seed-pii@example.com",
       orderRef: "SEED_PII_ORDER",
       customerRef: "SEED_PII_CUSTOMER",
@@ -53,7 +55,11 @@ function review({ id, brand, displayName, ship, tour, region, serviceRating, pro
       url: null,
       imageUrl: null,
     },
-    ratings: { service: serviceRating ?? null, product: productRating ?? null },
+    ratings: {
+      service: serviceRating ?? null,
+      product: productRating ?? null,
+      headline: headline === null ? null : Math.round(headline),
+    },
     reviews: {
       serviceTitle: serviceText ? "Service headline" : null,
       serviceText: serviceText ?? null,
@@ -84,18 +90,31 @@ function review({ id, brand, displayName, ship, tour, region, serviceRating, pro
     hasMedia: (media ?? []).length > 0,
     moderationStatus: "published",
     verified: true,
+    reply: reply ?? null,
+    ...(website ? { website } : {}),
+  };
+}
+
+function approved(placements) {
+  return {
+    status: "approved",
+    placements,
+    decidedBy: "SEED_PII_MODERATOR@example.com",
+    decidedAt: isoDaysAgo(1),
+    proposedAt: isoDaysAgo(1.5),
   };
 }
 
 const REVIEWS = [
   review({
-    id: "aaaaaaaaaaaaaaaaaaaaaa01", brand: "uniworld", displayName: "Jane D.",
+    id: "aaaaaaaaaaaaaaaaaaaaaa01", brand: "uniworld", displayName: "Jane D.", location: "London, United Kingdom",
     ship: "S.S. Beatrice", tour: "Enchanting Danube (8 Days)", region: "Central Europe",
     serviceRating: 5, productRating: 5,
     serviceText: "Booking was effortless.", productText: "The Danube was breathtaking.",
     positive: ["Staff", "Excursions"], negative: [],
     media: [{ type: "PHOTO", url: "https://example.com/p1.jpg" }],
     daysAgo: 2, sku: "UW-DAN-8", parentSku: "UW-DAN",
+    website: approved(["culinary"]),
   }),
   review({
     id: "aaaaaaaaaaaaaaaaaaaaaa02", brand: "uniworld", displayName: null,
@@ -104,6 +123,7 @@ const REVIEWS = [
     serviceText: null, productText: "Lovely ship, food could improve.",
     positive: ["Ship"], negative: ["Food Quality"],
     daysAgo: 5, sku: "UW-DAN-8", parentSku: "UW-DAN",
+    website: { status: "candidate", placements: [], decidedBy: null, decidedAt: null, proposedAt: isoDaysAgo(4) },
   }),
   review({
     id: "aaaaaaaaaaaaaaaaaaaaaa03", brand: "uniworld", displayName: "Robert K.",
@@ -112,15 +132,22 @@ const REVIEWS = [
     serviceText: "Itinerary changed twice before sailing.", productText: null,
     positive: [], negative: ["Itinerary Changes"],
     daysAgo: 40, sku: "UW-RHI-10",
+    reply: {
+      text: "Dear Robert,\nWe are sorry about the changes. Please email guestrelations@uniworld.com.",
+      html: "<p>Dear Robert,</p><p>We are sorry about the changes. Please email <a href=\"mailto:guestrelations@uniworld.com\">guestrelations@uniworld.com</a>.</p>",
+      author: "Uniworld Guest Relations",
+      createdAt: isoDaysAgo(39),
+    },
   }),
   review({
-    id: "bbbbbbbbbbbbbbbbbbbbbb01", brand: "luxury-gold", displayName: "Amelia P.",
+    id: "bbbbbbbbbbbbbbbbbbbbbb01", brand: "luxury-gold", displayName: "Amelia P.", location: "Sydney, Australia",
     ship: null, tour: "Majestic Switzerland", region: "Alps",
     serviceRating: 5, productRating: 5,
     serviceText: "White-glove from start to finish.", productText: "Hotels were superb.",
     positive: ["Service", "Accommodation"], negative: [],
     media: [{ type: "PHOTO", url: "https://example.com/p2.jpg" }],
     daysAgo: 3, sku: "LG-SWI-9",
+    website: approved(["guest-stories"]),
   }),
   review({
     id: "bbbbbbbbbbbbbbbbbbbbbb02", brand: "luxury-gold", displayName: null,
@@ -184,7 +211,11 @@ async function main() {
     // No service distribution: simulates a summary written before Phase 4.
     summary({ brand: "luxury-gold", scope: "fleet", scopeValue: null, reviews: luxuryGold, includeService: false }),
     summary({ brand: "uniworld", scope: "ship", scopeValue: "S.S. Beatrice", reviews: uniworld.filter((r) => r.tags.ship === "S.S. Beatrice") }),
+    // Per-trip summary keyed by parent_product_sku (scope=product).
+    summary({ brand: "uniworld", scope: "product", scopeValue: "UW-DAN", reviews: uniworld.filter((r) => r.product.parentSku === "UW-DAN") }),
   ];
+  // Feefo's own merchant numbers, as the summary step stores them.
+  Object.assign(summaries[0], { feefoRating: 4.8, feefoCount: 24888, feefoFetchedAt: new Date().toISOString() });
   for (const s of summaries) {
     await db.collection("summaries").doc(s.id).set(s);
   }

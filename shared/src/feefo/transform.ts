@@ -2,6 +2,8 @@ import { FeefoReview, FeefoMedia } from "./types";
 import { ReviewDocument } from "../types/review";
 import { parseTags } from "./parse-tags";
 import { isMerchantIdentifier } from "./brands";
+import { extractMerchantReply } from "../reviews/reply";
+import { computeHeadlineRating } from "../reviews/website";
 
 /** What `transformReview` actually consumes from each media item. The full
  * `FeefoMedia` type also has an `id` (which we drop on the way to Firestore),
@@ -74,6 +76,10 @@ export function transformReview(
     ratings: {
       service: raw.service?.rating.rating ?? null,
       product: product?.rating.rating ?? null,
+      headline: computeHeadlineRating({
+        service: raw.service?.rating.rating ?? null,
+        product: product?.rating.rating ?? null,
+      }),
     },
     reviews: {
       serviceTitle: raw.service?.title ?? null,
@@ -97,6 +103,9 @@ export function transformReview(
     hasMedia,
     moderationStatus: "published",
     verified: true,
+    // Requires the sync's full_thread=include; deliberately no `website`
+    // field here (see ReviewDocument.website).
+    reply: extractMerchantReply(raw),
   };
 }
 

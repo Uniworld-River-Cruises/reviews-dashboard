@@ -1,3 +1,6 @@
+import type { ReviewReply } from "../reviews/reply";
+import type { WebsiteModeration } from "../reviews/website";
+
 export interface ReviewDocument {
   id: string;
   feedbackUrl: string;
@@ -20,6 +23,11 @@ export interface ReviewDocument {
   ratings: {
     service: number | null;
     product: number | null;
+    /** Product rating, else service rating, rounded (computeHeadlineRating).
+     * The API's `rating` filter and highest/lowest sort run on this field.
+     * Absent on documents synced before it existed until the summary step
+     * backfills it. */
+    headline?: number | null;
   };
   reviews: {
     serviceTitle: string | null;
@@ -60,4 +68,12 @@ export interface ReviewDocument {
   hasMedia: boolean;
   moderationStatus: string;
   verified: boolean;
+  /** Latest merchant reply from Feefo's thread (`full_thread=include`);
+   * null when there is none. Absent on documents not re-synced since replies
+   * were collected. */
+  reply?: ReviewReply | null;
+  /** Website approval state. Never written by the Feefo sync (a re-sync
+   * must not undo a decision); set by the candidate rule in the summary step
+   * and by the dashboard's approval queue. */
+  website?: WebsiteModeration | null;
 }

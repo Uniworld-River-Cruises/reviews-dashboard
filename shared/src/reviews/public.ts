@@ -12,10 +12,17 @@ import { resolveDisplayName } from "./display-name";
  * Intentionally omitted from the public shape (see the design doc's open
  * decisions in docs/plans/2026-06-09-public-reviews-api.md):
  *  - customer.name / email / orderRef / customerRef  (PII, never public)
- *  - customer.location                               (the dashboard never
- *    renders customer location, so the API omits it to match the site)
  *  - tags.tourDirector                               (a staff member's name)
  *  - moderationStatus                                (internal)
+ *  - reply.html                                      (raw HTML; only the
+ *    plain-text reply.text is public)
+ *  - website (approval state, decidedBy email)       (internal; the API only
+ *    offers the website=approved filter)
+ *
+ * customer.display_location IS public (since 2026-10-12): it is the
+ * customer-chosen display location Feefo itself publishes, and the website
+ * shows "Name, Country". It was omitted until then only because the
+ * dashboard didn't render it.
  */
 
 export interface PublicRating {
@@ -70,15 +77,24 @@ export interface PublicReviewEnrichment {
   };
 }
 
+export interface PublicReply {
+  /** Plain text (HTML converted); escape it when rendering. */
+  text: string;
+  author: string | null;
+  created_at: string | null;
+}
+
 export interface PublicReview {
   merchant: { identifier: string };
   id: string;
   url: string;
-  customer: { display_name: string };
+  customer: { display_name: string; display_location: string | null };
   service: PublicReviewService | null;
   products: PublicReviewProduct[];
   last_updated_date: string;
   verified: boolean;
+  /** The merchant's latest reply, or null. */
+  reply: PublicReply | null;
   enrichment: PublicReviewEnrichment;
 }
 
@@ -125,6 +141,7 @@ export function toPublicReview(
     url: d.feedbackUrl,
     customer: {
       display_name: resolveDisplayName(d.customer),
+      display_location: nonEmpty(d.customer?.location),
     },
     service: hasServiceSection
       ? {
@@ -153,6 +170,14 @@ export function toPublicReview(
     ],
     last_updated_date: d.dates?.lastUpdated ?? "",
     verified: d.verified === true,
+    reply:
+      d.reply && nonEmpty(d.reply.text)
+        ? {
+            text: d.reply.text,
+            author: d.reply.author ?? null,
+            created_at: d.reply.createdAt ?? null,
+          }
+        : null,
     enrichment: {
       themes: {
         positive: Array.isArray(d.themes?.positive) ? [...d.themes.positive] : [],
@@ -185,8 +210,10 @@ export function toPublicReview(
 /** The subset of a `summaries` collection document the public mapper reads.
  * Matches the Summary interface in functions/src/sync/compute-summaries.ts;
  * also accepts merged synthetic input for merchant_identifier=all. */
+export type SummaryScope = "fleet" | "ship" | "itinerary" | "product";
+
 export interface SummaryDocLike {
-  scope: "fleet" | "ship" | "itinerary";
+  scope: SummaryScope;
   scopeValue: string | null;
   totalReviews: number;
   reviewsWithComments: number;
@@ -201,6 +228,10 @@ export interface SummaryDocLike {
   ships: string[];
   itineraries: string[];
   lastUpdated?: string;
+  /** Feefo's own merchant rating and count (fleet docs only, stored by the
+   * summary step from Feefo's summary endpoint). */
+  feefoRating?: number | null;
+  feefoCount?: number | null;
 }
 
 export interface PublicStarDistribution {
@@ -214,11 +245,20 @@ export interface PublicStarDistribution {
 
 export interface PublicSummary {
   merchant: { identifier: string; name: string };
-  meta: { count: number };
+  meta: {
+    count: number;
+    /** Feefo's own review count for the merchant (fleet scope, single
+     * merchant only); null elsewhere or before the first sync stores it. */
+    feefo_count: number | null;
+  };
   rating: {
     min: number;
     max: number;
+    /** Average PRODUCT rating computed from the stored reviews. */
     rating: number;
+    /** Feefo's own published merchant rating (e.g. 4.8), same availability
+     * as meta.feefo_count. Use this for a headline that matches Feefo. */
+    feefo_rating: number | null;
     product: PublicStarDistribution;
     /** Service-rating distribution when the summary document carries one
      * (serviceStarDistribution, computed by the sync since Phase 4); null
@@ -226,7 +266,7 @@ export interface PublicSummary {
     service: PublicStarDistribution | null;
   };
   enrichment: {
-    scope: "fleet" | "ship" | "itinerary";
+    scope: SummaryScope;
     scope_value: string | null;
     reviews_with_comments: number;
     top_positive_themes: { theme: string; count: number }[];
@@ -268,11 +308,15 @@ export function toPublicSummary(
 
   return {
     merchant: { identifier: merchant.identifier, name: merchant.name },
-    meta: { count: doc.totalReviews ?? 0 },
+    meta: {
+      count: doc.totalReviews ?? 0,
+      feefo_count: typeof doc.feefoCount === "number" ? doc.feefoCount : null,
+    },
     rating: {
       min: 1,
       max: 5,
       rating: doc.avgRating ?? 0,
+      feefo_rating: typeof doc.feefoRating === "number" ? doc.feefoRating : null,
       product,
       service: toStarDistribution(doc.serviceStarDistribution),
     },

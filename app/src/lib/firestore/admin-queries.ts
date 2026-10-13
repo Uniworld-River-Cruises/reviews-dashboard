@@ -21,7 +21,8 @@ export type AdminAccessPermission =
   | "batchClassify"
   | "manageMappings"
   | "manageUsers"
-  | "manageApiClients";
+  | "manageApiClients"
+  | "moderateWebsite";
 
 export interface AdminUserAccess {
   email: string;
@@ -52,7 +53,12 @@ export interface KnownUser {
   active: boolean | null;
 }
 
-export type OperationLogType = "sync" | "classification" | "summary" | "apiClient";
+export type OperationLogType =
+  | "sync"
+  | "classification"
+  | "summary"
+  | "apiClient"
+  | "website";
 export type OperationLogLevel = "info" | "success" | "warning" | "error";
 export type OperationLogSource = "scheduled" | "manual" | "system";
 

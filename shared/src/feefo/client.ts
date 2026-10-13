@@ -122,6 +122,9 @@ export async function fetchReviews(
   if (params.sincePeriod) searchParams.set("since_period", params.sincePeriod);
   if (params.sinceUpdatedPeriod) searchParams.set("since_updated_period", params.sinceUpdatedPeriod);
   if (params.mediaOnly) searchParams.set("media", "ONLY");
+  // Without this Feefo omits each review's thread, which is where merchant
+  // replies (MERCHANT_COMMENT) live.
+  searchParams.set("full_thread", "include");
 
   const url = `${FEEFO_BASE_URL}/20/reviews/all?${searchParams}`;
   const res = await fetchWithRetry(url, {
@@ -186,9 +189,14 @@ export async function fetchMediaByUrl(
   return map;
 }
 
+/**
+ * Feefo's own merchant summary (the rating and count Feefo shows publicly).
+ * since_period=all matters: without it Feefo summarises only the last year
+ * (measured 2026-10-12: 3,685 reviews at 4.7 vs 24,888 at 4.8 all-time).
+ */
 export async function fetchSummary(brand: Brand): Promise<FeefoSummaryResponse> {
   const merchantIdentifier = MERCHANT_IDENTIFIERS[brand];
-  const url = `${FEEFO_BASE_URL}/20/reviews/summary/all?merchant_identifier=${merchantIdentifier}`;
+  const url = `${FEEFO_BASE_URL}/20/reviews/summary/all?merchant_identifier=${merchantIdentifier}&since_period=all`;
   const res = await fetchWithRetry(url);
   return (await res.json()) as FeefoSummaryResponse;
 }

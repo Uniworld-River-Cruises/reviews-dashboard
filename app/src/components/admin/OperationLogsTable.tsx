@@ -259,7 +259,9 @@ function getDetailRows(log: OperationLogEntry): DetailRow[] {
 }
 
 function typeLabel(type: string): string {
-  return type === "apiClient" ? "API client" : type;
+  if (type === "apiClient") return "API client";
+  if (type === "website") return "Website queue";
+  return type;
 }
 
 function actionLabel(action: string): string {

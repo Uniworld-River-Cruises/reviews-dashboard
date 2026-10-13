@@ -66,7 +66,8 @@ export default function NavTabs() {
           Boolean(
             access.permissions.sync ||
               access.permissions.manageMappings ||
-              access.permissions.manageUsers,
+              access.permissions.manageUsers ||
+              access.permissions.moderateWebsite,
           ),
         );
       })

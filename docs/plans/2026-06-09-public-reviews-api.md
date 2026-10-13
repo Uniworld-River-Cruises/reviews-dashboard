@@ -435,7 +435,7 @@ For **star ratings in Google results**, the site must server-render review conte
 
 1. **Customer-name rule:** ✅ **Resolved (PR #60, merged)** — canonical `displayName || "Trusted Customer"` with the `|| customer.name` fallback removed; the rule now lives on `main` for the website, and the API reuses it.
 2. **Auth surface:** ✅ **Resolved — server-side only.** Feefo-style `client_id`/`client_secret` → bearer token; no browser-embeddable key. Remaining sub-decision: token format — **opaque (recommended) vs JWT** — and TTL (default 1h).
-3. **`display_location`:** ✅ default **omit** in v1 (the dashboard never displays customer location, so omitting matches the site rule). Open: expose later with product sign-off?
+3. **`display_location`:** ✅ **Resolved 2026-10-12: exposed** as `customer.display_location` (Matt: the new website shows "Name, Country"). It is the location the customer chose to display on Feefo, which Feefo itself publishes. v1 omitted it only because the dashboard didn't render it. See docs/plans/2026-10-12-website-reviews-api-brief.md.
 4. **`tour_director` (staff name):** ✅ default **omit** in v1 (it's a person's name). Open: expose as public metadata, or keep internal-only?
 5. **Raw Feefo `tags[]`:** normalized `enrichment.attributes` only, or also retain + passthrough raw tags (needs a sync change)?
 6. **Per-section `created_at`:** accept the collapsed-date approximation, or extend the sync to retain `service`/`product` timestamps separately?
@@ -452,7 +452,7 @@ For **star ratings in Google results**, the site must server-render review conte
 | `id` | `id` | Stable doc id |
 | `feedbackUrl` | `url` | |
 | `customer.displayName` | `customer.display_name` | via `resolveDisplayName()`; empty ⇒ `"Trusted Customer"` |
-| `customer.location` | — (default) | **Omitted in v1** — the site never shows location; opt-in open decision |
+| `customer.location` | `customer.display_location` | **Exposed since 2026-10-12** (was omitted in v1); null when the customer gave none |
 | `customer.name` / `email` / `orderRef` / `customerRef` | — | **Dropped (PII).** (`name` was the value some site pages leaked as a fallback; removed in **PR #60**, merged) |
 | `ratings.service` / `ratings.product` | `service.rating.rating` / `products[0].rating.rating` | wrapped `{min:1,max:5,rating}` |
 | `reviews.serviceTitle` / `serviceText` / `productText` | `service.title` / `service.review` / `products[0].review` | |
