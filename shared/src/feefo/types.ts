@@ -30,6 +30,17 @@ export interface FeefoRating {
   rating: number;
 }
 
+/** One event in a review's history. Feefo returns these only when the
+ * request asks for `full_thread=include`; merchant replies are the
+ * MERCHANT_COMMENT entries (the comment may be HTML). Other types seen in
+ * practice: CUSTOMER_RETITLE, CUSTOMER_RERATE. */
+export interface FeefoThreadEntry {
+  type: string;
+  author?: string;
+  comment?: string;
+  created_at?: string;
+}
+
 export interface FeefoMedia {
   id: string;
   type: "PHOTO" | "VIDEO";
@@ -50,6 +61,7 @@ export interface FeefoProduct {
     tags?: FeefoReviewTag[];
   };
   created_at: string;
+  thread?: FeefoThreadEntry[];
 }
 
 export interface FeefoService {
@@ -58,6 +70,7 @@ export interface FeefoService {
   title?: string;
   review?: string;
   created_at: string;
+  thread?: FeefoThreadEntry[];
 }
 
 export interface FeefoReview {

@@ -10,5 +10,7 @@ export * from "./themes/model";
 export * from "./themes/prompt";
 export * from "./reviews/display-name";
 export * from "./reviews/public";
+export * from "./reviews/reply";
+export * from "./reviews/website";
 // classifier is NOT re-exported here to avoid eagerly loading @anthropic-ai/sdk
 // Import directly from "@feefo/shared/dist/themes/classifier" when needed

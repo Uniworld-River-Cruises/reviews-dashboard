@@ -2,15 +2,17 @@ import { ReviewDocument } from "../../types/review";
 import { toPublicReview, toPublicSummary, SummaryDocLike } from "../public";
 import { resolveDisplayName } from "../display-name";
 
-/** Fixture with sentinel PII values — the tests assert none of these strings
- * ever appear anywhere in serialized public output. */
+/** Fixture with sentinel PII/internal values — the tests assert none of these
+ * strings ever appear anywhere in serialized public output. (Customer
+ * display_location is public since 2026-10-12, so it is not a sentinel.) */
 const PII = {
   name: "PII_FULL_NAME_Jane_Doe",
   email: "PII_EMAIL_jane.doe@example.com",
   orderRef: "PII_ORDER_REF_12345",
   customerRef: "PII_CUSTOMER_REF_67890",
-  location: "PII_LOCATION_London_UK",
   tourDirector: "PII_STAFF_NAME_Markus_W",
+  replyHtml: "<p>PII_RAW_REPLY_HTML</p>",
+  decidedBy: "PII_MODERATOR_editor@example.com",
 };
 
 function fixture(overrides: Partial<ReviewDocument> = {}): ReviewDocument {
@@ -21,7 +23,7 @@ function fixture(overrides: Partial<ReviewDocument> = {}): ReviewDocument {
     customer: {
       name: PII.name,
       displayName: "Jane D.",
-      location: PII.location,
+      location: "London, United Kingdom",
       email: PII.email,
       orderRef: PII.orderRef,
       customerRef: PII.customerRef,
@@ -64,6 +66,19 @@ function fixture(overrides: Partial<ReviewDocument> = {}): ReviewDocument {
     hasMedia: true,
     moderationStatus: "published",
     verified: true,
+    reply: {
+      text: "Thank you for sailing with us.",
+      html: PII.replyHtml,
+      author: "Uniworld Guest Relations",
+      createdAt: "2026-05-22T10:00:00Z",
+    },
+    website: {
+      status: "approved",
+      placements: ["culinary"],
+      decidedBy: PII.decidedBy,
+      decidedAt: "2026-05-23T10:00:00Z",
+      proposedAt: "2026-05-21T12:00:00Z",
+    },
     ...overrides,
   };
 }
@@ -105,6 +120,7 @@ describe("toPublicReview — PII firewall", () => {
         "last_updated_date",
         "merchant",
         "products",
+        "reply",
         "service",
         "url",
         "verified",
@@ -112,10 +128,19 @@ describe("toPublicReview — PII firewall", () => {
     );
   });
 
-  it("customer contains ONLY display_name (no location, no name)", () => {
+  it("customer contains ONLY display_name and display_location (no name)", () => {
     const pub = toPublicReview(fixture());
-    expect(Object.keys(pub.customer)).toEqual(["display_name"]);
+    expect(Object.keys(pub.customer).sort()).toEqual(["display_location", "display_name"]);
     expect(pub.customer.display_name).toBe("Jane D.");
+    expect(pub.customer.display_location).toBe("London, United Kingdom");
+  });
+
+  it("display_location is null when the customer gave none", () => {
+    const base = fixture();
+    const pub = toPublicReview(
+      fixture({ customer: { ...base.customer, location: "   " } })
+    );
+    expect(pub.customer.display_location).toBeNull();
   });
 
   it("attributes exclude tour_director", () => {
@@ -193,6 +218,20 @@ describe("toPublicReview — shape mapping", () => {
     expect(pub.enrichment.itinerary.group).toBe("Enchanting Danube (8 Days)");
   });
 
+  it("exposes the reply as plain text only (never the stored HTML)", () => {
+    const pub = toPublicReview(fixture());
+    expect(pub.reply).toEqual({
+      text: "Thank you for sailing with us.",
+      author: "Uniworld Guest Relations",
+      created_at: "2026-05-22T10:00:00Z",
+    });
+  });
+
+  it("emits reply: null for documents without a reply (or synced before replies)", () => {
+    expect(toPublicReview(fixture({ reply: null })).reply).toBeNull();
+    expect(toPublicReview(fixture({ reply: undefined })).reply).toBeNull();
+  });
+
   it("maps themes and flags", () => {
     const pub = toPublicReview(fixture());
     expect(pub.enrichment.themes).toEqual({
@@ -225,8 +264,9 @@ describe("toPublicSummary", () => {
       name: "Uniworld",
     });
     expect(pub.merchant).toEqual({ identifier: "uniworld", name: "Uniworld" });
-    expect(pub.meta).toEqual({ count: 1842 });
+    expect(pub.meta).toEqual({ count: 1842, feefo_count: null });
     expect(pub.rating.rating).toBe(4.81);
+    expect(pub.rating.feefo_rating).toBeNull();
     expect(pub.rating.product).toEqual({
       count: 1790,
       "5_star": 1500,
@@ -254,6 +294,25 @@ describe("toPublicSummary", () => {
       "2_star": 18,
       "1_star": 12,
     });
+  });
+
+  it("adds Feefo's own merchant rating and count when stored", () => {
+    const pub = toPublicSummary(
+      { ...summaryDoc, feefoRating: 4.8, feefoCount: 24888 },
+      { identifier: "uniworld", name: "Uniworld" }
+    );
+    expect(pub.rating.feefo_rating).toBe(4.8);
+    expect(pub.meta.feefo_count).toBe(24888);
+    expect(pub.rating.rating).toBe(4.81);
+  });
+
+  it("supports the per-trip product scope", () => {
+    const pub = toPublicSummary(
+      { ...summaryDoc, scope: "product", scopeValue: "176" },
+      { identifier: "uniworld", name: "Uniworld" }
+    );
+    expect(pub.enrichment.scope).toBe("product");
+    expect(pub.enrichment.scope_value).toBe("176");
   });
 
   it("carries scope and enrichment fields", () => {
