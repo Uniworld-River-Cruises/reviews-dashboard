@@ -7,8 +7,22 @@ import {
   feefoUrlLocaleVariants,
   Brand,
   ReviewDocument,
+  itinerarySlug,
+  resolveItineraryGroup,
 } from "@feefo/shared";
 import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
+import { getMappingLookup } from "./itinerary-mappings";
+
+function itineraryGroupFields(
+  doc: ReviewDocument,
+  mappingLookup: ReadonlyMap<string, string>
+): Pick<ReviewDocument, "itineraryGroup" | "itineraryGroupKey"> {
+  const itineraryGroup = resolveItineraryGroup(doc, mappingLookup);
+  return {
+    itineraryGroup,
+    itineraryGroupKey: itineraryGroup ? itinerarySlug(itineraryGroup) : null,
+  };
+}
 
 interface SyncResult {
   brand: Brand;
@@ -86,6 +100,10 @@ export async function syncBrand(
     // few extra paginated requests, not a meaningful cost.
     const mediaSincePeriod = fullSync ? "all" : "month";
     const mediaByUrl = await fetchMediaByUrl(brand, mediaSincePeriod);
+
+    // Itinerary group for the API's `itinerary` filter; the summary step that
+    // follows every sync recomputes it with the same lookup.
+    const mappingLookup = await getMappingLookup(brand);
 
     // 2. Paginate through Feefo reviews — fetch, transform, write per page
     let page = 1;
@@ -207,9 +225,10 @@ export async function syncBrand(
         result.writtenReviews += 1;
         // See the comment above this loop: include themes only on new
         // inserts; preserve existing themes by stripping them on update.
-        const payload = isNew
-          ? { ...docWithoutThemes, themes }
-          : docWithoutThemes;
+        const payload = {
+          ...(isNew ? { ...docWithoutThemes, themes } : docWithoutThemes),
+          ...itineraryGroupFields(doc, mappingLookup),
+        };
         writer.set(db.collection("reviews").doc(doc.id), payload, { merge: true });
       }
       await writer.close();

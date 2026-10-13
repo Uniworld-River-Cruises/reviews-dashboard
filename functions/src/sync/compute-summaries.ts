@@ -1,5 +1,11 @@
 import { getFirestore } from "firebase-admin/firestore";
-import { ReviewDocument, Brand, fetchSummary, normalizeItineraryName } from "@feefo/shared";
+import {
+  ReviewDocument,
+  Brand,
+  fetchSummary,
+  rawItineraryName,
+  resolveItineraryGroup,
+} from "@feefo/shared";
 import { getMappingLookup } from "./itinerary-mappings";
 import { syncDerivedReviewFields } from "./derived-fields";
 import { writeOperationLog, type OperationLogSource } from "../ops/operation-logs";
@@ -78,15 +84,11 @@ export async function computeSummaries(
       await db.collection("summaries").doc(docId).set(summary);
     }
 
-    // Per-itinerary summaries - group by effective parent name via mappings
+    // Per-itinerary summaries - group by effective parent name via mappings.
+    // syncDerivedReviewFields stores the same group on each review for the
+    // API's `itinerary` filter, so both must use resolveItineraryGroup.
     const mappingLookup = await getMappingLookup(brand);
-    const resolveParent = (rawTour: string): string =>
-      mappingLookup.get(rawTour) ?? normalizeItineraryName(rawTour);
-
-    const byItinerary = groupBy(reviews, (r) => {
-      const raw = r.tags.tour ?? r.product.title;
-      return raw ? resolveParent(raw) : null;
-    });
+    const byItinerary = groupBy(reviews, (r) => resolveItineraryGroup(r, mappingLookup));
 
     for (const [itinerary, itinReviews] of Object.entries(byItinerary)) {
       if (!itinerary) continue;
@@ -96,9 +98,7 @@ export async function computeSummaries(
       ];
       // Track which raw itinerary names rolled up into this parent.
       summary.childItineraries = [
-        ...new Set(
-          itinReviews.map((r) => r.tags.tour ?? r.product.title).filter(Boolean) as string[]
-        ),
+        ...new Set(itinReviews.map(rawItineraryName).filter(Boolean) as string[]),
       ];
       const docId = `${brand}_itinerary_${slugify(itinerary)}`;
       await db.collection("summaries").doc(docId).set(summary);
@@ -124,7 +124,7 @@ export async function computeSummaries(
     await computeMonthlySummaries(brand, reviews);
     await cleanStaleSummaries(brand, byShip, byItinerary, byProduct);
 
-    const derived = await syncDerivedReviewFields(snapshot.docs);
+    const derived = await syncDerivedReviewFields(snapshot.docs, mappingLookup);
 
     await writeOperationLog({
       type: "summary",

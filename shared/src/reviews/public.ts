@@ -131,9 +131,11 @@ export function toPublicReview(
     serviceRating !== null || serviceTitle !== null || serviceText !== null;
 
   const rawItinerary = nonEmpty(d.tags?.tour) ?? nonEmpty(d.product?.title);
-  const group = rawItinerary
-    ? options.itineraryGroupLookup?.get(rawItinerary) ?? rawItinerary
-    : null;
+  // The stored group (set by the sync/summary step) is the value the
+  // `itinerary` filter matches; documents not yet backfilled fall back.
+  const group =
+    d.itineraryGroup ??
+    (rawItinerary ? options.itineraryGroupLookup?.get(rawItinerary) ?? rawItinerary : null);
 
   return {
     merchant: { identifier: d.brand },

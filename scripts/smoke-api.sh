@@ -338,6 +338,30 @@ else
   echo "SKIP  lifecycle checks (apiClients mgmt endpoint unavailable: $code — set SYNC_TOKEN/MGMT)"
 fi
 
+# ── itinerary= (the group scope=itinerary summaries use) ───────────────────
+curl -s -o "$T/it" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube" >/dev/null
+curl -s -o "$T/its" "${AUTH[@]}" "$BASE/v1/reviews/summary/all?merchant_identifier=uniworld&scope=itinerary&scope_value=Enchanting%20Danube" >/dev/null
+check "itinerary=: count 2, equal to the itinerary summary's meta.count" "2:2"   "$(json "$T/it" 'b.summary.meta.count')":"$(json "$T/its" 'b.meta.count')"
+check "itinerary=: enrichment.itinerary.group is the filter value" "Enchanting Danube"   "$(json "$T/it" '[...new Set(b.reviews.map(r=>r.enrichment.itinerary.group))].join()')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=enchanting-DANUBE")
+check "itinerary=: case and punctuation ignored, like scope_value" "200:2" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?itinerary=Majestic%20Switzerland")
+check "itinerary=: other merchant's group (all merchants)" "200:2:luxury-gold"   "$code:$(json "$T/r" 'b.summary.meta.count')":"$(json "$T/r" '[...new Set(b.reviews.map(r=>r.merchant.identifier))].join()')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&sort=highest")
+check "itinerary= + sort=highest: 200, descending headline" "200:01,02" "$code:$(json "$T/r" 'b.reviews.map(r=>r.id.slice(-2)).join()')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&sort=lowest")
+check "itinerary= + sort=lowest: 200, ascending headline" "200:02,01" "$code:$(json "$T/r" 'b.reviews.map(r=>r.id.slice(-2)).join()')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&rating=4")
+check "itinerary= + rating=4: post-filter, 1 match" "200:null:02" "$code:$(json "$T/r" 'String(b.summary.meta.count)')":"$(json "$T/r" 'b.reviews.map(r=>r.id.slice(-2)).join()')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&website=approved")
+check "itinerary= + website=approved -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?merchant_identifier=uniworld&itinerary=Enchanting%20Danube&website=approved&placement=culinary")
+check "itinerary= + website=approved&placement=culinary -> 1" "200:1" "$code:$(json "$T/r" 'b.summary.meta.count')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?itinerary=Enchanting%20Danube&tour=Castles%20along%20the%20Rhine")
+check "itinerary= + tour -> 400 filters_not_combinable" "400:filters_not_combinable" "$code:$(json "$T/r" 'b.error.code')"
+code=$(curl -s -o "$T/r" -w "%{http_code}" "${AUTH[@]}" "$BASE/v1/reviews/all?itinerary=%26%26")
+check "itinerary= with no letters or digits -> 400" "400:invalid_parameter" "$code:$(json "$T/r" 'b.error.code')"
+
 # ── Developer docs (public, no auth) ───────────────────────────────────────
 code=$(curl -s -o "$T/spec" -w "%{http_code}" "$BASE/v1/openapi.json")
 check "openapi.json: 200 without auth" "200" "$code"

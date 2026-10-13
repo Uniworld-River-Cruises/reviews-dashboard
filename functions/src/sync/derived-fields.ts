@@ -4,10 +4,13 @@ import {
   WebsiteModeration,
   computeHeadlineRating,
   isWebsiteCandidate,
+  itinerarySlug,
+  resolveItineraryGroup,
 } from "@feefo/shared";
 
 export interface DerivedFieldsResult {
   headlineUpdated: number;
+  itineraryGroupUpdated: number;
   candidatesAdded: number;
   candidatesRemoved: number;
   /** Updates skipped because the document changed after it was read. */
@@ -21,6 +24,10 @@ export interface DerivedFieldsResult {
  *  - `ratings.headline`: written by the sync for every review it touches;
  *    this pass backfills documents synced before the field existed and so
  *    keeps the API's `rating` filter and highest/lowest sort complete.
+ *  - `itineraryGroup` / `itineraryGroupKey`: the group the itinerary
+ *    summaries use, from the same mapping lookup. Recomputing here backfills
+ *    old documents and regroups a mapping's reviews after its parent name is
+ *    edited, so the API's `itinerary` filter always matches the summaries.
  *  - `website`: the candidate rule. Themes arrive after the sync (from the
  *    batch classifier), so the rule can't run at sync time; evaluating it
  *    here means a review becomes a candidate on the first summary recompute
@@ -30,10 +37,12 @@ export interface DerivedFieldsResult {
  */
 export async function syncDerivedReviewFields(
   docs: QueryDocumentSnapshot[],
+  mappingLookup: ReadonlyMap<string, string>,
   now: string = new Date().toISOString()
 ): Promise<DerivedFieldsResult> {
   const result: DerivedFieldsResult = {
     headlineUpdated: 0,
+    itineraryGroupUpdated: 0,
     candidatesAdded: 0,
     candidatesRemoved: 0,
     skippedChanged: 0,
@@ -53,6 +62,14 @@ export async function syncDerivedReviewFields(
     if (review.ratings?.headline !== headline) {
       update["ratings.headline"] = headline;
       result.headlineUpdated += 1;
+    }
+
+    const group = resolveItineraryGroup(review, mappingLookup);
+    const groupKey = group ? itinerarySlug(group) : null;
+    if ((review.itineraryGroup ?? null) !== group || (review.itineraryGroupKey ?? null) !== groupKey) {
+      update.itineraryGroup = group;
+      update.itineraryGroupKey = groupKey;
+      result.itineraryGroupUpdated += 1;
     }
 
     const status = review.website?.status ?? null;

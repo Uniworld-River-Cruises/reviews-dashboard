@@ -33,7 +33,16 @@ function isoDaysAgo(days) {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
 
+function itinerarySlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 100);
+}
+
+// Raw tour name -> itinerary group, as the itinerary_mappings seeded below
+// resolve it (the summary step stores the result on each review).
+const SEED_ITINERARY_GROUPS = { "Enchanting Danube (8 Days)": "Enchanting Danube" };
+
 function review({ id, brand, displayName, location, ship, tour, region, serviceRating, productRating, serviceText, productText, positive, negative, media, daysAgo, sku, parentSku, reply, website }) {
+  const itineraryGroup = SEED_ITINERARY_GROUPS[tour] ?? tour;
   const headline = productRating ?? serviceRating ?? null;
   return {
     id,
@@ -92,6 +101,8 @@ function review({ id, brand, displayName, location, ship, tour, region, serviceR
     verified: true,
     reply: reply ?? null,
     ...(website ? { website } : {}),
+    itineraryGroup,
+    itineraryGroupKey: itinerarySlug(itineraryGroup),
   };
 }
 
@@ -213,6 +224,8 @@ async function main() {
     summary({ brand: "uniworld", scope: "ship", scopeValue: "S.S. Beatrice", reviews: uniworld.filter((r) => r.tags.ship === "S.S. Beatrice") }),
     // Per-trip summary keyed by parent_product_sku (scope=product).
     summary({ brand: "uniworld", scope: "product", scopeValue: "UW-DAN", reviews: uniworld.filter((r) => r.product.parentSku === "UW-DAN") }),
+    // Itinerary group summary; the list's itinerary= filter must match its count.
+    summary({ brand: "uniworld", scope: "itinerary", scopeValue: "Enchanting Danube", reviews: uniworld.filter((r) => r.itineraryGroup === "Enchanting Danube") }),
   ];
   // Feefo's own merchant numbers, as the summary step stores them.
   Object.assign(summaries[0], { feefoRating: 4.8, feefoCount: 24888, feefoFetchedAt: new Date().toISOString() });
