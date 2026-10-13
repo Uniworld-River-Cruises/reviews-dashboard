@@ -38,14 +38,20 @@ export interface WebsiteModeration {
  * review that nobody has decided on yet.
  */
 export const WEBSITE_CANDIDATE_RULE = {
-  /** Product OR service rating must equal this. */
+  /** Product AND service rating must both equal this. */
   rating: 5,
   /** At least this many positive themes from the classifier. */
-  minPositiveThemes: 1,
+  minPositiveThemes: 2,
   /** Service review text length (trimmed), inclusive. */
-  minServiceTextLength: 60,
+  minServiceTextLength: 150,
   maxServiceTextLength: 600,
+  /** Only reviews created within this many days. Undecided candidates that
+   * age past it drop out of the queue; decisions are never touched. */
+  maxAgeDays: 730,
 } as const;
+// Matt chose this rule on 2026-10-13 (option E). The first rule (5 on either
+// rating, 1+ theme, 60-600 chars, any age) proposed ~half of all reviews
+// (12,401 Uniworld, 2,031 Luxury Gold); this one proposes ~619 and ~187.
 
 /** The fields the candidate rule reads. */
 export interface WebsiteCandidateInput {
@@ -53,15 +59,19 @@ export interface WebsiteCandidateInput {
   reviews?: { serviceText?: string | null } | null;
   themes?: { positive?: string[] | null } | null;
   hasComment?: boolean;
+  dates?: { created?: string | null } | null;
 }
 
 export function isWebsiteCandidate(
   review: WebsiteCandidateInput,
-  rule: typeof WEBSITE_CANDIDATE_RULE = WEBSITE_CANDIDATE_RULE
+  rule: typeof WEBSITE_CANDIDATE_RULE = WEBSITE_CANDIDATE_RULE,
+  now: number = Date.now()
 ): boolean {
   const ratings = review.ratings ?? {};
-  if (ratings.product !== rule.rating && ratings.service !== rule.rating) return false;
+  if (ratings.product !== rule.rating || ratings.service !== rule.rating) return false;
   if (review.hasComment !== true) return false;
+  const created = Date.parse(review.dates?.created ?? "");
+  if (!Number.isFinite(created) || now - created > rule.maxAgeDays * 86_400_000) return false;
   const positive = review.themes?.positive;
   if (!Array.isArray(positive) || positive.length < rule.minPositiveThemes) return false;
   const serviceText = review.reviews?.serviceText?.trim() ?? "";
