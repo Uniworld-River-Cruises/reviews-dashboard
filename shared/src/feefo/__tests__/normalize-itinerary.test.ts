@@ -1,4 +1,4 @@
-import { normalizeItineraryName } from "../normalize-itinerary";
+import { itinerarySlug, normalizeItineraryName, resolveItineraryGroup } from "../normalize-itinerary";
 
 describe("normalizeItineraryName", () => {
   it("strips direction codes and year", () => {
@@ -72,5 +72,48 @@ describe("normalizeItineraryName", () => {
 
   it("handles whitespace-only string", () => {
     expect(normalizeItineraryName("   ")).toBe("");
+  });
+});
+
+describe("resolveItineraryGroup", () => {
+  const croatia = "Croatia and the Dalmatian Coast";
+  const lookup = new Map([
+    ["Croatia and the Dalmatian Coast Upper Deck", croatia],
+    ["Croatia and the Dalmatian Coast Lower Deck", croatia],
+  ]);
+
+  it("uses the mapping's effective parent name", () => {
+    expect(
+      resolveItineraryGroup(
+        { tags: { tour: "Croatia and the Dalmatian Coast Lower Deck" }, product: { title: "x" } },
+        lookup
+      )
+    ).toBe(croatia);
+  });
+
+  it("falls back to the normalized name when the raw name has no mapping", () => {
+    expect(
+      resolveItineraryGroup(
+        { tags: { tour: "Enchanting Danube (PAS-BUD) 25" }, product: { title: "x" } },
+        lookup
+      )
+    ).toBe("Enchanting Danube");
+  });
+
+  it("falls back to the product title when there is no tour tag", () => {
+    expect(
+      resolveItineraryGroup({ tags: { tour: null }, product: { title: "Majestic Japan " } }, lookup)
+    ).toBe("Majestic Japan");
+  });
+
+  it("returns null when there is no name at all", () => {
+    expect(resolveItineraryGroup({ tags: { tour: null }, product: { title: "" } }, lookup)).toBeNull();
+  });
+});
+
+describe("itinerarySlug", () => {
+  it("ignores case and punctuation", () => {
+    expect(itinerarySlug("Croatia & the Dalmatian Coast")).toBe("croatia-the-dalmatian-coast");
+    expect(itinerarySlug("ultimate  PORTUGAL")).toBe(itinerarySlug("Ultimate Portugal"));
   });
 });

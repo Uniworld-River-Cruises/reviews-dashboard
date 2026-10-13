@@ -12,6 +12,7 @@ import {
   WEBSITE_PLACEMENTS,
   WebsitePlacement,
   isWebsitePlacement,
+  itinerarySlug,
   toPublicReview,
   toPublicSummary,
 } from "@feefo/shared";
@@ -101,8 +102,14 @@ interface ListParams {
 /** Filters `website=approved` may be combined with (one of them), and the
  * ones a rating sort may be combined with. Each has composite indexes in
  * firestore.indexes.json; anything else would 500 in production. */
-const WEBSITE_COMBINABLE = new Set(["ship", "tour", "parent_product_sku", "positive_theme"]);
-const RATING_SORT_COMBINABLE = new Set(["parent_product_sku"]);
+const WEBSITE_COMBINABLE = new Set([
+  "ship",
+  "tour",
+  "itinerary",
+  "parent_product_sku",
+  "positive_theme",
+]);
+const RATING_SORT_COMBINABLE = new Set(["parent_product_sku", "itinerary"]);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function queryParam(req: any, name: string): string | undefined {
@@ -219,6 +226,16 @@ function parseListParams(req: any): ListParams {
   };
   pushAttr("ship", "tags.ship", "==");
   pushAttr("tour", "tags.tour", "==");
+  // itinerary: the group `scope=itinerary` summaries use (deck/season
+  // variants rolled up), matched on its slug like the summary's scope_value.
+  const itineraryRaw = queryParam(req, "itinerary");
+  if (itineraryRaw !== undefined) {
+    const key = itinerarySlug(itineraryRaw);
+    if (!key) {
+      throw new ApiError(400, "invalid_parameter", "itinerary must contain letters or digits.");
+    }
+    attributeCandidates.push({ param: "itinerary", field: "itineraryGroupKey", op: "==", value: key });
+  }
   pushAttr("region", "tags.region", "==");
   pushAttr("booking_type", "tags.bookingType", "==");
   pushAttr("loyalty", "tags.loyalty", "==");
