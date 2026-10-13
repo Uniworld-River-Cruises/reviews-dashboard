@@ -89,7 +89,7 @@ full sync.
 | `rating=1..5` | Headline star (product rating, else service, rounded). **On its own** (with or without date filters) it runs server-side: `summary.meta.count` is exact and `page=N` works. Combined with another filter it is applied while scanning (`count: null`, pages beyond the first need `cursor`). |
 | `sort=highest` / `sort=lowest` | Headline rating, then newest first. Combine only with `parent_product_sku` (and `rating`, where it reduces to newest first); not with date filters. Feefo itself has no rating sort. |
 | `website=approved` | Only reviews a person approved for the website in **Admin → Website Queue**. Can be combined with **one** of `ship`, `tour`, `parent_product_sku`, `positive_theme`. Newest/oldest only. |
-| `placement=` | Requires `website=approved`. One of `guest-stories`, `culinary`, `ships`, `travel-that-gives-back`. Can't be combined with `positive_theme` (Firestore allows one array filter per query). |
+| `placement=` | Requires `website=approved`. One of `guest-stories`, `culinary`, `ships`, `travel-that-gives-back`. Works alone or with the one filter `website=approved` allows (e.g. `parent_product_sku` for one trip's carousel), except `positive_theme` (Firestore allows one array filter per query). |
 
 ### Summary parameters
 
